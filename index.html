@@ -1,1 +1,116 @@
-<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Roshan Technologies — Purchase Management</title><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css"><link rel="stylesheet" href="shared.css"><style>body{font-family:Inter,Arial,sans-serif;background:#F0F2F8}.login{min-height:100vh;display:flex}.brand{display:none}@media(min-width:1024px){.brand{display:flex;width:42%;align-items:center;justify-content:center;background:linear-gradient(160deg,#FAFBFF,#F0F2F8);border-right:1px solid #E5E7EB}}.brand-card{background:#fff;border-radius:24px;padding:48px;box-shadow:0 20px 60px -12px rgba(27,42,107,.15)}.brand-card img{width:300px}.form{flex:1;display:flex;align-items:center;justify-content:center;padding:24px}.box{width:100%;max-width:390px}.field{margin-bottom:16px}.field label{display:block;font-size:12px;font-weight:700;color:#6B7280;text-transform:uppercase;margin-bottom:7px}.field input{width:100%;padding:12px 14px;border:1px solid #E5E7EB;border-radius:10px;background:#fff}.btn{width:100%;border:0;background:#1B2A6B;color:#fff;padding:12px;border-radius:10px;font-weight:700;cursor:pointer}.demo{margin-top:20px;background:#fff;border:1px solid #E5E7EB;border-radius:12px;padding:14px;font-size:12px;color:#6B7280}.toast{position:fixed;bottom:24px;right:24px;background:#1F2937;color:#fff;padding:11px 18px;border-radius:10px;z-index:99}</style></head><body><div class="login"><section class="brand"><div><div class="brand-card"><img src="assets/logo.png"></div><div style="text-align:center;margin-top:30px;color:#6B7A99;font-size:11px;font-weight:700;letter-spacing:1.5px">PURCHASE MANAGEMENT SYSTEM</div></div></section><section class="form"><div class="box"><div style="display:block;text-align:center;margin-bottom:28px"><img src="assets/logo.png" style="width:220px;max-width:75%"></div><h2 style="font-size:24px;margin:0 0 5px">Welcome back</h2><p style="color:#9CA3AF;font-size:14px;margin:0 0 26px">Sign in to your procurement workspace</p><div class="field"><label>Email address</label><input id="email" type="email" value="admin@purchase.local"></div><div class="field"><label>Password</label><input id="password" type="password" value="admin123" onkeydown="if(event.key==='Enter')login()"></div><button class="btn" onclick="login()">Sign in</button><div class="demo"><b>Demo account</b><br>admin@purchase.local / admin123<br><span>Standalone test mode — no previous CRM database.</span></div></div></section></div><div id="toast"></div><script>function login(){const e=document.getElementById('email').value.trim(),p=document.getElementById('password').value;const raw=localStorage.getItem('purchase_demo_v1');let users=[];try{users=raw?(JSON.parse(raw).users||[]):[]}catch(_){users=[]}if(!users.length&&e==='admin@purchase.local'&&p==='admin123')users=[{name:'Admin User',role:'Admin',email:e,password:p,active:true}];const u=users.find(a=>a.email.toLowerCase()===e.toLowerCase()&&a.password===p&&a.active!==false);if(u){sessionStorage.setItem('purchase_user',JSON.stringify({id:u.id||null,name:u.name,role:u.role,email:u.email}));location.href='dashboard.html'}else{document.getElementById('toast').textContent='Invalid credentials or inactive user';document.getElementById('toast').className='toast';}}if(sessionStorage.getItem('purchase_user'))location.href='dashboard.html';</script></body></html>
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Purchase Management System</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css">
+<link rel="stylesheet" href="shared.css">
+<style>
+body{font-family:Inter,Arial,sans-serif;background:#F0F2F8}
+.login{min-height:100vh;display:flex}
+.brand{display:none}
+@media(min-width:1024px){.brand{display:flex;width:42%;align-items:center;justify-content:center;background:linear-gradient(160deg,#FAFBFF,#F0F2F8);border-right:1px solid #E5E7EB}}
+.brand-card{background:#fff;border-radius:24px;padding:48px;box-shadow:0 20px 60px -12px rgba(27,42,107,.15)}
+.brand-card img{width:300px}
+.form{flex:1;display:flex;align-items:center;justify-content:center;padding:24px}
+.box{width:100%;max-width:390px}
+.field{margin-bottom:16px}
+.field label{display:block;font-size:12px;font-weight:700;color:#6B7280;text-transform:uppercase;margin-bottom:7px}
+.field input{width:100%;padding:12px 14px;border:1px solid #E5E7EB;border-radius:10px;background:#fff}
+.btn{width:100%;border:0;background:#1B2A6B;color:#fff;padding:12px;border-radius:10px;font-weight:700;cursor:pointer}
+.demo{margin-top:20px;background:#fff;border:1px solid #E5E7EB;border-radius:12px;padding:14px;font-size:12px;color:#6B7280}
+.toast{position:fixed;bottom:24px;right:24px;background:#1F2937;color:#fff;padding:11px 18px;border-radius:10px;z-index:99}
+</style>
+</head>
+<body>
+<div class="login">
+<section class="brand"><div><div class="brand-card"><img src="assets/logo.png"></div><div style="text-align:center;margin-top:30px;color:#6B7A99;font-size:11px;font-weight:700;letter-spacing:1.5px">PURCHASE MANAGEMENT SYSTEM</div></div></section>
+<section class="form"><div class="box">
+<div style="display:block;text-align:center;margin-bottom:28px"><img src="assets/logo.png" style="width:220px;max-width:75%"></div>
+<h2 style="font-size:24px;margin:0 0 5px">Welcome back</h2>
+<p style="color:#9CA3AF;font-size:14px;margin:0 0 26px">Sign in to your procurement workspace</p>
+<div class="field"><label>Email address</label><input id="email" type="email" placeholder="name@company.com"></div>
+<div class="field"><label>Password</label><input id="password" type="password" onkeydown="if(event.key==='Enter')login()"></div>
+<button class="btn" onclick="login()">Sign in</button>
+<div class="demo"><b>Local demo login</b><br>admin@purchase.local / admin123<br><small>Data is stored in this browser using localStorage.</small></div>
+</div></section>
+</div>
+<div id="toast"></div>
+<script>
+const STORAGE_KEY = 'purchase_management_state_v1';
+const AUTH_KEY = 'purchase_management_current_user_v1';
+
+function seedState(){
+  return {
+    vendors:[
+      {id:1,name:"Alpha Office Supplies",contact:"Ahmed Khan",phone:"0300-1111111",email:"sales@alpha.test",category:"Office Supplies",status:"Active"},
+      {id:2,name:"Tech Source Pakistan",contact:"Sara Ali",phone:"0301-2222222",email:"sales@techsource.test",category:"IT Equipment",status:"Active"},
+      {id:3,name:"Prime Industrial Traders",contact:"Usman Raza",phone:"0302-3333333",email:"info@primeindustrial.test",category:"Industrial",status:"Active"}
+    ],
+    products:[
+      {id:1,name:"A4 Paper Box",sku:"PAP-A4",category:"Stationery",unit:"Box",rate:4200},
+      {id:2,name:"Wireless Keyboard",sku:"IT-KB01",category:"IT Equipment",unit:"Each",rate:3500},
+      {id:3,name:"Office Chair",sku:"FUR-CH01",category:"Furniture",unit:"Each",rate:18500}
+    ],
+    requests:[{
+      id:1001,requestNo:"PR-2026-001",requester:"Admin User",department:"Administration",
+      date:"2026-09-01",requiredDate:"2026-09-10",status:"Pending Approval",
+      justification:"Office stationery and equipment required for the administration department.",
+      lineItems:[
+        {productId:1,productName:"A4 Paper Box",description:"80 GSM A4 copy paper",quantity:2,rate:4200,unit:"Box",total:8400},
+        {productId:2,productName:"Wireless Keyboard",description:"USB wireless keyboard",quantity:1,rate:3500,unit:"Each",total:3500},
+        {productId:3,productName:"Office Chair",description:"Ergonomic office chair",quantity:1,rate:13800,unit:"Each",total:13800}
+      ],items:3,total:25700
+    }],
+    rfqs:[],quotations:[],orders:[],receipts:[],invoices:[],payments:[],comparisons:[],activities:[],
+    roles:{},users:[{id:1,name:"Admin User",email:"admin@purchase.local",password:"admin123",role:"Admin",active:true}]
+  };
+}
+function defaultRoles(){
+  return {
+    Admin:{dashboard:true,requests:true,rfqs:true,quotations:true,comparison:true,orders:true,receipts:true,invoices:true,payments:true,vendors:true,products:true,reports:true,users:true,activities:true},
+    'Procurement Manager':{dashboard:true,requests:true,rfqs:true,quotations:true,comparison:true,orders:true,receipts:true,invoices:false,payments:false,vendors:true,products:true,reports:true,users:false,activities:true},
+    Requester:{dashboard:true,requests:true,rfqs:false,quotations:false,comparison:false,orders:false,receipts:false,invoices:false,payments:false,vendors:false,products:true,reports:false,users:false,activities:true},
+    Finance:{dashboard:true,requests:false,rfqs:false,quotations:false,comparison:false,orders:false,receipts:true,invoices:true,payments:true,vendors:true,products:false,reports:true,users:false,activities:true},
+    Viewer:{dashboard:true,requests:true,rfqs:true,quotations:true,comparison:true,orders:true,receipts:true,invoices:true,payments:true,vendors:true,products:true,reports:true,users:false,activities:true}
+  };
+}
+function ensureState(){
+  let state=null;
+  try{state=JSON.parse(localStorage.getItem(STORAGE_KEY)||'null')}catch(_){}
+  if(!state){state=seedState();}
+  state.roles=state.roles||defaultRoles();
+  Object.keys(defaultRoles()).forEach(r=>{if(!state.roles[r])state.roles[r]=defaultRoles()[r];state.roles[r].activities=true});
+  state.users=Array.isArray(state.users)?state.users:[];
+  if(!state.users.length)state.users=seedState().users;
+  const admin=state.users.find(u=>String(u.email||'').toLowerCase()==='admin@purchase.local');
+  if(!admin) state.users.unshift({id:1,name:'Admin User',email:'admin@purchase.local',password:'admin123',role:'Admin',active:true});
+  else if(!admin.password) admin.password='admin123';
+  localStorage.setItem(STORAGE_KEY,JSON.stringify(state));
+  return state;
+}
+function login(){
+  const email=document.getElementById('email').value.trim().toLowerCase();
+  const password=document.getElementById('password').value;
+  const state=ensureState();
+  const user=state.users.find(u=>String(u.email||'').toLowerCase()===email);
+  const toast=document.getElementById('toast');
+  if(!user||user.active===false||user.password!==password){
+    toast.textContent='Invalid credentials or inactive user';
+    toast.className='toast';
+    return;
+  }
+  const safe={...user};delete safe.password;
+  localStorage.setItem(AUTH_KEY,JSON.stringify(safe));
+  location.href='dashboard.html';
+}
+(function(){
+  ensureState();
+  try{
+    if(localStorage.getItem(AUTH_KEY))location.href='dashboard.html';
+  }catch(_){}
+})();
+</script>
+</body>
+</html>
