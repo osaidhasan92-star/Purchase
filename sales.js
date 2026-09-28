@@ -1,4 +1,4 @@
-/* Sales Management Module - standalone MVP sharing the Purchase Management localStorage store. */
+/* Sales Management Module - standalone MVP sharing the Enterprise Resource Planning localStorage store. */
 function salesSeed(x){
   if(!Array.isArray(x.customers)) x.customers=[
     {id:1,code:'CUS-001',name:'ABC Traders',contact:'Ahmed Khan',phone:'0300-5550001',email:'sales@abc.test',address:'Karachi',category:'Retail',paymentTerms:'30 Days',creditLimit:500000,status:'Active'},
