@@ -401,6 +401,15 @@ const USER_MENU_STYLE = `
   display:block;
   line-height:20px;
 }
+
+/* Keep the account menu above dashboard content and prevent hero containers from clipping it. */
+.user-menu-wrap{position:relative;z-index:10020}
+.user-dropdown{z-index:10030;max-height:calc(100vh - 24px);overflow-y:auto}
+.admin-hero,.module-hero,.dashboard-identity,
+.admin-hero.has-dashboard-account,.module-hero.has-dashboard-account,.dashboard-identity.has-dashboard-account{
+  overflow:visible!important;
+}
+.has-dashboard-account{z-index:10010}
 </style>`;
 
 const SIDEBAR_SCROLL_KEY='purchase_sidebar_scroll_v1';
