@@ -1,0 +1,10 @@
+{
+  "name": "purchase-erp",
+  "private": true,
+  "scripts": {
+    "test:dom": "node tests/dom-smoke.cjs"
+  },
+  "devDependencies": {
+    "jsdom": "26.1.0"
+  }
+}

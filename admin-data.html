@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Data import and export</title>
+<link rel="stylesheet" href="shared.css"><style>body{font:16px Arial;background:#f3f5fa;padding:40px}main{max-width:760px;margin:auto;background:white;padding:30px;border-radius:14px}button,a{margin:8px;padding:10px}pre{white-space:pre-wrap}label{display:block;margin:15px 0}</style></head>
+<body><main><h1>Import and export company records</h1><p>Administrator access required. Import is available only on an empty installation.</p>
+<p>For browser demo records, open this page in the same browser and on the same origin where the demo was used. If moving domains, use the browser console export instructions in the README, then select that JSON file below.</p>
+<button id="browser-import">Import this browser's demo records</button>
+<label>Or select an exported JSON file <input id="import-file" type="file" accept="application/json,.json"></label>
+<button id="file-import">Import selected file</button><button id="export">Export server records</button>
+<p>Imported accounts are disabled until an administrator resets their passwords and activates them. Browser passwords are never imported. JSON exports contain business and HR records; store them privately. Database backups are also needed to restore accounts and audit history.</p>
+<a href="dashboard.html">Back to dashboard</a><pre id="result" role="status"></pre></main><script src="backend-client.js"></script><script>
+const result=document.getElementById('result');
+function display(error){result.textContent=error.message||String(error)}
+function stripCredentials(value){if(Array.isArray(value))return value.map(stripCredentials);if(value&&typeof value==='object')return Object.fromEntries(Object.entries(value).filter(([k])=>!['password','password_hash','initialPassword','currentPassword','newPassword'].includes(k)).map(([k,v])=>[k,stripCredentials(v)]));return value}
+async function load(){const me=await BackendPersistence.request('/auth/me');if(me.user.role!=='Admin')throw new Error('Administrator access required')}
+async function importData(data){await load();result.textContent='Importing…';const response=await BackendPersistence.request('/admin/import',{method:'POST',body:JSON.stringify(stripCredentials(data))});result.textContent=response.message}
+document.getElementById('browser-import').onclick=async()=>{try{const app=JSON.parse(localStorage.getItem('purchase_demo_state_v1')||'null'),hr=JSON.parse(localStorage.getItem('unified_hr_payroll_v1')||'{}');if(!app)throw new Error('No demo records found in this browser. Select an exported file instead.');await importData({app,hr})}catch(e){display(e)}};
+document.getElementById('file-import').onclick=async()=>{try{const file=document.getElementById('import-file').files[0];if(!file)throw new Error('Select a JSON file');await importData(JSON.parse(await file.text()))}catch(e){display(e)}};
+document.getElementById('export').onclick=async()=>{try{await load();const data=await BackendPersistence.request('/admin/export');const url=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download='purchase-records-'+new Date().toISOString().slice(0,10)+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);result.textContent='Records exported.'}catch(e){display(e)}};
+load().catch(display);
+</script></body></html>

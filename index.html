@@ -1,37 +1,15 @@
 <!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Enterprise Resource Planning System</title><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css"><link rel="stylesheet" href="shared.css"><style>body{font-family:Inter,Arial,sans-serif;background:#F0F2F8}.login{min-height:100vh;display:flex}.brand{display:none}@media(min-width:1024px){.brand{display:flex;width:42%;align-items:center;justify-content:center;background:linear-gradient(160deg,#FAFBFF,#F0F2F8);border-right:1px solid #E5E7EB}}.brand-card{background:#fff;border-radius:24px;padding:48px;box-shadow:0 20px 60px -12px rgba(27,42,107,.15)}.brand-card img{width:340px;max-width:100%;height:auto;display:block}.form{flex:1;display:flex;align-items:center;justify-content:center;padding:24px}.box{width:100%;max-width:390px}.field{margin-bottom:16px}.field label{display:block;font-size:12px;font-weight:700;color:#6B7280;text-transform:uppercase;margin-bottom:7px}.field input{width:100%;padding:12px 14px;border:1px solid #E5E7EB;border-radius:10px;background:#fff}.btn{width:100%;border:0;background:#1B2A6B;color:#fff;padding:12px;border-radius:10px;font-weight:700;cursor:pointer}.demo{margin-top:20px;background:#fff;border:1px solid #E5E7EB;border-radius:12px;padding:14px;font-size:12px;color:#6B7280}.toast{position:fixed;bottom:24px;right:24px;background:#1F2937;color:#fff;padding:11px 18px;border-radius:10px;z-index:99}</style></head><body><div class="login"><section class="brand"><div><div class="brand-card"><img src="logo.png" alt="Roshan Technologies"></div><div style="text-align:center;margin-top:30px;color:#6B7A99;font-size:11px;font-weight:700;letter-spacing:1.5px">ENTERPRISE RESOURCE PLANNING SYSTEM</div></div></section><section class="form"><div class="box"><h2 style="font-size:24px;margin:0 0 5px">Welcome back</h2><p style="color:#9CA3AF;font-size:14px;margin:0 0 26px">Sign in to your procurement workspace</p><div class="field"><label>Email address</label><input id="email" type="email" placeholder="name@company.com"></div><div class="field"><label>Password</label><input id="password" type="password" onkeydown="if(event.key==='Enter')login()"></div><button class="btn" onclick="login()">Sign in</button>
-<button class="demo" type="button" onclick="fillDemoLogin()" style="display:block;width:100%;text-align:left;cursor:pointer;font:inherit;margin-top:16px">
-<strong style="display:block;color:#1B2A6B;margin-bottom:4px">Demo Administrator — click to autofill</strong>
-<span>Fills the demo username and password for quick access.</span>
-</button>
-</div></section></div><div id="toast"></div><script>
-const DEMO_USERS_KEY='purchase_demo_users_v1',DEMO_SESSION_KEY='purchase_demo_session_v1';
-function demoUsers(){try{const saved=JSON.parse(localStorage.getItem(DEMO_USERS_KEY)||'null');if(saved)return saved}catch(_){}const users=[{id:'demo-admin',name:'Demo Administrator',email:'admin@purchase.local',password:'Demo@123',role:'Admin',active:true}];localStorage.setItem(DEMO_USERS_KEY,JSON.stringify(users));return users}
-
-try{const st=JSON.parse(localStorage.getItem('purchase_demo_state_v1')||'null'),c=st?.company||{};const logo=document.querySelector('.brand-card img');const title=document.querySelector('.brand + .form .box h2');if(title&&c.name)title.textContent='Welcome to '+c.name;const brand=document.querySelector('.brand-card')?.parentElement?.querySelector('div[style*="ENTERPRISE RESOURCE PLANNING SYSTEM"]');if(brand)brand.textContent='ENTERPRISE RESOURCE PLANNING SYSTEM'}catch(_){}
-
-function fillDemoLogin() {
-  document.getElementById('email').value = 'admin@purchase.local';
-  document.getElementById('password').value = 'Demo@123';
-  document.getElementById('email').focus();
-}
-
+</div></section></div><div id="toast"></div><script src="backend-client.js"></script><script>
 async function login() {
-  const email = document.getElementById('email').value.trim();
-  const password = document.getElementById('password').value;
-  const toast = document.getElementById('toast');
-
-  try {
-    const user=demoUsers().find(u=>u.email.toLowerCase()===email.toLowerCase()&&u.password===password&&u.active!==false);
-    if(!user)throw new Error('Invalid email or password');
-    localStorage.setItem(DEMO_SESSION_KEY,JSON.stringify({userId:user.id}));
-
-    sessionStorage.setItem('purchase_browser_session', 'active');
-    location.href = 'dashboard.html';
-  } catch (error) {
-    toast.textContent = error.message || 'Unable to sign in';
-    toast.className = 'toast';
-  }
+ const button=document.querySelector('.btn');
+ button.disabled=true;
+ try{
+   await BackendPersistence.request('/auth/login',{method:'POST',body:JSON.stringify({email:document.getElementById('email').value.trim(),password:document.getElementById('password').value})});
+   // Remove obsolete browser passwords after successful backend authentication.
+   localStorage.removeItem('purchase_demo_users_v1');
+   localStorage.removeItem('purchase_demo_session_v1');
+   location.href='dashboard.html';
+ }catch(error){const el=document.getElementById('toast');el.textContent=error.message;el.className='toast';button.disabled=false;}
 }
-
-try{const session=JSON.parse(localStorage.getItem(DEMO_SESSION_KEY)||'null');if(session&&demoUsers().some(u=>String(u.id)===String(session.userId)&&u.active!==false))location.href='dashboard.html'}catch(_){}
+BackendPersistence.request('/auth/me').then(()=>location.href='dashboard.html').catch(()=>{});
 </script></body></html>
