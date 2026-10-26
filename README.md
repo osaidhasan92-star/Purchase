@@ -1,26 +1,39 @@
 # Purchase — database-backed ERP
 
-This branch converts the browser demo into a shared, single-company application.
-It preserves the existing purchasing, CRM, sales and HR interfaces while moving
-their records to a Flask API and a database. PostgreSQL is the deployment target;
-SQLite is available for local development and automated tests.
+This is a general-products ERP demonstration for **Pakistan, PKR, one company and
+one warehouse (`WH / Stock`)**. It integrates CRM, sales, purchasing, HR/payroll,
+accounting, inventory, manufacturing and employee expenses. PostgreSQL is the
+deployment target; SQLite supports local development and automated tests.
 
 ## Included
 
-- Shared purchasing, CRM, sales, company settings and HR/payroll storage.
-- Hashed passwords; opaque, database-backed eight-hour login sessions; HttpOnly
-  and SameSite cookies; CSRF validation; persistent failed-login throttling.
-- Server-owned role permissions, separate HR permissions, sales-team filtering,
-  account administration, and session revocation after password/account changes.
-- Version-checked saves: an outdated browser gets HTTP 409 instead of overwriting
-  another user's changes. The UI waits for server saves before reporting success.
-- Protected PDF attachment upload/download for requests, vendor quotations and
-  direct purchase orders (10 MB maximum per PDF). Attachments are in the database.
-- Server-generated audit events, admin data export, and one-time browser-data import.
-- Docker/PostgreSQL deployment configuration, API tests and DOM workflow checks.
-- CRM script loading/synchronization fixes, consistent discounted-tax calculations,
-  separate purchasing/sales balance helpers, and server validation for document
-  numbers, overpayments, receipt quantities and sales-order dispatch limits.
+- CRM lead handoff, quotation approval, customer acceptance, sales orders,
+  pending/delivered challans, customer invoices and full/partial payments.
+- Purchase requests, approvals, RFQs, vendor quotations, comparison, purchase
+  orders, partial receipts, partial vendor bills and payments.
+- Relational double-entry journals and journal items, chart of accounts, manual
+  journals/reversals, receivable/payable matching, bank/cash transfers, bank
+  statement matching, period locks, general ledger, trial balance, P&L, balance
+  sheet, open-item aging and cash-movement reporting.
+- Relational stock balances and immutable movements, average-cost perpetual
+  valuation, negative-stock prevention, adjustments, scrap and linked stock returns.
+- Relational BoMs and manufacturing orders: Draft → Confirmed → In Progress → Done.
+  Completion consumes components, accrues conversion costs and receives finished
+  goods, with stock and journals committed in one database transaction.
+- Relational employee expenses: Draft → Submitted → Approved → Paid, with optional
+  PDF receipts and automatic expense/liability/reimbursement entries.
+- HR employee records, attendance, leave, payroll and separation. Payroll approval
+  posts salary expense and liabilities; payment clears salaries payable against
+  Main Bank. Completing separation revokes linked non-administrator logins.
+- Shared authenticated backend, hashed passwords, expiring HttpOnly sessions,
+  CSRF checks, role permissions, sales-team scope, conflict detection and audit log.
+- Fixed Pakistan/PKR setup. The separate Company Settings page is removed; basic
+  company name/contact/NTN details are edited in an administrator profile dialog
+  on the ERP overview. Product forms distinguish goods from services.
+- Explicit demo opening data: raw materials, finished kit, standard BoM, bank/cash
+  balances and opening stock. No demo data is loaded without clicking the button.
+- Docker/PostgreSQL configuration, backup instructions, API tests and interface
+  workflow checks. See [the client demo walkthrough](docs/DEMO_GUIDE.md).
 
 ## Local setup (Python 3.12)
 
@@ -128,9 +141,10 @@ import. An import is not a database backup restore.
 
 ## Backups and restore
 
-The admin JSON export contains business/HR records and sanitized user profiles.
-It does **not** include password hashes, login sessions, audit history or PDF
-contents. Use PostgreSQL backups for a full recovery:
+The admin JSON export contains legacy operational/HR registers and sanitized user
+profiles. It does **not** include the relational accounting, inventory, manufacturing,
+expense or reconciliation tables, password hashes, sessions, audit history or PDF
+contents. It is an operational-register export, not a complete ERP backup. Use PostgreSQL backups for a full recovery:
 
 ```bash
 mkdir -p backups
@@ -185,6 +199,23 @@ Save body example: `{"revision":3,"changes":{"vendors":[...]}}`.
 Return codes include 401 (sign in), 403 (permission/CSRF), 409 (stale revision),
 428 (revision missing), and 429 (failed-login limit).
 
+ERP workspace endpoints share the same authentication/CSRF protections:
+
+| Paths under `/api/erp` | Purpose |
+| --- | --- |
+| `/overview`, `/company-profile`, `/seed-demo` | Workspace, admin identity dialog and explicit opening data |
+| `/accounts`, `/entries`, `/entries/:id/post`, `/entries/:id/reverse` | Chart and balanced manual journal workflow |
+| `/reports`, `/aged`, `/reconcile`, `/period-lock` | Statements, open items, matching and accounting lock |
+| `/transfers`, `/bank-statements`, `/bank-statements/:id/match` | Cash/bank transfers and statement matching |
+| `/inventory`, `/inventory/adjust`, `/inventory/return` | Quantity/value ledger, adjustments and linked returns |
+| `/boms`, `/manufacturing`, `/manufacturing/:id/:action` | BoMs and confirm/start/complete/cancel production |
+| `/expenses`, `/expenses/:id/:action` | Claims and submit/approve/reject/pay workflow |
+
+Creation requests use a unique `requestKey` (8–100 letters/numbers/hyphens/
+underscores). Repeating a stock adjustment, manufacturing completion, expense
+approval/payment or posting event cannot duplicate its ledger effects. Separate
+mutations commit all corresponding stock and journal records atomically.
+
 If a save fails, the red **NOT SAVED** notice blocks normal navigation. Reloading
 server records discards the unsaved local edits. Re-enter those edits after
 reloading. There is intentionally no automatic retry of stale business data.
@@ -200,34 +231,70 @@ npm run test:dom
 
 The DOM test starts its own HTTP server and isolated temporary SQLite database.
 It exercises page scripts and actual saves; it is not a real-browser visual test.
-GitHub Actions runs both the API tests and frontend syntax checks.
+GitHub Actions is configured for SQLite and PostgreSQL API tests, frontend syntax
+checks and the DOM workflow suite. PostgreSQL tests use a disposable database
+named `purchase_test`; never point `TEST_DATABASE_URL` at a live installation.
 
-## Implementation boundaries and remaining work
+## Upgrading the earlier backend branch
 
-This is a backend conversion of the current workflows, not a claim that every ERP
-business rule is complete. Accounts, sessions, audit events and attachments have
-dedicated tables. Business records currently use two versioned JSON database
-aggregates (`app` and `hr`) to preserve the existing UI. This is durable shared
-storage, but large installations should move to normalized document/line tables,
-database-generated document sequences and granular transaction APIs. Unrelated
-edits within the same aggregate can intentionally conflict.
+Back up the database, stop web workers, deploy the new code, run `init-db`, then
+restart workers. This release adds new tables without changing the existing
+account/session/document columns. `init-db` creates these tables, seeds the chart
+of accounts and adds missing ERP role permissions while retaining existing custom
+permissions. It fixes the company country/currency to Pakistan/PKR.
 
-- Full general-ledger accounting, bank reconciliation, payment-gateway execution,
-  tax-country compliance and statutory payroll calculations are not implemented.
-- Purchase matching still follows the existing full-receipt/full-PO policy;
-  partial billing and landed-cost allocation need a dedicated redesign.
-- Delivery quantities are bounded by order quantity; a proper warehouse/stock
-  ledger, service-vs-stock product types, reservations, returns and valuation remain.
-- Some legacy order/receipt lines still reference product IDs or array position
-  instead of immutable line IDs. HR history still uses legacy employee labels.
-- RFQ/quotation “Send” records a workflow status. SMTP delivery is not configured.
-- Separation still requires review of the linked login account in User Management.
-- Import/export is administrative; there is no self-service multi-company tenancy.
-- PDF signatures are checked, but uploads are not malware-scanned. Serve PDFs as
-  downloads. A real-browser security/visual review and PostgreSQL deployment smoke
-  test are required before production acceptance.
-- Initial schema creation uses `init-db`. Future schema changes need versioned
-  database migrations; `init-db` is not an upgrade/migration engine.
+Existing operational records are **not** silently backfilled into a historical
+ledger. For client demonstrations, start with an empty installation and load the
+explicit demo opening data. For an existing live database, a reviewed opening
+balance/history migration is required before relying on financial reports.
 
-The authentication cookie settings follow Flask's security guidance:
+## Implementation boundaries
+
+This implements the connected **demo workflows**, not every Odoo feature or a
+Pakistan statutory accounting/payroll localization. The workflows follow the
+concepts documented in Odoo 18; this application does not embed or depend on Odoo.
+
+- Accounts, journals/lines, reconciliations, stock balances/movements, BoMs,
+  manufacturing orders/components, expenses and statement lines use relational
+  tables. The existing CRM/sales/purchase/HR screens retain their versioned JSON
+  operational registers; accepted business events project into the relational
+  ledgers atomically. A row lock serializes ledger/stock writes, and unique source
+  keys prevent duplicate posting. This remains a small single-company demo design.
+- Posted economic documents cannot be changed/deleted. Correct posted manual
+  journals with reversing entries. Stock returns reverse quantities/valuation;
+  commercial customer/vendor refunds require reviewed accounting credit entries.
+- Manufacturing is one-step, one-level BoM production without work-center routing,
+  capacity planning, subcontracting, by-products or lot/serial traceability.
+  Conversion costs accrue to account 2400; settle actual costs through finance.
+- Average costing is supported. Multi-warehouse transfers, FIFO, serial/expiry
+  tracking and reservation planning are not implemented. Pending deliveries only
+  allocate sales-order quantities; negative stock is checked at actual delivery.
+- Partial purchase billing is bounded by unbilled accepted receipt value and the
+  PO total. Automated landed-cost allocation and purchase-price variance handling
+  are not included; shipping/additional charges need reviewed accounting treatment.
+- Tax fields default to zero for demonstration. No rate is asserted to apply to
+  every Pakistan product; FBR filings, withholding, EOBI/social security and
+  statutory salary tax calculations are not implemented.
+- Financial reports use posted journal items. Cash reporting is a signed cash
+  movement summary including capital/internal transfers, not a statutory classified
+  cash-flow statement. Aging uses current reconciliation state rather than a
+  historical settlement snapshot.
+- Bank reconciliation matches one statement line to one posted bank/cash journal
+  item; automated bank feeds and split/combined statement matching are not included.
+- RFQ/quotation “Send” records status; SMTP and payment gateways are not configured.
+- Some legacy operational lines/HR references still use product IDs, array positions
+  or employee labels. Advanced document migrations and normalized transaction APIs
+  remain follow-up work. Future column changes require versioned schema migrations;
+  `init-db` is not a general upgrade engine.
+- The automated interface checks execute scripts against a real HTTP API in a DOM
+  runtime. A real-browser visual/security review and PostgreSQL deployment smoke
+  test remain necessary before a production handover. PDF uploads are not malware
+  scanned and are served as downloads.
+
+Reference flows:
+- https://www.odoo.com/documentation/18.0/applications/finance/accounting.html
+- https://www.odoo.com/documentation/18.0/applications/inventory_and_mrp.html
+- https://www.odoo.com/documentation/18.0/applications/finance/expenses.html
+
+Authentication cookie settings follow Flask's security guidance:
 https://flask.palletsprojects.com/en/stable/web-security/

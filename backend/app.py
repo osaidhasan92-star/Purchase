@@ -5,6 +5,7 @@ import math
 import os
 import re
 import secrets
+import sqlite3
 import time
 from copy import deepcopy
 from datetime import datetime, timezone
@@ -15,7 +16,8 @@ import click
 from flask import Flask, abort, g, jsonify, request, send_from_directory, send_file
 from io import BytesIO
 from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy import select, update
+from sqlalchemy import select, update, event
+from sqlalchemy.engine import Engine
 from sqlalchemy.exc import IntegrityError
 from werkzeug.exceptions import HTTPException
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -25,6 +27,13 @@ from .permissions import COLLECTIONS, HR_COLLECTIONS, ACTIONS, MODULES, allowed,
 from .validation import InvalidBusinessState, validate_business
 
 db = SQLAlchemy()
+
+
+@event.listens_for(Engine, 'connect')
+def sqlite_constraints(connection, _record):
+    if isinstance(connection, sqlite3.Connection):
+        connection.execute('PRAGMA foreign_keys=ON')
+
 ROOT = Path(__file__).resolve().parent.parent
 COOKIE = 'purchase_session'
 APP_KEYS = set(COLLECTIONS) | {'roles', 'company', 'users', 'activities'}
@@ -185,6 +194,10 @@ def merge_collection(key, incoming, existing, state, module):
         action = 'create' if before is None else 'delete' if after is None else 'edit'
         if not allowed(g.user, state, module, action):
             problem(f'Permission denied: {module}.{action}', 403)
+        if after and key == 'payroll':
+            previous, target = (before or {}).get('status'), after.get('status')
+            if previous != target and target not in {None:{'Draft'},'Draft':{'Approved'},'Approved':{'Paid'},'Paid':set()}.get(previous,set()):
+                problem('Payroll must progress from Draft to Approved to Paid')
         if after and key == 'salesQuotations':
             stages = {None: {'Draft', 'Pending Approval'}, 'Draft': {'Pending Approval', 'Rejected'},
                       'Pending Approval': {'Approved', 'Rejected'}, 'Approved': {'Sent'},
@@ -233,6 +246,8 @@ def validate_numbers(record):
 
 
 def validate_company(company):
+    if company.get('currency', 'PKR') != 'PKR' or company.get('country', 'Pakistan') != 'Pakistan':
+        problem('This single-company demo is fixed to Pakistan and PKR')
     logo = company.get('logo')
     if logo and not (isinstance(logo, str) and (
             re.fullmatch(r'data:image/(png|jpeg|webp|gif);base64,[A-Za-z0-9+/=\s]+', logo) or
@@ -246,11 +261,15 @@ def validate_company(company):
 def commit_document(doc, revision, data):
     if not isinstance(revision, int) or isinstance(revision, bool):
         problem('An integer revision is required', 428)
+    from .erp import lock, sync_business
+    lock()
+    previous = deepcopy(doc.data)
     result = db.session.execute(update(Document).where(Document.name == doc.name, Document.revision == revision)
                                 .values(data=data, revision=revision + 1).execution_options(synchronize_session=False))
     if result.rowcount != 1:
         db.session.rollback()
         problem('Another user saved newer data. Reload before trying again.', 409)
+    sync_business(previous, data, doc.name)
     audit('Saved ' + doc.name, {'collections': sorted(g.changed_keys)})
     db.session.commit()
     return revision + 1
@@ -568,7 +587,7 @@ def create_app(config=None):
     @app.post('/api/attachments')
     def upload_attachment():
         module = request.form.get('module')
-        if module not in ('requests', 'quotations', 'orders') or not allowed(g.user, app_document().data, module, 'create'):
+        if module not in ('requests', 'quotations', 'orders', 'expenses') or not allowed(g.user, app_document().data, module, 'create'):
             problem('Attachment upload permission required', 403)
         file = request.files.get('file')
         if not file:
@@ -594,6 +613,9 @@ def create_app(config=None):
             problem('Attachment access denied', 403)
         linked = any(r.get('attachmentPath') == attachment_id and in_scope(g.user, r, key, state)
                      for key, module in COLLECTIONS.items() if module == attachment.module for r in state.get(key, []))
+        if attachment.module == 'expenses':
+            from .erp import Expense
+            linked = bool(db.session.scalar(select(Expense.id).where(Expense.attachment_id == attachment_id))) and allowed(g.user, state, 'expenses', 'approve')
         if g.user.role != 'Admin' and attachment.uploader_id != g.user.id and not linked:
             problem('Attachment access denied', 403)
         return send_file(BytesIO(attachment.content), mimetype='application/pdf',
@@ -605,10 +627,10 @@ def create_app(config=None):
 
     @app.get('/<path:path>')
     def frontend(path):
-        if path in ('bootstrap.html', 'seed.html'):
+        if path in ('bootstrap.html', 'seed.html', 'settings.html'):
             problem('Demo login shortcuts have been removed', 410)
         # Never expose backend source, environment files, database files or backup JS.
-        public = {'app.js', 'crm.js', 'sales.js', 'sales_patch.js', 'hr.js', 'backend-client.js',
+        public = {'app.js', 'crm.js', 'sales.js', 'sales_patch.js', 'hr.js', 'backend-client.js', 'erp.js', 'erp.css',
                   'shared.css', 'styles.css', 'logo.png', 'dexterra-stamp.jpg'}
         pages = {p.name for p in ROOT.glob('*.html')} - {'bootstrap.html', 'seed.html'}
         asset = path.startswith('assets/') and Path(path).suffix.lower() in ('.png', '.jpg', '.jpeg', '.webp')
@@ -626,6 +648,9 @@ def create_app(config=None):
             db.session.add(Document(name='app', data=state, revision=1))
         if not db.session.get(Document, 'hr'):
             db.session.add(Document(name='hr', data={key: [] for key in HR_COLLECTIONS}, revision=1))
+        db.session.flush()
+        from .erp import initialize
+        initialize()
         db.session.commit()
         click.echo('Database initialized; existing records were preserved.')
 
@@ -645,6 +670,8 @@ def create_app(config=None):
         db.session.commit()
         click.echo('Administrator created.')
 
+    from .erp_api import init_erp
+    init_erp(app)
     return app
 
 

@@ -87,3 +87,17 @@ def validate_business(state):
             accepted[(str(order['id']), index)] += number(line.get('acceptedQty'))
             if accepted[(str(order['id']), index)] > number(order['items'][index].get('quantity')):
                 raise InvalidBusinessState('Accepted receipts exceed ordered quantity')
+    billed = defaultdict(Decimal)
+    for invoice in state.get('invoices', []):
+        if invoice.get('status') not in ('Matched','Approved','Partially Paid','Paid'):
+            continue
+        order = purchase_orders.get(str(invoice.get('poId')))
+        if not order:
+            raise InvalidBusinessState('A matched vendor bill must reference a purchase order')
+        received = Decimal(0)
+        for index, line in enumerate(order.get('items', [])):
+            base = accepted[(str(order['id']),index)] * number(line.get('rate',line.get('quotedRate',0)))
+            received += base * (1-number(line.get('discountPercent'))/100) * (1+number(line.get('taxPercent'))/100)
+        billed[str(order['id'])] += number(invoice.get('amount'))
+        if billed[str(order['id'])] > min(number(order.get('total')), received) + Decimal('0.01'):
+            raise InvalidBusinessState('Vendor bills exceed the ordered and accepted receipt value')

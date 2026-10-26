@@ -23,6 +23,7 @@ HR_COLLECTIONS = {
 MODULES = sorted(set(COLLECTIONS.values()) | set(HR_COLLECTIONS.values()) | {
     'dashboard', 'sales', 'reports', 'activities', 'users', 'settings',
     'hr_dashboard', 'hr_reports',
+    'accounting', 'inventory', 'manufacturing', 'expenses',
 })
 
 
@@ -64,6 +65,18 @@ def default_roles():
     roles['Quote Manager'] = deepcopy(roles['Sales Manager'])
     add('Viewer', list(COLLECTIONS.values()) + ['dashboard', 'sales', 'reports', 'activities'], readonly=True)
     add('HR Manager', list(HR_COLLECTIONS.values()) + ['dashboard', 'hr_dashboard', 'hr_reports'], approve=True)
+    for name in roles:
+        for module in ('accounting', 'inventory', 'manufacturing', 'expenses'):
+            view = name == 'Admin' or (module == 'accounting' and name == 'Finance') or (module == 'inventory' and name in ('Procurement Manager','Procurement Staff','Sales Manager','Finance','Viewer')) or module == 'expenses'
+            write = view and name != 'Viewer'
+            approve = name == 'Admin' or (module in ('accounting','expenses') and name == 'Finance') or (module == 'inventory' and name == 'Procurement Manager')
+            roles[name][module] = view
+            roles[name]['permissions'][module] = dict(view=view, create=write, edit=write, delete=False, approve=approve, export=view)
+    # Dedicated shop-floor role; production users do not receive finance access.
+    add('Manufacturing Manager', ['dashboard','inventory','manufacturing','products','expenses','activities'])
+    for module in ('inventory','manufacturing'):
+        roles['Manufacturing Manager'][module] = True
+        roles['Manufacturing Manager']['permissions'][module] = dict(view=True,create=True,edit=True,delete=False,approve=True,export=True)
     return roles
 
 
