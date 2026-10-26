@@ -83,6 +83,11 @@ async function main() {
     'admin-data', 'hr-recruitment', 'hr-attendance', 'hr-leave', 'hr-payroll', 'hr-separation', 'hr-reports', 'reports', 'activities',
     'erp:overview','erp:accounting','erp:accounts','erp:journals','erp:reports','erp:aged','erp:bank','erp:inventory','erp:stock-moves','erp:manufacturing','erp:production-orders','erp:boms','erp:expenses','erp:expense-claims'];
   for (const name of names) {(await page(name)).window.close();}
+  let profilePage=await page('sales');
+  assert.equal(profilePage.window.document.querySelectorAll('#user-dropdown button[onclick*="openCompanyProfile"]').length,1);
+  await profilePage.window.openCompanyProfile();
+  assert.ok(profilePage.window.document.getElementById('profile-name'),'Company profile opens outside ERP overview');
+  profilePage.window.close();
   // Shared master-data links retain their originating module's submenu.
   let contextPage=await page('customers?module=crm');
   assert.equal(contextPage.window.document.querySelector('.module-app').dataset.module,'crm');contextPage.window.close();
@@ -254,6 +259,7 @@ async function main() {
   dom=await page('sales-quotations');
   assert.equal(dom.window.document.querySelectorAll('.sidebar [data-workspace="hr"],.sidebar [data-workspace="accounting"],.sidebar [data-workspace="manufacturing"]').length,0);
   assert.equal(dom.window.document.querySelector('.module-tabs [aria-current="page"]').textContent,'Quotations');
+  assert.equal(dom.window.document.querySelectorAll('#user-dropdown button[onclick*="openCompanyProfile"]').length,0);
   dom.window.close();
   dom=await page('activities');
   assert.deepEqual([...dom.window.document.querySelectorAll('.module-tab')].map(e=>e.textContent),['Activity Log']);

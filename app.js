@@ -146,6 +146,7 @@ function layout(active,title,sub,body){
 <span>${esc(currentUser()?.role||'')}</span>
 </div>
 <div class="user-dropdown-divider"></div>
+${currentUser()?.role==='Admin'?'<button onclick="openCompanyProfile();closeUserMenu()"><i class="ti ti-building"></i><span>Company profile</span></button>':''}
 <button onclick="openChangePassword();closeUserMenu()"><i class="ti ti-key"></i><span>Change Password</span></button>
 <button onclick="logout()"><i class="ti ti-logout"></i><span>Sign out</span></button>
 </div>
@@ -2031,4 +2032,17 @@ function moduleSubmenu(group){
    return `<a href="${esc(href)}" class="module-tab ${selected?'active':''}" ${selected?'aria-current="page"':''} onclick="return navigateAfterSave(event,this)">${esc(label)}</a>`;
  }).join('');
  return `<div class="module-navigation"><nav class="module-tabs" aria-label="${esc(group.label)} submenu">${links}</nav>${group.flow?`<div class="module-flow">${esc(group.flow)}</div>`:''}</div>`;
+}
+
+async function openCompanyProfile(){
+ if(currentUser()?.role!=='Admin')return;
+ try{
+ const {company:c}=await api('/erp/overview');
+ openModal(`<div class="modal" id="modal"><div class="modal-box request-modal"><div class="modal-head"><h3>Company profile</h3><button onclick="closeModal()">×</button></div><div class="modal-body"><p class="erp-note">Pakistan · PKR · One company · WH / Stock</p><div class="erp-form-grid">${[['name','Company name'],['legalName','Legal name'],['address','Address'],['phone','Telephone'],['email','Email'],['taxNumber','NTN / STRN']].map(([key,label])=>`<label>${label}<input id="profile-${key}" value="${esc(c[key]||'')}"></label>`).join('')}</div></div><div class="modal-foot"><button class="btn-secondary" onclick="closeModal()">Cancel</button><button class="btn-primary" onclick="saveCompanyProfile()">Save</button></div></div></div>`);
+ }catch(error){toast(error.message)}
+}
+async function saveCompanyProfile(){
+ if(currentUser()?.role!=='Admin')return;
+ const data={};for(const key of ['name','legalName','address','phone','email','taxNumber'])data[key]=document.getElementById('profile-'+key).value.trim();
+ try{await api('/erp/company-profile',{method:'POST',body:JSON.stringify(data)});location.reload()}catch(error){toast(error.message)}
 }
