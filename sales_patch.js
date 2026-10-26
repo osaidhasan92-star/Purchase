@@ -111,8 +111,8 @@
   // Existing edit modal is retained for draft maintenance, but its status selector is constrained by workflow.
   const oldEdit=window.editSalesQuotation;window.editSalesQuotation=function(id){const x=sdb(),q=x.salesQuotations.find(a=>Number(a.id)===Number(id)),u=currentUser();if(q&&q.status!=='Draft'){toast('Only draft quotations can be edited');return}if(oldEdit)oldEdit(id)};
   // Deep-link from CRM: sales-quotations.html?leadId=... opens the quotation form automatically.
-  function handleLeadQuery(){const p=new URLSearchParams(location.search),id=p.get('leadId');if(id&&location.pathname.endsWith('sales-quotations.html'))setTimeout(()=>openSalesQuotation(Number(id)),120)}
-  window.addEventListener('DOMContentLoaded',handleLeadQuery);
+  function handleLeadQuery(){const p=new URLSearchParams(location.search),id=p.get('leadId');if(id&&workspacePage().endsWith('sales-quotations.html'))setTimeout(()=>openSalesQuotation(Number(id)),120)}
+  window.addEventListener('workspace:ready',handleLeadQuery);
 
   /* ===== Sales Order / Delivery / Invoice separation ===== */
   // Sales Orders only show delivery/invoice/payment status. Creation of deliveries

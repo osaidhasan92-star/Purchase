@@ -124,3 +124,15 @@ Payroll entry amounts are entered for the demonstration; posting is automatic.
 This is a connected demonstration, not an assertion of FBR or statutory payroll
 compliance or full feature parity with Odoo. Use the README's boundaries when
 describing the system to clients.
+
+### One workspace address
+
+All business screens now open in `erp.html?view=…`, including CRM (`view=crm-dashboard`),
+Sales (`view=sales`), Purchasing (`view=purchase-dashboard`), HR (`view=hr-dashboard`),
+Accounting (`view=accounting`), Inventory, Manufacturing, Expenses and Administration.
+The shared workspace loads the required module scripts for the selected view. Navigation
+uses normal browser history, so refresh, bookmarks, Back and Forward work as expected.
+Old `.html` addresses redirect to the matching workspace view and preserve query parameters
+such as CRM lead IDs and the originating module for shared customer/product screens.
+Purchasing reports use `view=purchase-reports`; accounting reports retain `view=reports`.
+Login remains `index.html`. No database migration or reseeding is needed for this UI update.

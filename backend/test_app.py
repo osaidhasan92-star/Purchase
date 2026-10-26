@@ -205,3 +205,19 @@ def test_login_rate_limit(app):
     for _ in range(10):
         assert client.post('/api/auth/login', json={'email': 'missing@example.test', 'password': 'bad'}).status_code == 401
     assert client.post('/api/auth/login', json={'email': 'missing@example.test', 'password': 'bad'}).status_code == 429
+
+
+def test_workspace_routes_preserve_context(app):
+    client = app.test_client()
+    for page, view in [('sales.html', 'sales'), ('hr-payroll.html', 'hr-payroll'),
+                       ('crm-dashboard.html', 'crm-dashboard'), ('orders.html', 'orders'),
+                       ('reports.html', 'purchase-reports'), ('admin-data.html', 'admin-data')]:
+        response = client.get('/' + page + '?module=crm&leadId=123')
+        assert response.status_code == 302
+        from urllib.parse import urlparse, parse_qs
+        target = urlparse(response.location)
+        assert target.path == '/erp.html'
+        assert parse_qs(target.query) == {'module': ['crm'], 'leadId': ['123'], 'view': [view]}
+    shell = client.get('/erp.html?view=hr-payroll')
+    assert shell.status_code == 200
+    assert b'workspace-loader.js' in shell.data

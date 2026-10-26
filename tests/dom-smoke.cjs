@@ -58,6 +58,13 @@ async function main() {
     });
     await waitFor(() => dom.window.document.querySelector('.sidebar'), 'No sidebar on ' + name);
     const document=dom.window.document;
+    assert.equal(dom.window.location.pathname,'/erp.html','Every module uses the shared workspace');
+    assert.ok(dom.window.location.search.includes('view='),'Every screen has a view route');
+    for(const link of document.querySelectorAll('.sidebar a[href],.module-tabs a[href]')){
+      const target=new URL(link.href);
+      assert.equal(target.pathname,'/erp.html','Navigation must use the shared workspace: '+link.href);
+      assert.ok(target.searchParams.get('view'));
+    }
     assert.ok(document.querySelector('.module-header h1'),'Missing shared header: '+name);
     assert.equal(document.querySelectorAll('.sidebar .nav-item.active').length,1,'Expected one active module: '+name);
     const module=document.querySelector('.module-app').dataset.module;

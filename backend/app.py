@@ -13,7 +13,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 import click
-from flask import Flask, abort, g, jsonify, request, send_from_directory, send_file
+from flask import Flask, abort, g, jsonify, request, send_from_directory, send_file, redirect
 from io import BytesIO
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import select, update, event
@@ -629,8 +629,14 @@ def create_app(config=None):
     def frontend(path):
         if path in ('bootstrap.html', 'seed.html', 'settings.html'):
             problem('Demo login shortcuts have been removed', 410)
+        legacy_routes = {'reminders.html': 'reminders', 'requests.html': 'requests', 'sales-invoices.html': 'sales-invoices', 'users.html': 'users', 'sales-quotations.html': 'sales-quotations', 'invoices.html': 'invoices', 'purchase-dashboard.html': 'purchase-dashboard', 'hr-separation.html': 'hr-separation', 'products.html': 'products', 'hr-dashboard.html': 'hr-dashboard', 'hr-recruitment.html': 'hr-recruitment', 'sales-deliveries.html': 'sales-deliveries', 'crm-quotes.html': 'crm-quotes', 'payments.html': 'payments', 'customers.html': 'customers', 'hr-payroll.html': 'hr-payroll', 'hr-reports.html': 'hr-reports', 'hr-leave.html': 'hr-leave', 'quotations.html': 'quotations', 'activities.html': 'activities', 'leads.html': 'leads', 'companies.html': 'companies', 'comparison.html': 'comparison', 'reports.html': 'purchase-reports', 'sales.html': 'sales', 'rfqs.html': 'rfqs', 'sales-orders.html': 'sales-orders', 'vendors.html': 'vendors', 'crm-dashboard.html': 'crm-dashboard', 'sales-payments.html': 'sales-payments', 'admin-data.html': 'admin-data', 'hr-attendance.html': 'hr-attendance', 'receipts.html': 'receipts', 'hr-manpower.html': 'hr-manpower', 'orders.html': 'orders', 'dashboard.html': 'dashboard', 'hr-employees.html': 'hr-employees'}
+        if path in legacy_routes:
+            from urllib.parse import urlencode
+            query = request.args.to_dict(flat=False)
+            query['view'] = [legacy_routes[path]]
+            return redirect('/erp.html?' + urlencode(query, doseq=True), code=302)
         # Never expose backend source, environment files, database files or backup JS.
-        public = {'app.js', 'crm.js', 'sales.js', 'sales_patch.js', 'hr.js', 'backend-client.js', 'erp.js', 'erp.css',
+        public = {'workspace.js', 'workspace-loader.js', 'admin-data.js', 'app.js', 'crm.js', 'sales.js', 'sales_patch.js', 'hr.js', 'backend-client.js', 'erp.js', 'erp.css',
                   'shared.css', 'styles.css', 'logo.png', 'dexterra-stamp.jpg'}
         pages = {p.name for p in ROOT.glob('*.html')} - {'bootstrap.html', 'seed.html'}
         asset = path.startswith('assets/') and Path(path).suffix.lower() in ('.png', '.jpg', '.jpeg', '.webp')
