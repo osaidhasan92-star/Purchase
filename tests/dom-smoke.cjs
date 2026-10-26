@@ -243,6 +243,40 @@ async function main() {
   assert.ok(dom.window.eval(`ERP_CACHE.entries.some(e=>e.source==='payroll:${payrollId}')`));
   assert.ok(dom.window.eval(`ERP_CACHE.entries.some(e=>e.source==='payroll:${payrollId}:payment')`));
   dom.window.close();
+  // Exercise remaining HR registers and their actual UI action handlers.
+  async function hrRecord(screen,group,values){
+    const view=await page(screen);const form=view.window.document.querySelector('form.hr-form');
+    for(const [key,value] of Object.entries(values))form.elements[key].value=value;
+    await view.window.hrSubmit({preventDefault(){},target:form},group);
+    return view;
+  }
+  dom=await hrRecord('hr-manpower','manpower',{department:'Production',position:'Machine operator',count:'1',reason:'Demo expansion',requestedBy:'Demo manager'});
+  await dom.window.hrAdvance(dom.window.hrState().manpower[0].id);
+  assert.equal(dom.window.hrState().manpower[0].status,'Approved');dom.window.close();
+  dom=await hrRecord('hr-recruitment','candidates',{name:'Demo candidate',position:'Machine operator',contact:'candidate@example.test',stage:'Hired'});
+  assert.equal(dom.window.hrState().candidates[0].stage,'Hired');dom.window.close();
+  dom=await hrRecord('hr-attendance','attendance',{date:'2026-10-26',attendanceStatus:'Present'});
+  assert.equal(dom.window.hrState().attendance[0].attendanceStatus,'Present');
+  const alerts=[];dom.window.alert=message=>alerts.push(message);
+  let attendanceForm=dom.window.document.querySelector('form.hr-form');
+  attendanceForm.elements.date.value='2026-10-26';
+  await dom.window.hrSubmit({preventDefault(){},target:attendanceForm},'attendance');
+  assert.equal(dom.window.hrState().attendance.length,1);assert.equal(alerts.length,1);dom.window.close();
+  dom=await hrRecord('hr-leave','leaves',{from:'2026-11-01',to:'2026-11-02',reason:'Demo leave',leaveType:'Annual'});
+  assert.equal(dom.window.hrState().leaves[0].days,2);
+  await dom.window.hrSetLeaveStatus(dom.window.hrState().leaves[0].id,'Approved');
+  assert.equal(dom.window.hrState().leaves[0].status,'Approved');
+  dom.window.alert=message=>alerts.push(message);
+  const leaveForm=dom.window.document.querySelector('form.hr-form');
+  leaveForm.elements.from.value='2026-11-02';leaveForm.elements.to.value='2026-11-03';leaveForm.elements.reason.value='Overlapping leave';
+  await dom.window.hrSubmit({preventDefault(){},target:leaveForm},'leaves');
+  assert.equal(dom.window.hrState().leaves.length,1);assert.equal(alerts.length,2);dom.window.close();
+  dom=await hrRecord('hr-separation','separations',{lastWorkingDate:'2026-11-30',reason:'Demo separation',finalSettlement:'0'});
+  const separationId=dom.window.hrState().separations[0].id;
+  await dom.window.hrSeparationStatus(separationId,'Approved');
+  await dom.window.hrSeparationStatus(separationId,'Completed');
+  assert.equal(dom.window.hrState().employees[0].status,'Separated');dom.window.close();
+  dom=await page('hr-reports');assert.match(dom.window.document.body.textContent,/Separated Employees/);dom.window.close();
   dom = await page('sales-payments');
   assert.equal(dom.window.eval('db().customerInvoices[0].paidAmount'), 40);
   assert.equal(dom.window.eval('db().customerInvoices[0].status'), 'Partially Paid');
@@ -267,7 +301,7 @@ async function main() {
   jar.setCookieSync(login.headers.get('set-cookie'),base);
 
   assert.deepEqual(errors, []);
-  console.log(`${names.length} pages/views rendered with shared module navigation; active tabs, module context and restricted roles passed; CRM/sales, purchasing, manufacturing, expenses and payroll flows passed.`);
+  console.log(`${names.length} pages/views rendered with shared module navigation; active tabs, module context and restricted roles passed; CRM/sales, purchasing, manufacturing, expenses, payroll, manpower, recruitment, attendance, leave and separation flows passed.`);
 }
 
 main().catch(error => {console.error(error); process.exitCode = 1;}).finally(() => {
