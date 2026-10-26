@@ -43,7 +43,7 @@ async function main() {
     console.on('jsdomError', error => {
       if (!error.message.includes('Could not load') && !error.message.includes('CSS') && !error.message.includes('navigation')) errors.push(name + ': ' + error.message);
     });
-    const filename=name.startsWith('erp:')?'erp.html?view='+name.slice(4):name+'.html';
+    const [plain,search]=name.split('?');const filename=name.startsWith('erp:')?'erp.html?view='+name.slice(4):plain+'.html'+(search?'?'+search:'');
     const dom = await JSDOM.fromURL(base + '/' + filename, {
       cookieJar: jar, runScripts: 'dangerously', resources: new LocalResources(), pretendToBeVisual: true, virtualConsole: console,
       beforeParse(window) {
@@ -57,15 +57,30 @@ async function main() {
       }
     });
     await waitFor(() => dom.window.document.querySelector('.sidebar'), 'No sidebar on ' + name);
+    const document=dom.window.document;
+    assert.ok(document.querySelector('.module-header h1'),'Missing shared header: '+name);
+    assert.equal(document.querySelectorAll('.sidebar .nav-item.active').length,1,'Expected one active module: '+name);
+    const module=document.querySelector('.module-app').dataset.module;
+    if(module!=='overview'){
+      assert.equal(document.querySelectorAll('.module-tabs').length,1,'Expected one shared submenu: '+name);
+      assert.equal(document.querySelectorAll('.module-tabs [aria-current="page"]').length,1,'Expected one active tab: '+name);
+      if(module!=='admin')assert.equal(document.querySelectorAll('.module-navigation .module-flow').length,1,'Missing workflow strip: '+name);
+    }
+    assert.equal(document.querySelectorAll('.sidebar a[href="leads.html"],.sidebar a[href="orders.html"],.sidebar a[href="hr-payroll.html"]').length,0,'Submenus must live in the module content: '+name);
     return dom;
   }
 
   const names = ['dashboard', 'users', 'vendors', 'products', 'requests', 'rfqs', 'quotations', 'comparison', 'orders',
     'receipts', 'invoices', 'payments', 'crm-dashboard', 'leads', 'reminders', 'sales', 'customers', 'sales-quotations',
     'sales-orders', 'sales-deliveries', 'sales-invoices', 'sales-payments', 'hr-dashboard', 'hr-employees', 'hr-manpower',
-    'hr-recruitment', 'hr-attendance', 'hr-leave', 'hr-payroll', 'hr-separation', 'hr-reports', 'reports', 'activities',
-    'erp:overview','erp:accounting','erp:accounts','erp:journals','erp:reports','erp:aged','erp:bank','erp:inventory','erp:manufacturing','erp:boms','erp:expenses'];
+    'admin-data', 'hr-recruitment', 'hr-attendance', 'hr-leave', 'hr-payroll', 'hr-separation', 'hr-reports', 'reports', 'activities',
+    'erp:overview','erp:accounting','erp:accounts','erp:journals','erp:reports','erp:aged','erp:bank','erp:inventory','erp:stock-moves','erp:manufacturing','erp:production-orders','erp:boms','erp:expenses','erp:expense-claims'];
   for (const name of names) {(await page(name)).window.close();}
+  // Shared master-data links retain their originating module's submenu.
+  let contextPage=await page('customers?module=crm');
+  assert.equal(contextPage.window.document.querySelector('.module-app').dataset.module,'crm');contextPage.window.close();
+  contextPage=await page('products?module=purchase');
+  assert.equal(contextPage.window.document.querySelector('.module-app').dataset.module,'purchase');contextPage.window.close();
   let dom = await page('vendors');
   dom.window.openVendor();
   dom.window.document.getElementById('vname').value = 'Persisted through the interface';
@@ -221,8 +236,25 @@ async function main() {
   assert.equal(dom.window.eval('db().customerInvoices[0].status'), 'Partially Paid');
   dom.window.close();
 
+  // Restricted users see only permitted modules/tabs, including on shared master-data pages.
+  const adminCookie=jar.getCookieStringSync(base);
+  const adminMe=await (await fetch(base+'/api/auth/me',{headers:{Cookie:adminCookie}})).json();
+  const created=await fetch(base+'/api/users',{method:'POST',headers:{Cookie:adminCookie,'Content-Type':'application/json','X-CSRF-Token':adminMe.csrfToken},
+    body:JSON.stringify({name:'Navigation Viewer',email:'nav-viewer@example.test',password,role:'Viewer',active:true})});
+  assert.equal(created.status,200);
+  const viewerLogin=await fetch(base+'/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:'nav-viewer@example.test',password})});
+  assert.equal(viewerLogin.status,200);jar.setCookieSync(viewerLogin.headers.get('set-cookie'),base);
+  dom=await page('sales-quotations');
+  assert.equal(dom.window.document.querySelectorAll('.sidebar [data-workspace="hr"],.sidebar [data-workspace="accounting"],.sidebar [data-workspace="manufacturing"]').length,0);
+  assert.equal(dom.window.document.querySelector('.module-tabs [aria-current="page"]').textContent,'Quotations');
+  dom.window.close();
+  dom=await page('activities');
+  assert.deepEqual([...dom.window.document.querySelectorAll('.module-tab')].map(e=>e.textContent),['Activity Log']);
+  dom.window.close();
+  jar.setCookieSync(login.headers.get('set-cookie'),base);
+
   assert.deepEqual(errors, []);
-  console.log(`${names.length} pages rendered; CRM/sales/payment, full purchasing, manufacturing, expenses and automatic payroll journals passed; no script errors.`);
+  console.log(`${names.length} pages/views rendered with shared module navigation; active tabs, module context and restricted roles passed; CRM/sales, purchasing, manufacturing, expenses and payroll flows passed.`);
 }
 
 main().catch(error => {console.error(error); process.exitCode = 1;}).finally(() => {

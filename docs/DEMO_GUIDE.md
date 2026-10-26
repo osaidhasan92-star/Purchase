@@ -16,6 +16,30 @@
 Demo opening data cannot overwrite an existing ledger or existing product catalog.
 Use a separate empty database for a clean presentation, never erase client data.
 
+## Consistent module navigation
+
+The sidebar lists modules. Click CRM, Sales, Purchasing, HR, Accounting, Inventory,
+Manufacturing or Expenses to open its dashboard. Each module uses the same header,
+horizontal submenu and workflow strip; the dark tab indicates the current screen.
+Submenu links are filtered by the signed-in user's permissions. On small screens,
+the module menu opens from the header and submenu tabs scroll horizontally.
+
+- CRM: Dashboard, Leads, Customers, Reminders.
+- Sales: Dashboard, Customers, Quotations, Orders, Deliveries, Invoices, Payments.
+- Purchasing: Dashboard, Requests, RFQs, Quotations, Comparison, Orders, Receipts,
+  Bills, Payments, Vendors, Products, Reports.
+- HR: Dashboard, Employees, Manpower, Recruitment, Attendance, Leave, Payroll,
+  Separation, Reports.
+- Accounting: Dashboard, Chart of Accounts, Journals, Financial Reports,
+  Receivables / Payables, Bank Reconciliation.
+- Inventory: Dashboard, Products, Stock Movements.
+- Manufacturing: Dashboard, Manufacturing Orders, Bills of Materials.
+- Expenses: Dashboard, Expense Claims.
+
+Customers opened from CRM retain the CRM submenu, and Products opened from
+Purchasing retain the Purchasing submenu. Administration also shares the same
+layout for users/roles, activities and import/export.
+
 ## Manufacturing → inventory → finance
 
 1. Open **Manufacturing → New Manufacturing Order**.
