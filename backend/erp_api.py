@@ -10,10 +10,11 @@ from sqlalchemy import select, func
 
 from .app import db, Document, Attachment, body, problem, audit
 from .permissions import allowed
+from .scope import object_visible, require_object, remember, object_creator
 from .validation import InvalidBusinessState
 from .erp import (Account, JournalEntry, JournalLine, Reconciliation, ERPProduct, StockBalance, StockMove,
                   BillOfMaterials, BOMLine, ManufacturingOrder, ProductionComponent, Expense, BankStatementLine,
-                  ERPControl, COMPANY, CENT, UNIT, dec, day, lock, next_number, post_entry, journal_pair,
+                  ERPControl, COMPANY, CHART, CENT, UNIT, dec, day, lock, next_number, post_entry, journal_pair,
                   stock_move, sync_products, matched_amount, reconcile, auto_reconcile, check_period)
 
 bp = Blueprint('erp', __name__, url_prefix='/api/erp')
@@ -56,10 +57,15 @@ def row(model, identity):
     value = db.session.get(model, identity)
     if not value:
         problem('Record not found', 404)
+    if model in (JournalEntry,JournalLine,StockMove,BillOfMaterials,ManufacturingOrder,Expense,BankStatementLine,ERPProduct,Attachment):
+        require_object(value)
+    if model is Account and value.code not in {a[0] for a in CHART}:
+        require_object(value)
     return value
 
 
 def entry_json(entry):
+    require_object(entry)
     return dict(id=entry.id, number=entry.number, source=entry.source, memo=entry.memo, date=entry.date,
                 status=entry.status, reversalOf=entry.reversal_of,
                 lines=[dict(id=l.id, account=l.account, debit=str(l.debit), credit=str(l.credit), partner=l.partner,
@@ -67,6 +73,7 @@ def entry_json(entry):
 
 
 def move_json(move):
+    require_object(move)
     product = db.session.get(ERPProduct, move.product_id)
     return dict(id=move.id, number=move.number, productId=move.product_id, product=product.name,
                 quantity=str(move.quantity), value=str(move.value), kind=move.kind, date=move.date,
@@ -74,6 +81,7 @@ def move_json(move):
 
 
 def expense_json(expense):
+    require_object(expense)
     return dict(id=expense.id, number=expense.number, employee=expense.employee, ownerId=expense.owner_id,
                 description=expense.description, account=expense.account, amount=str(expense.amount),
                 tax=str(expense.tax), total=str(expense.amount+expense.tax), date=expense.date,
@@ -81,6 +89,7 @@ def expense_json(expense):
 
 
 def bom_json(bom):
+    require_object(bom)
     return dict(id=bom.id, name=bom.name, productId=bom.product_id,
                 product=row(ERPProduct,bom.product_id).name, quantity=str(bom.output_quantity),
                 conversionCost=str(bom.conversion_cost),
@@ -88,6 +97,7 @@ def bom_json(bom):
 
 
 def mo_json(order):
+    require_object(order)
     return dict(id=order.id, number=order.number, bomId=order.bom_id, product=row(ERPProduct,order.product_id).name,
                 productId=order.product_id, quantity=str(order.quantity), conversionCost=str(order.conversion_cost),
                 actualCost=str(order.actual_cost), state=order.state, date=order.date,
@@ -103,14 +113,13 @@ def overview():
     result = dict(company=state.get('company', COMPANY), warehouse='WH / Stock', currency='PKR',
                   canSeed=g.user.role=='Admin', permissions={m:{a:allowed(g.user,state,m,a) for a in ('view','create','edit','approve')} for m in ('accounting','inventory','manufacturing','expenses')})
     if allowed(g.user,state,'inventory'):
-        result['inventoryValue'] = str(db.session.scalar(select(func.coalesce(func.sum(StockBalance.value),0))))
-        result['stockProducts'] = db.session.query(ERPProduct).filter_by(kind='stock').count()
+        result['inventoryValue'] = str(sum((m.value for m in db.session.scalars(select(StockMove)) if object_visible(m)),Decimal(0)))
+        result['stockProducts'] = sum(1 for p in db.session.scalars(select(ERPProduct).where(ERPProduct.kind=='stock')) if object_visible(p))
     if allowed(g.user,state,'manufacturing'):
-        result['openProduction'] = db.session.query(ManufacturingOrder).filter(ManufacturingOrder.state.in_(['Draft','Confirmed','In Progress'])).count()
+        result['openProduction'] = sum(1 for o in db.session.scalars(select(ManufacturingOrder).where(ManufacturingOrder.state.in_(['Draft','Confirmed','In Progress']))) if object_visible(o))
     if allowed(g.user,state,'expenses'):
         query=db.session.query(Expense).filter(Expense.status.in_(['Submitted','Approved']))
-        if g.user.role not in ('Admin','Finance'): query=query.filter_by(owner_id=g.user.id)
-        result['pendingExpenses']=query.count()
+        result['pendingExpenses']=sum(1 for e in query if object_visible(e))
     if allowed(g.user,state,'accounting'):
         report=financial_report()
         result.update(cashBank=report['cashBank'],receivables=report['receivables'],payables=report['payables'],profit=report['profit'])
@@ -120,7 +129,7 @@ def overview():
 @bp.get('/accounts')
 @access('accounting')
 def accounts():
-    return jsonify(accounts=[dict(code=a.code,name=a.name,type=a.kind,reconcile=a.reconcile) for a in db.session.scalars(select(Account).order_by(Account.code))])
+    return jsonify(accounts=[dict(code=a.code,name=a.name,type=a.kind,reconcile=a.reconcile) for a in db.session.scalars(select(Account).order_by(Account.code)) if a.code in {c[0] for c in CHART} or object_visible(a)])
 
 
 @bp.post('/accounts')
@@ -131,7 +140,8 @@ def create_account():
         raise InvalidBusinessState('Use a 4–8 digit code and a valid account type')
     if not isinstance(data.get('reconcile',False),bool):
         raise InvalidBusinessState('Reconciliation must be true or false')
-    db.session.add(Account(code=code,name=text(data.get('name'),'Account name'),kind=data['type'],reconcile=bool(data.get('reconcile',False))))
+    account=Account(code=code,name=text(data.get('name'),'Account name'),kind=data['type'],reconcile=bool(data.get('reconcile',False)))
+    db.session.add(account);db.session.flush();remember(account)
     audit('Created account',{'code':code})
     return done(dict(ok=True))
 
@@ -139,12 +149,12 @@ def create_account():
 @bp.get('/entries')
 @access('accounting')
 def entries():
-    query = select(JournalEntry).order_by(JournalEntry.id.desc()).limit(500)
+    query = select(JournalEntry).order_by(JournalEntry.id.desc())
     source = request.args.get('source')
     if source:
         query = query.where((JournalEntry.source == source) | JournalEntry.source.startswith(source + ':', autoescape=True) |
                             JournalEntry.source.startswith('stock:' + source + ':', autoescape=True))
-    return jsonify(entries=[entry_json(e) for e in db.session.scalars(query)])
+    return jsonify(entries=[entry_json(e) for e in db.session.scalars(query) if object_visible(e)][:500])
 
 
 @bp.post('/entries')
@@ -153,6 +163,7 @@ def create_entry():
     data=body(); request_key=key(data)
     if not isinstance(data.get('lines'),list) or len(data['lines'])>100:
         raise InvalidBusinessState('Provide up to 100 journal lines')
+    for line in data['lines']:row(Account,str(line.get('account')))
     entry=post_entry('manual:'+request_key,text(data.get('memo'),'Memo',500),data['lines'],data.get('date'),draft=True)
     return done(entry_json(entry))
 
@@ -172,6 +183,7 @@ def reverse_manual_entry(identity):
     entry=row(JournalEntry,identity)
     if entry.status!='Posted' or not entry.source.startswith(('manual:','transfer:')):
         raise InvalidBusinessState('Only posted manual journals/transfers can be reversed here; use the source document return flow for stock')
+    g.scope_creator=object_creator(entry)
     reversal=post_entry('reversal:'+str(entry.id),'Reversal of '+entry.number,
                        [dict(account=l.account,debit=l.credit,credit=l.debit,partner=l.partner) for l in entry.lines],body().get('date'))
     reversal.reversal_of=entry.id
@@ -202,9 +214,10 @@ def financial_report():
     if start and start>end: raise InvalidBusinessState('Start date must precede end date')
     query=select(JournalLine,JournalEntry).join(JournalEntry).where(JournalEntry.status=='Posted',JournalEntry.date<=end)
     lines=db.session.execute(query).all()
-    totals={a.code:dict(code=a.code,name=a.name,type=a.kind,debit=Decimal(0),credit=Decimal(0),periodDebit=Decimal(0),periodCredit=Decimal(0)) for a in db.session.scalars(select(Account).order_by(Account.code))}
+    totals={a.code:dict(code=a.code,name=a.name,type=a.kind,debit=Decimal(0),credit=Decimal(0),periodDebit=Decimal(0),periodCredit=Decimal(0)) for a in db.session.scalars(select(Account).order_by(Account.code)) if a.code in {c[0] for c in CHART} or object_visible(a)}
     ledger=[]; cash_in=Decimal(0);cash_out=Decimal(0);opening_cash=Decimal(0)
     for line,entry in lines:
+        if not object_visible(entry):continue
         account=totals[line.account];account['debit']+=line.debit;account['credit']+=line.credit
         inside=not start or entry.date>=start
         if inside:
@@ -244,6 +257,7 @@ def aged():
     lines=db.session.execute(select(JournalLine,JournalEntry).join(JournalEntry).where(JournalEntry.status=='Posted',JournalEntry.date<=as_of,JournalLine.account.in_(['1100','2100']))).all()
     # Reconciliation is current-state only. The UI labels this report accordingly.
     for line,entry in lines:
+        if not object_visible(entry):continue
         remaining=abs(line.debit-line.credit)-matched_amount(line)
         if remaining<=0:continue
         overdue=(date.fromisoformat(as_of)-date.fromisoformat(line.due_date or entry.date)).days
@@ -269,10 +283,13 @@ def period_lock():
 def inventory():
     products=[]
     for product in db.session.scalars(select(ERPProduct).order_by(ERPProduct.name)):
+        if not object_visible(product):continue
         balance=row(StockBalance,product.id)
+        scoped_moves=[m for m in db.session.scalars(select(StockMove).where(StockMove.product_id==product.id)) if object_visible(m)]
+        quantity=sum((m.quantity for m in scoped_moves),Decimal(0));value=sum((m.value for m in scoped_moves),Decimal(0))
         products.append(dict(id=product.id,name=product.name,sku=product.sku,type=product.kind,unit=product.unit,
-                             quantity=str(balance.quantity),value=str(balance.value),averageCost=str(dec(balance.value/balance.quantity)) if balance.quantity else '0.00'))
-    return jsonify(warehouse='WH / Stock',products=products,moves=[move_json(m) for m in db.session.scalars(select(StockMove).order_by(StockMove.id.desc()).limit(500))])
+                             quantity=str(quantity),value=str(value),averageCost=str(dec(value/quantity)) if quantity else '0.00'))
+    return jsonify(warehouse='WH / Stock',products=products,moves=[move_json(m) for m in db.session.scalars(select(StockMove).order_by(StockMove.id.desc())) if object_visible(m)][:500])
 
 
 @bp.post('/inventory/adjust')
@@ -291,6 +308,7 @@ def return_stock():
     data=body();original=row(StockMove,data.get('moveId'));quantity=dec(data.get('quantity'),UNIT,positive=True)
     if original.kind not in ('Purchase Receipt','Sales Delivery'):
         raise InvalidBusinessState('Returns must reference a purchase receipt or sales delivery')
+    g.scope_creator=object_creator(original)
     source='return:'+key(data)
     existing=db.session.scalar(select(StockMove).where(StockMove.source==source))
     if existing:return done(move_json(existing))
@@ -306,7 +324,7 @@ def return_stock():
 @bp.get('/boms')
 @access('manufacturing')
 def boms():
-    return jsonify(boms=[bom_json(b) for b in db.session.scalars(select(BillOfMaterials).order_by(BillOfMaterials.id.desc()))])
+    return jsonify(boms=[bom_json(b) for b in db.session.scalars(select(BillOfMaterials).order_by(BillOfMaterials.id.desc())) if object_visible(b)])
 
 
 @bp.post('/boms')
@@ -327,13 +345,13 @@ def create_bom():
     if conversion<0:raise InvalidBusinessState('Conversion cost cannot be negative')
     bom=BillOfMaterials(name=text(data.get('name'),'BoM name'),product_id=product.id,output_quantity=dec(data.get('quantity'),UNIT,positive=True),
                         conversion_cost=conversion,request_key=request_key,lines=lines)
-    db.session.add(bom);db.session.flush();audit('Created bill of materials',{'id':bom.id});return done(bom_json(bom))
+    db.session.add(bom);db.session.flush();remember(bom);audit('Created bill of materials',{'id':bom.id});return done(bom_json(bom))
 
 
 @bp.get('/manufacturing')
 @access('manufacturing')
 def manufacturing():
-    return jsonify(orders=[mo_json(o) for o in db.session.scalars(select(ManufacturingOrder).order_by(ManufacturingOrder.id.desc()))])
+    return jsonify(orders=[mo_json(o) for o in db.session.scalars(select(ManufacturingOrder).order_by(ManufacturingOrder.id.desc())) if object_visible(o)])
 
 
 @bp.post('/manufacturing')
@@ -345,7 +363,7 @@ def create_mo():
     order=ManufacturingOrder(number=next_number('MO'),bom_id=bom.id,product_id=bom.product_id,quantity=quantity,
                              conversion_cost=dec(bom.conversion_cost*factor),actual_cost=0,state='Draft',date=day(data.get('date')),request_key=request_key,
                              lines=[ProductionComponent(product_id=l.product_id,quantity=dec(l.quantity*factor,UNIT,positive=True)) for l in bom.lines])
-    db.session.add(order);db.session.flush();audit('Created manufacturing order',{'number':order.number});return done(mo_json(order))
+    db.session.add(order);db.session.flush();remember(order);audit('Created manufacturing order',{'number':order.number});return done(mo_json(order))
 
 
 @bp.post('/manufacturing/<int:identity>/<action>')
@@ -360,6 +378,7 @@ def advance_mo(identity,action):
         order.state=after
     elif action=='complete':
         if order.state not in ('Confirmed','In Progress'):raise InvalidBusinessState('Confirm the manufacturing order first')
+        g.scope_creator=object_creator(order)
         check_period(order.date);total=Decimal(0)
         for index,line in enumerate(order.lines):
             move=stock_move(line.product_id,-line.quantity,f'mo:{order.id}:component:{index}','Manufacturing Consumption','1250',value_date=order.date)
@@ -377,8 +396,7 @@ def advance_mo(identity,action):
 @access('expenses')
 def expenses():
     query=select(Expense).order_by(Expense.id.desc())
-    if not allowed(g.user,db.session.get(Document,'app').data,'expenses','approve'):query=query.where(Expense.owner_id==g.user.id)
-    return jsonify(expenses=[expense_json(e) for e in db.session.scalars(query)])
+    return jsonify(expenses=[expense_json(e) for e in db.session.scalars(query) if object_visible(e)])
 
 
 @bp.post('/expenses')
@@ -406,7 +424,7 @@ def create_expense():
 @bp.post('/expenses/<int:identity>/<action>')
 @access('expenses','edit')
 def advance_expense(identity,action):
-    expense=row(Expense,identity);state=db.session.get(Document,'app').data
+    expense=row(Expense,identity);g.scope_creator=expense.owner_id;state=db.session.get(Document,'app').data
     approver=allowed(g.user,state,'expenses','approve')
     if action in ('approve','pay','reject') and not approver:problem('Expense approval permission required',403)
     if not approver and expense.owner_id!=g.user.id:problem('Expense belongs to another user',403)
@@ -430,16 +448,16 @@ def advance_expense(identity,action):
 def bank_statements():
     if request.method=='POST':
         data=body();request_key=key(data);existing=db.session.scalar(select(BankStatementLine).where(BankStatementLine.request_key==request_key))
-        if existing:return done(dict(id=existing.id))
+        if existing:require_object(existing);return done(dict(id=existing.id))
         account=str(data.get('account','1010'))
         if account not in ('1000','1010'):raise InvalidBusinessState('Choose cash or bank')
         amount=dec(data.get('amount'))
         if not amount:raise InvalidBusinessState('Statement amount cannot be zero')
         line=BankStatementLine(date=day(data.get('date')),description=text(data.get('description'),'Description',300),account=account,amount=amount,request_key=request_key)
-        db.session.add(line);db.session.flush();audit('Recorded bank statement line',{'id':line.id});return done(dict(id=line.id))
-    items=[dict(id=l.id,date=l.date,description=l.description,account=l.account,amount=str(l.amount),matchedLine=l.matched_line) for l in db.session.scalars(select(BankStatementLine).order_by(BankStatementLine.id.desc()))]
+        db.session.add(line);db.session.flush();remember(line);audit('Recorded bank statement line',{'id':line.id});return done(dict(id=line.id))
+    items=[dict(id=l.id,date=l.date,description=l.description,account=l.account,amount=str(l.amount),matchedLine=l.matched_line) for l in db.session.scalars(select(BankStatementLine).order_by(BankStatementLine.id.desc())) if object_visible(l)]
     used={l['matchedLine'] for l in items if l['matchedLine']}
-    ledger=[dict(id=l.id,date=e.date,entry=e.number,memo=e.memo,account=l.account,amount=str(l.debit-l.credit)) for l,e in db.session.execute(select(JournalLine,JournalEntry).join(JournalEntry).where(JournalEntry.status=='Posted',JournalLine.account.in_(['1000','1010']))) if l.id not in used]
+    ledger=[dict(id=l.id,date=e.date,entry=e.number,memo=e.memo,account=l.account,amount=str(l.debit-l.credit)) for l,e in db.session.execute(select(JournalLine,JournalEntry).join(JournalEntry).where(JournalEntry.status=='Posted',JournalLine.account.in_(['1000','1010']))) if l.id not in used and object_visible(e)]
     return jsonify(statements=items,ledger=ledger)
 
 
@@ -483,6 +501,8 @@ def seed_demo():
                        dict(id=9004,name='Installation Service',sku='SVC-001',unit='Service',rate=1000,productType='service')]
     state['vendors']=[dict(id=9005,name='Pakistan Supplies',status='Active',email='vendor@example.test')]
     state['customers']=[dict(id=9006,code='CUS-001',name='Pakistan Demo Customer',status='Active',paymentTerms='30 Days')]
+    for collection in ('products','vendors','customers'):
+        for record in state[collection]:record['createdBy']=g.user.id
     state['company']={**COMPANY,**state.get('company',{}),'country':'Pakistan','currency':'PKR'}
     doc.data=state;doc.revision+=1;sync_products(state)
     journal_pair('demo:bank','Demo opening bank balance','1010','3000',250000)
@@ -491,7 +511,7 @@ def seed_demo():
     stock_move('9002',200,'demo:fasteners','Opening Stock','3000',50)
     bom=BillOfMaterials(name='General Assembly Kit — Standard BoM',product_id='9003',output_quantity=1,conversion_cost=100,request_key='demo-standard-bom',
                         lines=[BOMLine(product_id='9001',quantity=2),BOMLine(product_id='9002',quantity=4)])
-    db.session.add(bom);audit('Loaded Pakistan demo opening data');return done(dict(ok=True))
+    db.session.add(bom);db.session.flush();remember(bom);audit('Loaded Pakistan demo opening data');return done(dict(ok=True))
 
 
 def init_erp(app):

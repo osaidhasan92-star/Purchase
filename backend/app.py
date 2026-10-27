@@ -164,19 +164,19 @@ def visible_state(doc):
     # User profiles are needed for ownership selectors; credentials never leave the account table.
     profiles = db.session.scalars(select(User)).all()
     if user.role != 'Admin':
-        profiles = [u for u in profiles if u.id == user.id or u.role == 'Sales Manager' or
-                    (user.role == 'Sales Manager' and u.manager_id == user.id)]
+        profiles = [u for u in profiles if u.id == user.id or u.id == user.manager_id or u.manager_id == user.id]
     state['users'] = [u.public() for u in profiles]
     for key, module in COLLECTIONS.items():
         state[key] = [r for r in state.get(key, []) if allowed(user, doc.data, module) and in_scope(user, r, key, doc.data)]
     state['activities'] = []
     if allowed(user, doc.data, 'activities'):
-        entries = db.session.scalars(select(Audit).order_by(Audit.id.desc()).limit(2000)).all()
+        entries = db.session.scalars(select(Audit).order_by(Audit.id.desc())).all()
         if user.role != 'Admin':
-            entries = [entry for entry in entries if entry.actor_id == user.id]
+            from .scope import actor_visible
+            entries = [entry for entry in entries if actor_visible(entry.actor_id)]
         state['activities'] = [dict(id=a.id, userId=a.actor_id, userName=a.actor_id,
                                     action=a.action, module='Server', details=json.dumps(a.details),
-                                    createdAt=a.at) for a in entries]
+                                    createdAt=a.at) for a in entries[:2000]]
     return state
 
 
@@ -187,6 +187,14 @@ def merge_collection(key, incoming, existing, state, module):
     visible = {rid: r for rid, r in old.items() if in_scope(g.user, r, key, state)}
     for rid in set(new) | set(visible):
         before, after = visible.get(rid), new.get(rid)
+        if after is not None:
+            from .scope import creator_of_record
+            creator = creator_of_record(before or {}) if before else g.user.id
+            if before and after.get('createdBy') not in (None, creator):
+                problem('Record creator cannot be changed', 403)
+            if not before and after.get('createdBy') not in (None, g.user.id):
+                problem('Record creator must be the signed-in user', 403)
+            after['createdBy'] = creator
         if before == after:
             continue
         if rid in old and rid not in visible:
@@ -206,24 +214,64 @@ def merge_collection(key, incoming, existing, state, module):
             previous, target = (before or {}).get('status'), after.get('status')
             if previous != target and target not in stages.get(previous, set()):
                 problem('Invalid sales quotation status transition')
-        if after and before is None and key == 'customers' and g.user.role in ('Sales Manager', 'Salesperson', 'Sales Representative'):
+        if after and before is None and key == 'customers':
             after['ownerId'] = g.user.id
-            after['managerId'] = g.user.id if g.user.role == 'Sales Manager' else g.user.manager_id
+            after['managerId'] = g.user.manager_id
         if after and not in_scope(g.user, after, key, state):
-            # New customers may be created by sales staff, then linked to a new lead.
-            if not (key == 'customers' and before is None):
-                problem('Record is outside your assigned scope', 403)
+            problem('Record is outside your creator/team scope', 403)
         if after and after.get('status') != (before or {}).get('status') and after.get('status') in APPROVAL_STATUSES:
             # Sales staff can record completed physical deliveries; financial approvals remain restricted.
             if not (key == 'deliveries') and not allowed(g.user, state, module, 'approve'):
                 problem(f'Approval permission required: {module}', 403)
         if after:
             validate_numbers(after)
-        if after and before and key == 'salesQuotations' and after.get('status') == 'Approved' and g.user.role != 'Admin':
-            if g.user.role != 'Sales Manager' or str(before.get('managerId')) != g.user.id:
-                problem('Only the assigned Sales Manager can approve this quotation', 403)
     hidden = [r for rid, r in old.items() if rid not in visible]
     return list(new.values()) + hidden
+
+
+def validate_scope_references(saved, previous):
+    relations = {'vendorId':'vendors','customerId':'customers','leadId':'leads',
+                 'requestId':'requests','rfqId':'rfqs','quotationId':'quotations',
+                 'poId':'orders','invoiceId':'invoices','orderId':'salesOrders','productId':'products',
+                 'companyId':'companies','selectedQuotationId':'quotations','deliveryId':'deliveries'}
+    for key in COLLECTIONS:
+        old={str(r['id']):r for r in previous.get(key,[])}
+        for record in saved.get(key,[]):
+            if old.get(str(record['id'])) == record:continue
+            def check(value):
+                for field,item in value.items():
+                    target=relations.get(field)
+                    if field=='quotationId' and key in ('leads','salesOrders','deliveries','customerInvoices','customerPayments'):target='salesQuotations'
+                    if field=='invoiceId' and key in ('customerPayments','deliveries','salesOrders'):target='customerInvoices'
+                    if target and item not in (None,''):
+                        parent=next((r for r in saved.get(target,[]) if str(r['id'])==str(item)),None)
+                        if parent is not None and not in_scope(g.user,parent,target,saved):
+                            problem('Referenced record is outside your creator/team scope',403)
+                    if field=='attachmentPath' and item:
+                        from .scope import require_object
+                        attachment=db.session.get(Attachment,str(item))
+                        if not attachment:problem('Attachment not found',404)
+                        require_object(attachment)
+                    if isinstance(item,dict):check(item)
+                    elif isinstance(item,list):
+                        for row in item:
+                            if isinstance(row,dict):check(row)
+            check(record)
+
+
+def validate_hr_references(saved, previous):
+    for key in HR_COLLECTIONS:
+        old={str(r['id']):r for r in previous.get(key,[])}
+        for record in saved.get(key,[]):
+            if record==old.get(str(record['id'])):continue
+            if key=='employees' and record.get('linkedUserId'):
+                from .scope import actor_visible
+                target=db.session.get(User,str(record['linkedUserId']))
+                if not target or not actor_visible(target.id):problem('Linked account is outside your creator/team scope',403)
+            for employee in saved.get('employees',[]):
+                label=str(employee.get('employeeId',''))+' - '+str(employee.get('name',''))
+                if (record.get('employeeKey') and str(record['employeeKey'])==str(employee['id'])) or record.get('employee')==label:
+                    if not in_scope(g.user,employee,'employees',saved):problem('Employee is outside your creator/team scope',403)
 
 
 def validate_numbers(record):
@@ -432,10 +480,16 @@ def create_app(config=None):
             manager_id = data.get('managerId') or None
             if manager_id:
                 manager = db.session.get(User, str(manager_id))
-                if not manager or not manager.active or manager.role != 'Sales Manager':
-                    problem('Select an active Sales Manager')
+                if not manager or not manager.active or (user_id and str(manager_id) == str(user_id)):
+                    problem('Select another active user as team manager')
+                seen = {str(user_id)} if user_id else set()
+                parent = manager
+                while parent:
+                    if str(parent.id) in seen:problem('Team manager assignments cannot contain a cycle')
+                    seen.add(str(parent.id))
+                    parent = db.session.get(User, parent.manager_id) if parent.manager_id else None
             if role in ('Salesperson', 'Sales Representative') and not manager_id:
-                problem('A Sales Manager is required')
+                problem('A team manager is required')
             active = data.get('active', True)
             if not isinstance(active, bool):
                 problem('active must be a boolean')
@@ -494,6 +548,7 @@ def create_app(config=None):
                 saved[key] = incoming
             else:
                 saved[key] = merge_collection(key, incoming, saved.get(key, []), doc.data, COLLECTIONS[key])
+        validate_scope_references(saved, doc.data)
         validate_business(saved)
         revision = commit_document(doc, data.get('revision'), saved)
         return jsonify(ok=True, revision=revision)
@@ -502,7 +557,7 @@ def create_app(config=None):
     def hr_state():
         doc, state = db.session.get(Document, 'hr'), app_document().data
         if request.method == 'GET':
-            filtered = {key: value if allowed(g.user, state, module) else [] for key, module in HR_COLLECTIONS.items()
+            filtered = {key: [r for r in value if in_scope(g.user,r,key,state)] if allowed(g.user, state, module) else [] for key, module in HR_COLLECTIONS.items()
                         for value in [deepcopy(doc.data.get(key, []))]}
             return jsonify(state=filtered, revision=doc.revision)
         data = body()
@@ -514,6 +569,7 @@ def create_app(config=None):
         g.changed_keys = set(changes)
         for key, incoming in changes.items():
             saved[key] = merge_collection(key, incoming, saved.get(key, []), state, HR_COLLECTIONS[key])
+        validate_hr_references(saved,doc.data)
         revision = commit_document(doc, data.get('revision'), saved)
         return jsonify(ok=True, revision=revision)
 
@@ -566,6 +622,7 @@ def create_app(config=None):
             db.session.add(User(id=uid, name=str(profile.get('name', email)), email=email, role=role,
                                 manager_id=profile.get('managerId'), active=False,
                                 password_hash=generate_password_hash(secrets.token_urlsafe(32))))
+        validate_scope_references(saved, app_doc.data)
         validate_business(saved)
         app_doc.data, hr_doc.data = saved, hr_saved
         app_doc.revision += 1
@@ -611,12 +668,8 @@ def create_app(config=None):
         state = app_document().data
         if not allowed(g.user, state, attachment.module):
             problem('Attachment access denied', 403)
-        linked = any(r.get('attachmentPath') == attachment_id and in_scope(g.user, r, key, state)
-                     for key, module in COLLECTIONS.items() if module == attachment.module for r in state.get(key, []))
-        if attachment.module == 'expenses':
-            from .erp import Expense
-            linked = bool(db.session.scalar(select(Expense.id).where(Expense.attachment_id == attachment_id))) and allowed(g.user, state, 'expenses', 'approve')
-        if g.user.role != 'Admin' and attachment.uploader_id != g.user.id and not linked:
+        from .scope import actor_visible
+        if not actor_visible(attachment.uploader_id):
             problem('Attachment access denied', 403)
         return send_file(BytesIO(attachment.content), mimetype='application/pdf',
                          download_name=attachment.filename, as_attachment=True)
@@ -643,6 +696,43 @@ def create_app(config=None):
         if path not in public | pages and not asset:
             abort(404)
         return send_from_directory(ROOT, path)
+
+    @app.cli.command('assign-legacy-owner')
+    @click.option('--namespace',type=click.Choice(['app','hr','bom','manufacturing','bank','account']),required=True)
+    @click.option('--collection',default='')
+    @click.option('--record-id',required=True)
+    @click.option('--creator-email',required=True)
+    def assign_legacy_owner(namespace,collection,record_id,creator_email):
+        """Attribute one historical record after reviewing its creator. Never overwrites known ownership."""
+        from .erp import lock, BillOfMaterials, ManufacturingOrder, BankStatementLine, Account, JournalEntry
+        from .scope import creator_of_record, object_creator, remember
+        creator=db.session.scalar(select(User).where(User.email==creator_email.strip().lower()))
+        if not creator:raise click.ClickException('Creator account not found')
+        lock()
+        if namespace in ('app','hr'):
+            permitted=COLLECTIONS if namespace=='app' else HR_COLLECTIONS
+            if collection not in permitted:raise click.ClickException('Choose a valid collection for this namespace')
+            doc=db.session.get(Document,namespace);data=deepcopy(doc.data)
+            record=next((r for r in data.get(collection,[]) if str(r['id'])==record_id),None)
+            if record is None:raise click.ClickException('Record not found')
+            owner=creator_of_record(record)
+            if owner and db.session.get(User,str(owner)):raise click.ClickException('Record already has a known creator')
+            record['createdBy']=creator.id;doc.data=data;doc.revision+=1
+            # Existing automatic journals and their stock movements follow the reviewed source.
+            source=collection+':'+record_id
+            for entry in db.session.scalars(select(JournalEntry)):
+                if entry.source==source or entry.source.startswith(source+':') or entry.source.startswith('stock:'+source+':'):
+                    remember(entry,creator.id)
+        else:
+            model={'bom':BillOfMaterials,'manufacturing':ManufacturingOrder,'bank':BankStatementLine,'account':Account}[namespace]
+            identity=record_id if namespace=='account' else int(record_id)
+            record=db.session.get(model,identity)
+            if not record:raise click.ClickException('Record not found')
+            if object_creator(record):raise click.ClickException('Record already has a known creator')
+            remember(record,creator.id)
+        audit('Attributed legacy record',dict(namespace=namespace,collection=collection,recordId=record_id,creatorId=creator.id))
+        db.session.commit()
+        click.echo('Legacy ownership assigned; creator, direct manager and Admin can access it subject to module permissions.')
 
     @app.cli.command('init-db')
     def init_db():

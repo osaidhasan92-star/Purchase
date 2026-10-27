@@ -26,7 +26,7 @@ deployment target; SQLite supports local development and automated tests.
   posts salary expense and liabilities; payment clears salaries payable against
   Main Bank. Completing separation revokes linked non-administrator logins.
 - Shared authenticated backend, hashed passwords, expiring HttpOnly sessions,
-  CSRF checks, role permissions, sales-team scope, conflict detection and audit log.
+  CSRF checks, role permissions, system-wide creator/direct-manager scope, conflict detection and audit log.
 - Fixed Pakistan/PKR setup. The separate Company Settings page is removed; basic
   company name/contact/NTN details are edited in an administrator profile dialog
   on the ERP overview. Product forms distinguish goods from services.
@@ -298,3 +298,12 @@ Reference flows:
 
 Authentication cookie settings follow Flask's security guidance:
 https://flask.palletsprojects.com/en/stable/web-security/
+
+
+### Creator and team access
+
+All business modules now enforce the same record visibility: creator, the creator's
+current direct team manager, and Admin. A colleague reporting to the same manager
+cannot see that creator's records. Module/action permissions still apply. See
+[Team access setup and legacy records](docs/TEAM_ACCESS.md) before updating an
+existing installation. No schema migration or demo reseeding is required.

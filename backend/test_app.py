@@ -98,6 +98,8 @@ def test_viewer_and_hr_privacy(app):
     assert viewer.post('/api/users', headers=vh, json={}).status_code == 403
     assert viewer.get('/api/admin/export').status_code == 403
     hr, hh = session(app, 'hr')
+    assert hr.get('/api/hr/state').json['state']['employees'] == []
+    assert patch(hr, hh, {'employees':[{'id':2,'name':'Own employee','salary':100}]}, '/api/hr/state').status_code == 200
     assert hr.get('/api/hr/state').json['state']['employees'][0]['salary'] == 100
     assert patch(hr, hh, {'attendance': [{'id': 'a', 'employee': '1 - Private payroll employee', 'date': '2026-10-26'}]}, '/api/hr/state').status_code == 200
 
@@ -111,18 +113,18 @@ def test_server_permissions_cannot_be_escalated(app):
 
 def test_sales_scope_preserves_hidden_records(app):
     admin, ah = session(app)
-    leads = [{'id': 1, 'customerId': 1, 'ownerId': 'seller', 'managerId': 'manager'},
-             {'id': 2, 'customerId': 2, 'ownerId': 'someone-else', 'managerId': 'another-manager'}]
-    assert patch(admin, ah, {'leads': leads, 'customers': [{'id': 1, 'name': 'My account'}, {'id': 2, 'name': 'Other team'}]}).status_code == 200
-    seller, sh = session(app, 'seller')
-    data = seller.get('/api/state').json['state']
-    assert [r['id'] for r in data['leads']] == [1]
-    assert [r['id'] for r in data['customers']] == [1]
-    data['leads'][0]['contact'] = 'Updated'
-    assert patch(seller, sh, {'leads': data['leads']}).status_code == 200
-    all_leads = admin.get('/api/state').json['state']['leads']
-    assert len(all_leads) == 2
-    assert patch(seller, sh, {'leads': leads}).status_code == 403
+    assert patch(admin,ah,{'leads':[{'id':2,'customerName':'Admin private lead'}]}).status_code==200
+    seller, sh = session(app,'seller')
+    assert patch(seller,sh,{'customers':[{'id':1,'name':'My account'}],
+                           'leads':[{'id':1,'customerId':1,'ownerId':'seller','managerId':'manager'}]}).status_code==200
+    data=seller.get('/api/state').json['state']
+    assert [r['id'] for r in data['leads']]==[1]
+    assert [r['id'] for r in data['customers']]==[1]
+    data['leads'][0]['contact']='Updated'
+    assert patch(seller,sh,{'leads':data['leads']}).status_code==200
+    all_leads=admin.get('/api/state').json['state']['leads']
+    assert len(all_leads)==2
+    assert patch(seller,sh,{'leads':all_leads}).status_code==403
 
 
 def test_password_change_revokes_every_session(app):

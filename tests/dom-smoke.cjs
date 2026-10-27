@@ -88,6 +88,18 @@ async function main() {
   await profilePage.window.openCompanyProfile();
   assert.ok(profilePage.window.document.getElementById('profile-name'),'Company profile opens outside ERP overview');
   profilePage.window.close();
+  const userSetup=await page('users');userSetup.window.openUser();
+  const setupDoc=userSetup.window.document;
+  setupDoc.getElementById('user-role').value='Procurement Staff';userSetup.window.toggleUserManagerField();
+  assert.equal(setupDoc.getElementById('user-manager-wrap').style.display,'block');
+  setupDoc.getElementById('user-name').value='Procurement team user';
+  setupDoc.getElementById('user-email').value='procurement-team@example.test';
+  setupDoc.getElementById('user-password').value=password;
+  setupDoc.getElementById('user-manager').value=userSetup.window.currentUser().id;
+  await userSetup.window.saveUser('');
+  const teamUser=userSetup.window.eval('db().users.find(u=>u.email==="procurement-team@example.test")');
+  assert.equal(teamUser.managerId,userSetup.window.currentUser().id);
+  userSetup.window.close();
   // Shared master-data links retain their originating module's submenu.
   let contextPage=await page('customers?module=crm');
   assert.equal(contextPage.window.document.querySelector('.module-app').dataset.module,'crm');contextPage.window.close();

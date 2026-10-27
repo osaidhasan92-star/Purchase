@@ -88,31 +88,5 @@ def allowed(user, state, module, action='view'):
 
 
 def in_scope(user, record, key, state):
-    """Enforce sales-team ownership for reads and writes, not just list screens."""
-    if user.role not in ('Sales Manager', 'Salesperson', 'Sales Representative'):
-        return True
-    if key == 'customers':
-        if str(record.get('ownerId')) == str(user.id) or (user.role == 'Sales Manager' and str(record.get('managerId')) == str(user.id)):
-            return True
-        return any(str(lead.get('customerId')) == str(record.get('id')) and
-                   in_scope(user, lead, 'leads', state) for lead in state.get('leads', []))
-    if key == 'reminders':
-        lead = next((r for r in state.get('leads', []) if str(r.get('id')) == str(record.get('leadId'))), None)
-        return lead is not None and in_scope(user, lead, 'leads', state)
-    if key in ('salesOrders', 'deliveries', 'customerInvoices', 'customerPayments'):
-        if key == 'salesOrders':
-            quote_id = record.get('quotationId')
-        else:
-            order = next((r for r in state.get('salesOrders', []) if
-                          str(r.get('id')) == str(record.get('orderId')) or
-                          (record.get('orderNo') and r.get('orderNo') == record.get('orderNo'))), None)
-            if not order:
-                return False
-            quote_id = order.get('quotationId')
-        quote = next((r for r in state.get('salesQuotations', []) if str(r.get('id')) == str(quote_id)), None)
-        return quote is not None and in_scope(user, quote, 'salesQuotations', state)
-    if key in ('leads', 'salesQuotations'):
-        owner = record.get('ownerId') or record.get('createdBy')
-        manager = record.get('managerId')
-        return str(manager if user.role == 'Sales Manager' else owner) == str(user.id)
-    return True
+    from .scope import actor_visible, creator_of_record
+    return actor_visible(creator_of_record(record), user)

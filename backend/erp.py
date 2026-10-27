@@ -13,6 +13,7 @@ from sqlalchemy import select, update, func
 
 from .app import db, Document, User, LoginSession, audit
 from .permissions import default_roles
+from .scope import remember, source_creator
 from .validation import InvalidBusinessState
 
 CENT = Decimal('0.01')
@@ -266,10 +267,11 @@ def post_entry(source, memo, lines, value_date=None, draft=False):
     if len(normalized) < 2 or sum(l['debit'] for l in normalized) != sum(l['credit'] for l in normalized):
         raise InvalidBusinessState('Journal entry debits and credits must balance exactly')
     entry = JournalEntry(number=next_number('JE'), source=source, memo=str(memo)[:500], date=value_date,
-                         status='Draft' if draft else 'Posted', created_by=getattr(getattr(g, 'user', None), 'id', 'system'))
+                         status='Draft' if draft else 'Posted', created_by=source_creator(source) if getattr(g,'user',None) else 'system')
     entry.lines = [JournalLine(**line) for line in normalized]
     db.session.add(entry)
     db.session.flush()
+    if getattr(g,'user',None):remember(entry,entry.created_by)
     audit('Created journal entry', {'number': entry.number, 'source': source, 'status': entry.status})
     return entry
 
@@ -331,6 +333,7 @@ def stock_move(product_id, quantity, source, kind, counterpart, unit_cost=None, 
     balance.quantity, balance.value = available + quantity, current_value + value
     db.session.add(move)
     db.session.flush()
+    if getattr(g,'user',None):remember(move,source_creator(source))
     audit('Posted stock movement', {'number': move.number, 'productId': product.id, 'quantity': str(quantity)})
     return move
 
@@ -423,6 +426,7 @@ def sync_business(previous, current, namespace):
             for row in current.get(key, []):
                 if before.get(str(row['id'])) == row or (key == 'deliveries' and row.get('status') != 'Delivered'):
                     continue
+                g.scope_creator = row.get('createdBy') or row.get('ownerId') or g.user.id
                 order = next((o for o in current.get('orders' if key == 'receipts' else 'salesOrders', []) if str(o['id']) == str(row.get('poId' if key == 'receipts' else 'orderId'))), None)
                 for index, line in enumerate(row.get('items', [])):
                     product = db.session.get(ERPProduct, str(line.get('productId')))
@@ -443,6 +447,7 @@ def sync_business(previous, current, namespace):
                 if key == 'customerInvoices' and row.get('status') not in ('Posted', 'Partially Paid', 'Paid'): continue
                 if key == 'payments' and row.get('status') != 'Processed': continue
                 if key == 'customerPayments' and row.get('status') != 'Received': continue
+                g.scope_creator = row.get('createdBy') or row.get('ownerId') or g.user.id
                 finance_document(row, key, current)
     else:
         for collection, fields in [('attendance',('employee','date')),('payroll',('employee','month'))]:
@@ -468,6 +473,7 @@ def sync_business(previous, current, namespace):
             deductions, net = dec(row.get('deductions', 0)), dec(row.get('netPay', 0))
             if gross <= 0 or net < 0 or gross - deductions != net:
                 raise InvalidBusinessState('Payroll net pay must equal basic plus allowances less deductions')
+            g.scope_creator = row.get('createdBy') or row.get('ownerId') or g.user.id
             partner = 'employee:' + str(row.get('employee', ''))
             post_entry(source, 'Payroll ' + str(row.get('month', '')), [dict(account='6100', debit=gross),
                        dict(account='2300', credit=net, partner=partner), dict(account='2310', credit=deductions)], day())
@@ -492,3 +498,4 @@ def sync_business(previous, current, namespace):
                 db.session.query(LoginSession).filter_by(user_id=target.id).delete()
                 audit('Disabled separated employee account',{'userId':target.id})
     db.session.flush()
+    g.pop('scope_creator',None)
