@@ -384,9 +384,10 @@ def finance_document(row, key, state):
         else:
             po = next((p for p in state.get('orders', []) if str(p['id']) == str(row.get('poId'))), None)
             stock_net, service_net = Decimal(0), Decimal(0)
-            for item in (po or {}).get('items', []):
+            native_lines = row.get('items') if row.get('items') and all('lineIndex' in i for i in row['items']) else None
+            for item in native_lines or (po or {}).get('items', []):
                 product = db.session.get(ERPProduct, str(item.get('productId')))
-                base = Decimal(str(item.get('quantity', 0))) * Decimal(str(item.get('rate', item.get('quotedRate', 0)))) * (1 - Decimal(str(item.get('discountPercent', 0))) / 100)
+                base = Decimal(str(item.get('subtotal',0))) if native_lines else Decimal(str(item.get('quantity', 0))) * Decimal(str(item.get('rate', item.get('quotedRate', 0)))) * (1 - Decimal(str(item.get('discountPercent', 0))) / 100)
                 if product and product.kind == 'stock': stock_net += base
                 else: service_net += base
             accrued = net if stock_net and not service_net else dec(net * stock_net / (stock_net + service_net)) if stock_net else Decimal(0)
@@ -436,9 +437,20 @@ def sync_business(previous, current, namespace):
                     src = (order or {}).get('items', [])
                     item = src[index] if key == 'receipts' and index < len(src) else {}
                     cost = Decimal(str(item.get('rate', item.get('quotedRate', 0)))) * (1 - Decimal(str(item.get('discountPercent', 0))) / 100)
+                    receipt_value = None
+                    if key == 'receipts' and row.get('workflowVersion') == 1 and (order or {}).get('workflowVersion') == 1:
+                        # Preserve line cents across partial receipts instead of rounding
+                        # a discounted unit cost first (which can leave GRNI stranded).
+                        sources = [f'receipts:{receipt["id"]}:{index}' for receipt in current.get('receipts', [])
+                                   if str(receipt.get('poId')) == str(order['id']) and str(receipt['id']) != str(row['id'])]
+                        prior = list(db.session.scalars(select(StockMove).where(StockMove.source.in_(sources)))) if sources else []
+                        prior_qty = sum((move.quantity for move in prior), Decimal(0))
+                        prior_value = sum((move.value for move in prior), Decimal(0))
+                        target = dec(Decimal(str(item['subtotal'])) * (prior_qty + qty) / Decimal(str(item['quantity'])))
+                        receipt_value = target - prior_value
                     stock_move(product.id, qty if key == 'receipts' else -qty, f'{key}:{row["id"]}:{index}',
                                'Purchase Receipt' if key == 'receipts' else 'Sales Delivery', '2105' if key == 'receipts' else '5100',
-                               cost, row.get('receivedDate' if key == 'receipts' else 'deliveryDate'))
+                               cost, row.get('receivedDate' if key == 'receipts' else 'deliveryDate'), total_value=receipt_value)
         for key in ('invoices', 'customerInvoices', 'payments', 'customerPayments'):
             before = {str(r['id']): r for r in previous.get(key, [])}
             for row in current.get(key, []):

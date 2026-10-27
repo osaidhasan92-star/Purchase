@@ -164,6 +164,7 @@ const assert = require("node:assert/strict");
     await page.goto(base+'/erp.html?view=crm-dashboard');
     await page.getByText('No follow-ups due',{exact:true}).waitFor();
     assert.ok(!requests.includes('/api/state')&&!requests.includes('/api/hr/state'));
+    await require('./trade-browser.cjs')(page,base,requests);
     for (const view of [
       "sales",
       "purchase-dashboard",
@@ -201,7 +202,7 @@ const assert = require("node:assert/strict");
       JSON.stringify({
         browser: browser.version(),
         checks:
-          "Native customers/vendors/products/leads/reminders CRUD and CRM dashboard; compact bootstrap; Admin profile; five legacy modules in React shell; mobile navigation and width",
+          "Native masters/CRM plus full native Sales/Purchasing partial fulfilment, billing, payments and print checks; compact bootstrap; Admin profile; five legacy modules in React shell; mobile navigation and width",
         pageErrors: errors,
       }),
     );

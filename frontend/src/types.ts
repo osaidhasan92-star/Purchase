@@ -28,7 +28,11 @@ export interface ShellPage {
   logo: string;
   menuStyle: string;
   html: string;
+  tradeResource?: import("./modules/trade/types").Resource;
+  tradeArea?: "sales" | "purchase";
   native?:
+    | "trade"
+    | "trade-dashboard"
     | "crm-dashboard"
     | "customers"
     | "vendors"

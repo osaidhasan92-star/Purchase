@@ -138,30 +138,39 @@ def customers():
 @bp.get("/customers/<identity>")
 def customer_details(identity):
     permit("view")
-    state = app_document().data
-    record = next(
-        (r for r in state.get("customers", []) if str(r["id"]) == identity), None
-    )
-    if record is None:
+    from sqlalchemy import select, func
+    from .master_store import Customer, record as master_record
+    from .trade_store import MODELS
+    from .trade_api import visibility
+
+    customer = db.session.get(Customer, identity)
+    if customer is None:
         problem("Customer not found", 404)
-    orders = [
-        r
-        for r in state.get("salesOrders", [])
-        if str(r.get("customerId")) == identity
-        and allowed(g.user, state, "sales_orders")
-        and in_scope(g.user, r, "salesOrders", state)
-    ]
-    orders.sort(key=lambda r: (str(r.get("orderDate", "")), str(r["id"])), reverse=True)
+    state = app_document().stored_data
+    total = 0
+    orders = []
+    if allowed(g.user, state, "sales_orders"):
+        model = MODELS["salesOrders"]
+        query = select(model).where(
+            model.customer_id == identity, visibility("salesOrders")
+        )
+        total = db.session.scalar(select(func.count()).select_from(query.subquery()))
+        for row in db.session.scalars(
+            query.order_by(model.document_date.desc(), model.id.desc()).limit(25)
+        ):
+            orders.append(
+                dict(
+                    id=row.original_id,
+                    orderNo=row.number,
+                    orderDate=row.document_date,
+                    total=float(row.total or 0),
+                    status=row.status,
+                )
+            )
     return jsonify(
-        customer=output(record),
-        orderTotal=len(orders),
-        orders=[
-            {
-                key: r.get(key)
-                for key in ("id", "orderNo", "orderDate", "total", "status")
-            }
-            for r in orders[:25]
-        ],
+        customer=output(master_record("customers", customer)),
+        orderTotal=total,
+        orders=orders,
     )
 
 

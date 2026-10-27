@@ -13,6 +13,7 @@ mobile menu and user dropdown). These module contents now use native React compo
 | CRM leads | `/api/crm/leads` | `crm_lead` |
 | CRM reminders | `/api/crm/reminders` | `crm_reminder` |
 | CRM dashboard | `/api/crm/summary` | SQL totals from scoped leads/reminders |
+| Sales and Purchasing transactions/dashboard/comparison | `/api/trade/…` | Domain headers, source/product-linked lines, RFQ vendor links |
 
 Lists use SQL filtering/counting/offset/limit (25 rows by default, 100 maximum).
 The dashboard queries grouped totals and at most 25 due reminders. CRM ownership
@@ -34,11 +35,11 @@ The Sales handoff continues through `erp.html?view=sales-quotations&leadId=…`.
 Core master/CRM fields are typed SQL columns, money uses Numeric, search/ownership
 columns are indexed, and per-record extension JSON retains legacy/custom attributes.
 The migration preserves IDs, unknown attributes, optional field presence and numeric
-reference types. It removes these five arrays from the physical `document.data` JSON.
+reference types. It removes migrated master/CRM and Sales/Purchasing arrays from physical `document.data` JSON.
 There is no dual-authoritative JSON copy of a migrated register. A compatibility
 adapter reconstructs the old read model for unconverted screens and exports. Native
 writes advance its document revision so stale legacy saves conflict rather than
-silently overwrite newer records. Legacy writes synchronize SQL rows atomically.
+silently overwrite newer records. Internal compatibility writes synchronize SQL rows atomically. Production aggregate transaction writes are retired (410).
 
 ## Upgrade an existing desktop installation (Windows CMD)
 
@@ -60,7 +61,7 @@ a second administrator. Node is unnecessary for desktop testing; compiled fronte
 assets and third-party licenses are included.
 
 `init-db` creates missing tables and preserves records. `migrate-storage` moves the
-five existing registers in a transaction and verifies exact round trips before
+master/CRM and Sales/Purchasing registers in a transaction and verifies exact round trips before
 committing. Repeating it makes no further changes. If a legacy value cannot fit the
 new representation without changing it, migration stops and rolls back business
 changes. Unmigrated installations receive a clear 503 message on native APIs rather
@@ -105,21 +106,17 @@ Set `PYTHON` to the virtual-environment executable when needed.
 
 ## Work still outstanding
 
-This commit does **not** complete the system-wide rewrite requested in the roadmap.
-Purchasing transactions, Sales transactions, HR/payroll and administration still use
-legacy module contents/aggregate transport; the unmigrated operational/HR registers
-still live in versioned JSON. Accounting, stock, BoMs, manufacturing orders and
-expenses already use relational backend services, but their screen contents still
-need native React conversions. Legacy renderers remain behind an explicit HTML
-compatibility boundary, and full-page view navigation remains.
+Sales and Purchasing native screens, resource/action APIs, headers/lines and their
+migration are now implemented. [Phase 2 details](TRADE_MIGRATION.md) describe workflows,
+API boundaries, printing, permissions, migration preservation and verification.
 
-Next conversions must move transaction headers/lines and HR records to domain tables
-and resource/action APIs, convert their complete forms/workflow actions, and retire
-aggregate endpoints only after Sales/Purchasing/payroll and posting simulations pass.
-Company/role configuration and the creator sidecar also remain JSON metadata. The
-current schema does not add database foreign keys from legacy transaction JSON to
-master records; those references continue to use server validation.
+HR/payroll and administration remain on legacy contents/transport/storage. Accounting,
+inventory, manufacturing and expenses already use relational services, but those screens
+still require native React conversion. Old CRM company/quote registers, company/role
+configuration and creator attribution metadata also remain outside the completed slices.
 
-Large-dataset/load testing, complete document/download/print acceptance, accessibility
-review, organization scopes and multi-currency are separate outstanding work. This
-migration stage alone is not a claim of large-scale production readiness.
+Trade commands still reuse server-side cross-register compatibility validation/posting,
+so further query-local validation/load testing is required for large data volumes.
+Full-page view navigation remains. Accessibility, document acceptance beyond the tested
+print layouts, organization scopes and multicurrency remain separate work. This stage
+alone does not establish large-scale production readiness.

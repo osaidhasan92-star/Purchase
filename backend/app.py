@@ -74,7 +74,7 @@ class Document(db.Model):
 
     @property
     def data(self):
-        from .master_store import project
+        from .storage import project
         stored = self.stored_data
         if self.name != 'app':
             return stored
@@ -85,9 +85,10 @@ class Document(db.Model):
 
     @data.setter
     def data(self, value):
-        from .master_store import MARKER, persist
+        from .storage import persist
+        from .master_store import MARKER
         if self.name == 'app' and self.stored_data and self.stored_data.get(MARKER):
-            self.stored_data = persist(value)
+            self.stored_data = persist(value, include_trade=bool(self.stored_data.get('_relationalTrade')))
         else:
             self.stored_data = value
 
@@ -358,8 +359,9 @@ def commit_document(doc, revision, data):
     from .erp import lock, sync_business
     lock()
     previous = deepcopy(doc.data)
-    from .master_store import MARKER, persist
-    stored = persist(data) if doc.name == 'app' and doc.stored_data.get(MARKER) else data
+    from .master_store import MARKER
+    from .storage import persist
+    stored = persist(data, include_trade=bool(doc.stored_data.get('_relationalTrade'))) if doc.name == 'app' and doc.stored_data.get(MARKER) else data
     result = db.session.execute(update(Document).where(Document.name == doc.name, Document.revision == revision)
                                 .values(stored_data=stored, revision=revision + 1).execution_options(synchronize_session=False))
     if result.rowcount != 1:
@@ -377,7 +379,7 @@ def create_app(config=None):
     if uri.startswith('postgresql://'):
         uri = uri.replace('postgresql://', 'postgresql+psycopg://', 1)
     (ROOT / 'instance').mkdir(exist_ok=True)
-    app.config.update(SQLALCHEMY_DATABASE_URI=uri, SQLALCHEMY_TRACK_MODIFICATIONS=False,
+    app.config.update(ENABLE_LEGACY_TRADE_WRITES=False, SQLALCHEMY_DATABASE_URI=uri, SQLALCHEMY_TRACK_MODIFICATIONS=False,
                       MAX_CONTENT_LENGTH=12 * 1024 * 1024, COOKIE_SECURE=os.environ.get('COOKIE_SECURE', 'true').lower() == 'true',
                       PUBLIC_ORIGIN=os.environ.get('PUBLIC_ORIGIN', ''), SESSION_HOURS=8)
     if config:
@@ -567,6 +569,9 @@ def create_app(config=None):
         changes = data.get('changes')
         if not isinstance(changes, dict) or set(changes) - APP_KEYS:
             problem('Unknown or invalid state collections')
+        from .trade_store import SPECS as trade_collections
+        if set(changes)&set(trade_collections) and not app.config['ENABLE_LEGACY_TRADE_WRITES']:
+            problem('Sales and Purchasing use document/action APIs; aggregate transaction writes are retired',410)
         validate_json(changes)
         saved = deepcopy(doc.data)
         g.changed_keys = set(changes) - {'users', 'activities'}
@@ -738,7 +743,7 @@ def create_app(config=None):
             query['view'] = [legacy_routes[path]]
             return redirect('/erp.html?' + urlencode(query, doseq=True), code=302)
         # Never expose backend source, environment files, database files or backup JS.
-        public = {'frontend-dist/THIRD_PARTY_LICENSES.txt', 'frontend-dist/workspace-app.js', 'frontend-dist/workspace-app.css', 'workspace.js', 'workspace-loader.js', 'admin-data.js', 'app.js', 'crm.js', 'sales.js', 'sales_patch.js', 'hr.js', 'backend-client.js', 'erp.js', 'erp.css',
+        public = {'frontend-dist/THIRD_PARTY_LICENSES.txt', 'frontend-dist/workspace-app.js', 'frontend-dist/workspace-app.css', 'workspace.js', 'workspace-loader.js', 'trade-workspace.js', 'admin-data.js', 'app.js', 'crm.js', 'sales.js', 'sales_patch.js', 'hr.js', 'backend-client.js', 'erp.js', 'erp.css',
                   'shared.css', 'styles.css', 'logo.png', 'dexterra-stamp.jpg'}
         pages = {p.name for p in ROOT.glob('*.html')} - {'bootstrap.html', 'seed.html'}
         asset = path.startswith('assets/') and Path(path).suffix.lower() in ('.png', '.jpg', '.jpeg', '.webp')
@@ -790,7 +795,7 @@ def create_app(config=None):
         if not db.session.get(Document, 'app'):
             state = {key: [] for key in COLLECTIONS}
             state.update(roles=default_roles(), company={}, users=[], activities=[])
-            from .master_store import persist
+            from .storage import persist
             db.session.add(Document(name='app', stored_data=persist(state), revision=1))
         if not db.session.get(Document, 'hr'):
             db.session.add(Document(name='hr', data={key: [] for key in HR_COLLECTIONS}, revision=1))
@@ -805,21 +810,18 @@ def create_app(config=None):
         """Idempotently move existing masters to relational tables; retain IDs."""
         db.create_all()
         from .erp import lock
-        from .master_store import MARKER, MODELS, persist, read
+        from .master_store import MARKER, MODELS, read
+        from .storage import migrate
         lock()
         doc = app_document()
         db.session.refresh(doc)
-        if not doc.stored_data.get(MARKER):
-            original=deepcopy(doc.stored_data)
-            doc.stored_data = persist(original)
-            db.session.flush()
-            for key in MODELS:
-                if read(key)!=original.get(key,[]):
-                    db.session.rollback()
-                    raise click.ClickException('Migration stopped: '+key+' could not round-trip exactly. No business data was changed.')
-            doc.revision += 1
+        try:
+            changed=migrate(doc)
+        except (ValueError,ArithmeticError) as error:
+            db.session.rollback()
+            raise click.ClickException(str(error)) from error
         db.session.commit()
-        click.echo('Relational master migration complete; existing IDs and records preserved.')
+        click.echo('Relational master and transaction migration complete; existing IDs and records preserved.')
 
     @app.cli.command('create-admin')
     @click.option('--email', prompt=True)
@@ -844,6 +846,8 @@ def create_app(config=None):
     from .master_api import bp as master_blueprint
     from . import crm_api  # Register CRM resource routes on the shared blueprint.
     app.register_blueprint(master_blueprint)
+    from .trade_api import bp as trade_blueprint
+    app.register_blueprint(trade_blueprint)
     return app
 
 

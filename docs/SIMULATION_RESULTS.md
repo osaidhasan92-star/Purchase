@@ -1,4 +1,19 @@
-# Demo simulation results — 26 October 2026
+# Simulation results — current migration coverage
+
+The original 26 October baseline is retained below. The Sales/Purchasing phase adds
+native React form execution in Chromium and canonical SQL header/line storage.
+[Phase 2](TRADE_MIGRATION.md) describes current scope and upgrade instructions.
+
+Current checks include 63 backend scenarios, 48 shared screen/view renders and real
+browser flows: request → RFQ → comparison/award → PO → two receipts/bills → partial
+and full payments; CRM lead → draft edit/print → approval/acceptance → order → two
+deliveries/invoices → partial and full collections. Backend cases independently
+check quantities, PKR totals, split tax rounding, discounted GRNI clearing, source
+foreign keys, migration of posted data without reposting, private Sales pagination,
+version conflicts and command idempotency. Native routes are checked for compact
+network access without business/HR aggregate loading or saving.
+
+## Earlier baseline — 26 October 2026
 
 Tested branch: `codex/database-backend`. Tests use isolated, temporary SQLite databases;
 no client or production data is used or changed.
@@ -71,10 +86,10 @@ npm run test:dom
 
 ## Scope and remaining limits
 
-This is automated API and DOM execution, not a new real-browser visual test, production
-load test or deployment acceptance. Previous visual checks do not substitute for testing
-printing, downloads and responsive behavior on the client's own browser. PostgreSQL
-is covered by the repository CI job; this local run uses SQLite.
+The earlier baseline below used API/DOM execution. Current phase checks additionally
+exercise Chromium native forms and print layouts, including responsive behavior.
+They do not establish production load or deployment acceptance. PostgreSQL is covered
+by the repository CI job; local backend runs use SQLite.
 
 Recruitment is a candidate register: selecting Hired does not automatically create an
 employee. Create the employee separately. Stock returns update physical stock and

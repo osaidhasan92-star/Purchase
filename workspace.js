@@ -31,3 +31,23 @@ if(location.pathname.endsWith('/erp.html')){
  else if(!url.searchParams.has('view'))url.searchParams.set('view','overview');
  if(url.href!==location.href)history.replaceState(null,'',url);
 }
+
+// Native transaction routes share compact bootstrap; no legacy register renderer is loaded.
+const NATIVE_TRADE_ROUTES={
+ 'requests.html':{resource:'requests',permission:'requests',active:'requests',title:'Purchase Requests',area:'purchase'},
+ 'rfqs.html':{resource:'rfqs',permission:'rfqs',active:'rfqs',title:'Requests for Quotation',area:'purchase'},
+ 'quotations.html':{resource:'quotations',permission:'quotations',active:'quotations',title:'Vendor Quotations',area:'purchase'},
+ 'comparison.html':{resource:'comparisons',permission:'comparison',active:'comparison',title:'Quotation Comparison',area:'purchase'},
+ 'orders.html':{resource:'orders',permission:'orders',active:'orders',title:'Purchase Orders',area:'purchase'},
+ 'receipts.html':{resource:'receipts',permission:'receipts',active:'receipts',title:'Goods Receipts',area:'purchase'},
+ 'invoices.html':{resource:'invoices',permission:'invoices',active:'invoices',title:'Vendor Bills',area:'purchase'},
+ 'payments.html':{resource:'payments',permission:'payments',active:'payments',title:'Supplier Payments',area:'purchase'},
+ 'sales-quotations.html':{resource:'salesQuotations',permission:'sales_quotations',active:'sales-quotations',title:'Sales Quotations',area:'sales'},
+ 'sales-orders.html':{resource:'salesOrders',permission:'sales_orders',active:'sales-orders',title:'Sales Orders',area:'sales'},
+ 'sales-deliveries.html':{resource:'deliveries',permission:'sales_deliveries',active:'sales-deliveries',title:'Delivery Challans',area:'sales'},
+ 'sales-invoices.html':{resource:'customerInvoices',permission:'sales_invoices',active:'sales-invoices',title:'Customer Invoices',area:'sales'},
+ 'sales-payments.html':{resource:'customerPayments',permission:'sales_payments',active:'sales-payments',title:'Customer Payments',area:'sales'},
+ 'sales.html':{permission:'sales',active:'sales',title:'Sales Dashboard',area:'sales'},
+ 'purchase-dashboard.html':{permission:'dashboard',active:'purchase-dashboard',title:'Purchasing Dashboard',area:'purchase'},
+ 'reports.html':{permission:'reports',active:'reports',title:'Purchase Reports',area:'purchase'}
+};

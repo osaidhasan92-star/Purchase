@@ -74,3 +74,140 @@
 [data-screen="leads-react"] table {
   min-width: 850px;
 }
+.trade-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 260px;
+  align-items: center;
+}
+.trade-link {
+  display: inline-block;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.trade-status {
+  display: inline-block;
+  padding: 5px 8px;
+  background: #f1f5f9;
+  border-radius: 6px;
+  font-size: 12px;
+  color: #334155;
+}
+.trade-dialog {
+  width: min(1100px, 96vw);
+  max-width: 1100px;
+}
+.trade-dialog .modal-body {
+  max-height: 70vh;
+  overflow: auto;
+}
+.trade-dialog .modal-foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.trade-lines {
+  margin: 20px 0;
+  min-width: 0;
+}
+.trade-lines h4 {
+  margin: 0;
+}
+.trade-line {
+  border: 1px solid #e2e8f0;
+  background: #fafbfe;
+  border-radius: 8px;
+  padding: 14px;
+  margin: 10px 0;
+}
+.trade-line-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 12px;
+}
+.trade-line-title .modern-reference {
+  flex: 1;
+}
+.trade-line-title small {
+  display: block;
+  color: #64748b;
+  font-size: 12px;
+}
+.trade-line-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 12px;
+  align-items: end;
+  margin-bottom: 12px;
+}
+.trade-line-total {
+  display: grid;
+  gap: 8px;
+  padding: 10px 0;
+}
+.trade-line-total small {
+  font-size: 11px;
+  color: #64748b;
+}
+.trade-total {
+  font-size: 18px;
+  font-weight: 700;
+  text-align: right;
+  margin: 20px 0;
+}
+.trade-notes {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.trade-comparison {
+  margin-top: 20px;
+}
+[data-screen^="trade-"] table {
+  min-width: 760px;
+}
+.trade-dialog table {
+  min-width: 760px;
+}
+.trade-dialog .detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 16px;
+  margin-bottom: 20px;
+}
+.trade-dialog .detail-grid span {
+  display: block;
+  font-size: 11px;
+  color: #64748b;
+  margin-bottom: 5px;
+}
+@media (max-width: 640px) {
+  .trade-dialog .grid2 {
+    grid-template-columns: 1fr;
+  }
+  .trade-line-title {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .trade-dialog .modal-body {
+    max-height: 68vh;
+  }
+}
+.trade-dialog label,
+.trade-dialog fieldset {
+  min-width: 0;
+}
+.trade-dialog input,
+.trade-dialog select,
+.trade-dialog textarea {
+  max-width: 100%;
+  box-sizing: border-box;
+}
+#workspace-root .modal.is-open {
+  background: rgba(15, 23, 42, 0.52);
+  border-radius: 0;
+  box-shadow: none;
+  opacity: 1;
+}

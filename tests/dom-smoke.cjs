@@ -77,6 +77,10 @@ async function main() {
       if(module!=='admin')assert.equal(document.querySelectorAll('.module-navigation .module-flow').length,1,'Missing workflow strip: '+name);
     }
     assert.equal(document.querySelectorAll('.sidebar a[href="leads.html"],.sidebar a[href="orders.html"],.sidebar a[href="hr-payroll.html"]').length,0,'Submenus must live in the module content: '+name);
+    if(dom.window.eval('!!NATIVE_TRADE_ROUTES[workspacePage()]')){
+      await waitFor(()=>document.querySelector('[data-screen^="trade-"] [aria-busy="false"]'),'Native transaction did not load');
+      assert.ok(!calls.includes('/api/state')&&!calls.includes('/api/hr/state'),'Transactions must use compact resources');
+    }
     if(['customers.html','vendors.html','products.html','leads.html','reminders.html'].includes(dom.window.eval('workspacePage()'))){
       assert.ok(document.querySelector('[data-screen$="-react"]'));
       await waitFor(()=>document.querySelector('[aria-busy="false"]'),'Native screen did not finish loading');
@@ -126,8 +130,8 @@ async function main() {
   assert.equal(handoff.window.eval('db().leads.length'),1);
   assert.equal(handoff.window.eval('db().leads[0].id'),assignedLead.id);handoff.window.close();
   handoff=await page('sales-quotations?leadId='+assignedLead.id);
-  await waitFor(()=>handoff.window.document.getElementById('sq-customer'),'Assigned seller cannot open CRM handoff');
-  assert.equal(handoff.window.document.getElementById('sq-customer').value,String(sharedCustomer.id));handoff.window.close();
+  await waitFor(()=>handoff.window.document.querySelector('select[name=customerId]'),'Assigned seller cannot open CRM handoff');
+  assert.equal(handoff.window.document.querySelector('select[name=customerId]').value,String(sharedCustomer.id));handoff.window.close();
   jar.setCookieSync(login.headers.get('set-cookie'),base);
   // Shared master-data links retain their originating module's submenu.
   let contextPage=await page('customers?module=crm');
@@ -156,102 +160,7 @@ async function main() {
   assert.match(dom.window.document.body.textContent, /Database Employee/);
   dom.window.close();
 
-  // Exercise the sales workflow against actual persisted state and CRM synchronization.
-  dom = await page('sales-quotations');
-  await dom.window.eval(`(async () => {
-    const x=db();
-    x.products.push({id:1003,name:'Test service',sku:'TEST-SVC',unit:'Service',rate:100});
-    x.customers.push({id:1001,code:'CUS-TEST',name:'Workflow Customer',status:'Active'});
-    x.leads.push({id:1002,customerId:1001,customerName:'Workflow Customer',ownerId:currentUser().id,stage:'Quotation Required'});
-    await save(x);
-  })()`);
-  dom.window.openSalesQuotation(1002);
-  dom.window.document.querySelector('.s-prod').value = '1003';
-  dom.window.document.querySelector('.s-rate').value = '100';
-  await dom.window.saveSalesQuotationWorkflow('Pending Approval', 1002);
-  const quoteId = dom.window.eval('db().salesQuotations[0].id');
-  await dom.window.approveSalesQuotation(quoteId);
-  assert.equal(dom.window.eval('db().leads.find(l=>l.id===1002).stage'), 'Quotation Approved');
-  await dom.window.sendSalesQuotationToCustomer(quoteId);
-  await dom.window.acceptSalesQuotation(quoteId);
-  assert.equal(dom.window.eval('db().leads.find(l=>l.id===1002).stage'), 'Closed Won');
-  dom.window.openSalesOrderCreateModal(quoteId);
-  await dom.window.saveSalesOrderFromModal();
-  dom.window.close();
-  dom = await page('sales-invoices');
-  dom.window.downloadSalesInvoicePdf = () => {};
-  dom.window.createInvoiceFromOrderModal();
-  await dom.window.saveInvoiceFromOrderModal();
-  dom.window.close();
-  dom = await page('sales-payments');
-  dom.window.downloadCustomerPaymentPdf = () => {};
-  dom.window.openStandaloneCustomerPayment();
-  dom.window.document.getElementById('cp-amount').value = '40';
-  await dom.window.saveStandaloneCustomerPayment();
-  // This wrapper delegates to the asynchronous saver; wait for its promise queue.
-  await dom.window.eval('BackendPersistence.drain()');
-  assert.equal(dom.window.eval('db().customerInvoices[0].paidAmount'), 40);
-  dom.window.close();
-
-  // Full purchasing screen flow, including stock valuation, supplier bill and bank payment.
-  dom = await page('products');
-  dom.window.openProduct();
-  for(const [id,value] of Object.entries({pname:'Workflow raw material',psku:'RAW-UI-1',prate:'10'}))dom.window.document.getElementById(id).value=value;
-  await dom.window.saveProduct();
-  const rawId=dom.window.eval('db().products.at(-1).id');
-  dom.window.close();
-  dom=await page('requests');dom.window.openRequest();
-  dom.window.document.querySelector('.req-product').value=String(rawId);
-  dom.window.document.querySelector('.req-qty').value='20';
-  dom.window.document.querySelector('.req-rate').value='10';
-  await dom.window.saveRequest();
-  const requestId=dom.window.eval('db().requests[0].id');
-  await dom.window.approveRequest(requestId);dom.window.close();
-  dom=await page('rfqs');dom.window.openRFQ(requestId);
-  dom.window.document.getElementById('rfq-due').value='2026-12-31';
-  dom.window.document.getElementById('rfq-vendors').options[0].selected=true;
-  await dom.window.saveRFQ();const rfqId=dom.window.eval('db().rfqs[0].id');
-  await dom.window.sendRFQ(rfqId);dom.window.close();
-  dom=await page('quotations');dom.window.openQuotation(rfqId);
-  dom.window.document.getElementById('q-vendor').selectedIndex=1;
-  dom.window.document.getElementById('q-valid').value='2026-12-31';
-  dom.window.document.querySelector('.q-rate').value='10';
-  await dom.window.saveQuotation();const vendorQuote=dom.window.eval('db().quotations[0].id');
-  await dom.window.awardQuotation(vendorQuote);dom.window.close();
-  dom=await page('orders');dom.window.openPOFromQuotation();
-  dom.window.document.getElementById('po-quotation').value=String(vendorQuote);
-  dom.window.loadPODetails();dom.window.document.getElementById('po-delivery-date').value='2026-12-31';
-  await dom.window.savePO();const poId=dom.window.eval('db().orders[0].id');
-  for(const state of ['Pending Approval','Approved','Sent to Vendor'])await dom.window.updatePOStatus(poId,state);
-  dom.window.close();
-  dom=await page('receipts');dom.window.openGRN();
-  dom.window.document.getElementById('grn-po').value=String(poId);dom.window.loadGRNPO();
-  dom.window.document.querySelector('.grn-received').value='10';
-  dom.window.document.querySelector('.grn-accepted').value='10';
-  await dom.window.saveGRN();dom.window.close();
-  dom=await page('invoices');dom.window.openInvoice();
-  dom.window.document.getElementById('inv-po').value=String(poId);dom.window.loadInvoicePO();
-  dom.window.document.getElementById('inv-no').value='UI-BILL-1';
-  dom.window.document.getElementById('inv-due').value='2026-12-31';
-  await dom.window.saveInvoice();const billId=dom.window.eval('db().invoices[0].id');
-  await dom.window.approveInvoice(billId);dom.window.close();
-  dom=await page('payments');dom.window.openPayment();
-  dom.window.document.getElementById('pay-invoice').value=String(billId);dom.window.loadPaymentInvoice();
-  await dom.window.savePayment();assert.equal(dom.window.eval('db().invoices[0].status'),'Paid');
-  assert.equal(dom.window.eval('db().orders[0].status'),'Partially Received');dom.window.close();
-  // Receive and bill the remaining half: the PO completes only after both installments.
-  dom=await page('receipts');dom.window.openGRN();
-  dom.window.document.getElementById('grn-po').value=String(poId);dom.window.loadGRNPO();
-  await dom.window.saveGRN();dom.window.close();
-  dom=await page('invoices');dom.window.openInvoice();
-  dom.window.document.getElementById('inv-po').value=String(poId);dom.window.loadInvoicePO();
-  assert.equal(Number(dom.window.document.getElementById('inv-amount').value),100);
-  dom.window.document.getElementById('inv-no').value='UI-BILL-2';dom.window.document.getElementById('inv-due').value='2026-12-31';
-  await dom.window.saveInvoice();const secondBillId=dom.window.eval('db().invoices[0].id');
-  await dom.window.approveInvoice(secondBillId);dom.window.close();
-  dom=await page('payments');dom.window.openPayment();
-  dom.window.document.getElementById('pay-invoice').value=String(secondBillId);dom.window.loadPaymentInvoice();
-  await dom.window.savePayment();assert.equal(dom.window.eval('db().orders[0].status'),'Completed');dom.window.close();
+  const {rawId}=await require('./trade-dom.cjs')({page,assert});
 
   // Manufacturing through the new screens, using the raw material received above.
   dom=await page('products');dom.window.openProduct();
@@ -320,8 +229,10 @@ async function main() {
   assert.equal(dom.window.hrState().employees[0].status,'Separated');dom.window.close();
   dom=await page('hr-reports');assert.match(dom.window.document.body.textContent,/Separated Employees/);dom.window.close();
   dom = await page('sales-payments');
-  assert.equal(dom.window.eval('db().customerInvoices[0].paidAmount'), 40);
-  assert.equal(dom.window.eval('db().customerInvoices[0].status'), 'Partially Paid');
+  const persisted=await dom.window.eval("BackendPersistence.request('/trade/customerInvoices')");
+  assert.equal(persisted.items[0].paidAmount,40);
+  assert.equal(persisted.items[0].status,'Partially Paid');
+  assert.equal(dom.window.eval('db().customerInvoices.length'),0,'Compact screens must not cache the entire register');
   dom.window.close();
 
   // Restricted users see only permitted modules/tabs, including on shared master-data pages.
@@ -343,7 +254,7 @@ async function main() {
   jar.setCookieSync(login.headers.get('set-cookie'),base);
 
   assert.deepEqual(errors, []);
-  console.log(`${names.length} pages/views rendered with shared module navigation; active tabs, module context and restricted roles passed; CRM/sales, purchasing, manufacturing, expenses, payroll, manpower, recruitment, attendance, leave and separation flows passed.`);
+  console.log(`${names.length} pages/views rendered with shared module navigation; active tabs, module context and restricted roles passed; native Sales/Purchasing API plus React read models, manufacturing, expenses, payroll, manpower, recruitment, attendance, leave and separation flows passed.`);
 }
 
 main().catch(error => {console.error(error); process.exitCode = 1;}).finally(() => {

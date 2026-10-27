@@ -348,7 +348,7 @@ export function CustomersPage({
         </div>
       </div>
       {editing !== undefined && (
-        <div className="modal" id="modal">
+        <div className="modal is-open" id="modal">
           <div
             className="modal-box request-modal"
             ref={dialog}
