@@ -204,3 +204,49 @@ def test_crm_manager_assignment_directory_is_limited_and_legacy_updates_sql(app)
         ).status_code
         == 409
     )
+
+
+def test_legacy_foreign_currency_is_not_silently_relabelled_or_summed_as_pkr(app):
+    admin, h = session(app)
+    customer = seed(admin, h)
+    assert (
+        patch(
+            admin,
+            h,
+            {
+                "leads": [
+                    dict(
+                        id=44,
+                        customerId=customer["id"],
+                        customerName=customer["name"],
+                        currency="USD",
+                        value=500,
+                        stage="New",
+                        status="Active",
+                    )
+                ]
+            },
+        ).status_code
+        == 200
+    )
+    summary = admin.get("/api/crm/summary").json
+    assert (
+        summary["pipeline"] == 0
+        and summary["active"] == 1
+        and summary["foreignCurrencyLeads"] == 1
+    )
+    old = admin.get("/api/crm/leads").json["items"][0]
+    response = admin.patch(
+        "/api/crm/leads/44",
+        headers=h,
+        json={"version": old["version"], "notes": "Retain original currency"},
+    )
+    assert response.status_code == 200 and response.json["record"]["currency"] == "USD"
+    assert (
+        admin.patch(
+            "/api/crm/leads/44",
+            headers=h,
+            json={"version": response.json["record"]["version"], "currency": "PKR"},
+        ).status_code
+        == 400
+    )

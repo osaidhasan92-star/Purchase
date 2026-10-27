@@ -18,6 +18,9 @@ Lists use SQL filtering/counting/offset/limit (25 rows by default, 100 maximum).
 The dashboard queries grouped totals and at most 25 due reminders. CRM ownership
 and assignment visibility is applied in SQL before counting/pagination/aggregation.
 User-entered search wildcards are escaped and query values are bound parameters.
+The assignee directory is searchable and bounded to 100 eligible active accounts.
+Existing foreign-currency leads retain their currency and are excluded from PKR totals;
+new native leads use PKR. No exchange-rate conversion is implied.
 Reference selectors search bounded customer/lead lists instead of loading every record.
 
 Writes update one SQL row, retain server-owned creator attribution and require a

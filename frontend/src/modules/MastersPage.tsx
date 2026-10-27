@@ -263,6 +263,8 @@ export function MastersPage({
       >;
     if (kind === "products") payload.rate = Number(payload.rate || 0);
     if (kind === "leads") {
+      if (editing?.currency && editing.currency !== "PKR")
+        delete payload.currency;
       payload.value = Number(payload.value || 0);
       if (editing && !stages.includes(String(editing.stage)))
         delete payload.stage;
@@ -321,9 +323,13 @@ export function MastersPage({
   };
   const columns = fields[kind].filter(
     (f) =>
-      !["productType", "notes", "ownerId", "currency", "email"].includes(
-        f.name,
-      ),
+      ![
+        "productType",
+        "notes",
+        "ownerId",
+        "currency",
+        ...(kind === "leads" ? ["email"] : []),
+      ].includes(f.name),
   );
   return (
     <>
@@ -394,7 +400,9 @@ export function MastersPage({
             <thead>
               <tr>
                 {columns.map((f) => (
-                  <th key={f.name}>{f.label}</th>
+                  <th key={f.name}>
+                    {f.name === "value" ? "Opportunity Value" : f.label}
+                  </th>
                 ))}
                 <th>Actions</th>
               </tr>
@@ -412,7 +420,11 @@ export function MastersPage({
                     {columns.map((f) => (
                       <td key={f.name}>
                         {f.type === "number"
-                          ? "Rs " +
+                          ? (kind === "leads" &&
+                            r.currency &&
+                            r.currency !== "PKR"
+                              ? String(r.currency) + " "
+                              : "Rs ") +
                             Number(r[f.name] || 0).toLocaleString("en-PK", {
                               minimumFractionDigits: 2,
                               maximumFractionDigits: 2,
@@ -533,7 +545,9 @@ export function MastersPage({
                   <div className="grid2">
                     {fields[kind].map((f) => (
                       <label key={f.name}>
-                        {f.label}
+                        {f.name === "value" && editing?.currency
+                          ? f.label.replace("PKR", String(editing.currency))
+                          : f.label}
                         {f.reference ? (
                           <ReferenceField
                             field={f}
@@ -547,9 +561,12 @@ export function MastersPage({
                             name={f.name}
                             disabled={
                               kind === "leads" &&
-                              f.name === "stage" &&
                               !!editing &&
-                              !stages.includes(String(editing.stage))
+                              ((f.name === "stage" &&
+                                !stages.includes(String(editing.stage))) ||
+                                (f.name === "currency" &&
+                                  !!editing.currency &&
+                                  editing.currency !== "PKR"))
                             }
                             defaultValue={String(
                               f.name === "done"
@@ -563,7 +580,11 @@ export function MastersPage({
                             editing?.stage &&
                             !stages.includes(String(editing.stage))
                               ? [...f.options, String(editing.stage)]
-                              : f.options
+                              : f.name === "currency" &&
+                                  editing?.currency &&
+                                  editing.currency !== "PKR"
+                                ? [...f.options, String(editing.currency)]
+                                : f.options
                             ).map((o) => (
                               <option key={o} value={o}>
                                 {o === "stock"
@@ -674,7 +695,7 @@ function ReferenceField({
     const timer = setTimeout(() => {
       const endpoint =
         reference === "assignees"
-          ? "/crm/assignees"
+          ? "/crm/assignees?" + new URLSearchParams({ search })
           : (reference === "leads" ? "/crm/leads" : "/customers") +
             "?" +
             new URLSearchParams({ page: "1", pageSize: "100", search });
@@ -694,7 +715,7 @@ function ReferenceField({
   }, [reference, search, bridge]);
   return (
     <span className="modern-reference">
-      {reference !== "assignees" && !readonly && (
+      {!readonly && (
         <input
           type="search"
           aria-label={"Find " + field.label.toLowerCase()}

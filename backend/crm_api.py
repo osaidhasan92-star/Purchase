@@ -2,7 +2,7 @@
 
 from datetime import date
 from flask import g, jsonify, request
-from sqlalchemy import select, or_, func
+from sqlalchemy import select, or_, func, case
 from .app import db, User, app_document, problem
 from .master_api import bp, permit, save_record, output
 from .master_store import Lead, Reminder, Customer, MODELS, record
@@ -114,8 +114,17 @@ def normalize(key, data, old):
         )
         if result["status"] not in ("Active", "Inactive"):
             problem("Invalid lead status")
-        if result["currency"] != "PKR":
-            problem("This company uses PKR; foreign currency posting is not configured")
+        previous_currency = (old or {}).get("currency", "PKR")
+        if (
+            result["currency"] != "PKR" and result["currency"] != previous_currency
+        ) or (
+            old
+            and previous_currency != "PKR"
+            and result["currency"] != previous_currency
+        ):
+            problem(
+                "This company uses PKR; existing foreign-currency leads cannot be relabeled as PKR"
+            )
         if result["email"]:
             import re
 
@@ -195,10 +204,25 @@ def crm_list(key):
 @bp.get("/crm/assignees")
 def crm_assignees():
     permit("leads")
-    query = select(User).where(User.active == True)
+    search = request.args.get("search", "").strip()
+    if len(search) > 160:
+        problem("Search is too long")
+    query = select(User).where(
+        User.active == True,
+        or_(
+            User.id == g.user.id, User.role.in_(("Salesperson", "Sales Representative"))
+        ),
+    )
+    if search:
+        term = (
+            "%"
+            + search.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+            + "%"
+        )
+        query = query.where(User.name.ilike(term, escape="\\"))
     if g.user.role not in ("Admin", "CRM Manager"):
         query = query.where(or_(User.id == g.user.id, User.manager_id == g.user.id))
-    users = db.session.scalars(query.order_by(User.name))
+    users = db.session.scalars(query.order_by(User.name, User.id).limit(100))
     return jsonify(
         items=[
             {"id": u.id, "name": u.name, "role": u.role, "managerId": u.manager_id}
@@ -225,7 +249,13 @@ def crm_summary():
     from .erp import day
 
     grouped = db.session.execute(
-        select(Lead.stage, func.count(), func.coalesce(func.sum(Lead.value), 0))
+        select(
+            Lead.stage,
+            func.count(),
+            func.coalesce(
+                func.sum(case((Lead.currency == "PKR", Lead.value), else_=0)), 0
+            ),
+        )
         .where(visible_leads(), Lead.status != "Inactive")
         .group_by(Lead.stage)
     ).all()
@@ -244,6 +274,11 @@ def crm_summary():
             .limit(25)
         )
     return jsonify(
+        foreignCurrencyLeads=db.session.scalar(
+            select(func.count())
+            .select_from(Lead)
+            .where(visible_leads(), Lead.status != "Inactive", Lead.currency != "PKR")
+        ),
         stages=stages,
         active=sum(r["count"] for r in stages),
         pipeline=sum(

@@ -3,6 +3,7 @@ import type { Bridge } from "../types";
 import { errorMessage } from "../lib/api";
 interface Summary {
   active: number;
+  foreignCurrencyLeads: number;
   pipeline: number;
   won: number;
   stages: { stage: string; count: number; value: number }[];
@@ -64,6 +65,12 @@ export function CrmDashboard({ bridge }: { bridge: Bridge }) {
               </div>
             ))}
           </div>
+          {data.foreignCurrencyLeads > 0 && (
+            <p className="hint">
+              {data.foreignCurrencyLeads} legacy foreign-currency leads are
+              excluded from PKR totals.
+            </p>
+          )}
           <div className="grid2">
             <section className="section-card">
               <div className="section-head">
