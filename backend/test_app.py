@@ -98,8 +98,8 @@ def test_viewer_and_hr_privacy(app):
     assert viewer.post('/api/users', headers=vh, json={}).status_code == 403
     assert viewer.get('/api/admin/export').status_code == 403
     hr, hh = session(app, 'hr')
-    assert hr.get('/api/hr/state').json['state']['employees'] == []
-    assert patch(hr, hh, {'employees':[{'id':2,'name':'Own employee','salary':100}]}, '/api/hr/state').status_code == 200
+    assert hr.get('/api/hr/state').json['state']['employees'][0]['salary'] == 100
+    assert patch(hr, hh, {'employees':hr.get('/api/hr/state').json['state']['employees']+[{'id':2,'name':'Own employee','salary':100}]}, '/api/hr/state').status_code == 200
     assert hr.get('/api/hr/state').json['state']['employees'][0]['salary'] == 100
     assert patch(hr, hh, {'attendance': [{'id': 'a', 'employee': '1 - Private payroll employee', 'date': '2026-10-26'}]}, '/api/hr/state').status_code == 200
 

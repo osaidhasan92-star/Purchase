@@ -1,79 +1,88 @@
-# Creator, team manager and Admin access
+# Department access and record privacy
 
-Every business record is visible to its creator, that creator's current direct manager,
-and Admin. Teammates do not see each other's records. This is one direct-manager level,
-not recursive access for the manager's manager. A manager also sees their own records.
-Users without a manager have creator/Admin access only.
+This single-company, single-warehouse ERP uses department permissions for business
+handoffs. Creator identity is retained for accountability; it is not a universal
+record-sharing restriction. Admin can access all company records.
 
-Role permissions remain required: assigning a manager does not grant new module or
-approval permissions. Admin can configure those under Users & Roles. CRM Manager,
-Finance, HR Manager and Procurement Manager no longer have company-wide record
-visibility merely because of their role. Admin retains company-wide access.
+| Area | Record visibility, after module permission checks |
+| --- | --- |
+| CRM leads / legacy CRM quotes | Creator, assigned salesperson, their direct managers, Admin |
+| CRM reminders | Creator/manager or users authorized for the linked private lead |
+| Customer/vendor/product/company masters | Shared with authorized modules/departments |
+| Purchase requests | Requester's team; authorized Procurement and Finance users |
+| RFQs, vendor quotes, comparison, POs, receipts, bills, payments | Shared with users authorized for each purchasing/Finance module |
+| Sales quotes, orders, deliveries, invoices and payments | Creator/assigned Sales team; source workflow participants; Finance where its module permissions permit |
+| Inventory, stock moves, BoMs, manufacturing orders | Shared with authorized inventory/production users in this one-company/warehouse deployment |
+| Accounting, custom accounts, journals, reports, bank statements | Company-wide for users authorized for Accounting |
+| HR records | Authorized HR staff; employees see only their own linked records when self-service view permission is granted |
+| Payroll | HR administration or the employee's own linked payroll records; not ordinary sales/team-manager access |
+| Expense claims and receipts | Submitter, their direct manager, authorized Finance users, Admin |
+| Activity log | Actor/direct manager, Admin; account administration and full audit export remain Admin-only |
 
-## Setup
+Module/action permissions remain mandatory. Shared visibility does not grant editing,
+approval, account management or access to an otherwise disabled module. A read-only
+Viewer cannot mutate shared records. A person with Accounting permission receives
+company-wide financial visibility, including payroll journal amounts; Finance access
+must therefore be limited to authorized personnel. HR payroll registers are separately
+protected by HR permissions.
 
-1. Sign in as Admin and open Administration → Users & Roles.
-2. Create the manager account and give its role the appropriate module permissions.
-3. Edit each team member, select **Team manager**, and save.
-4. Repeat for Procurement, Sales/CRM, HR, Finance and Manufacturing users as needed.
+## Setup in Users & Roles
 
-The Team manager field is available for every role. Self-management and management
-cycles are rejected. A manager change immediately changes access to the employee's
-historical records; ownership does not change. A user-account change revokes that
-user's existing login sessions, so they should sign in again.
+1. As Admin, create users with the appropriate Sales, CRM, Procurement, Finance, HR
+   or Manufacturing role.
+2. Set **Team manager** for Sales users and other staff whose claims/requests need
+   managerial oversight. Managers need appropriate module/action permissions.
+3. Review role permissions for creation, approval and payments separately. A manager
+   who may approve expenses needs Expenses approval permission. Reimbursement also
+   requires Accounting access, so a non-Finance manager cannot pay a claim.
+4. For employee self-service, link the employee record to their login account. Grant
+   only the needed HR view/export permissions; do not grant HR Employees edit permission
+   unless that role is authorized to administer company-wide HR records. Self-service
+   employees cannot create/edit their salary or approve their own payroll through view access.
 
-## Coverage
+Direct-manager and same-manager Sales-team membership is evaluated from current user
+accounts. Self-management and management cycles are rejected. A manager change updates
+team access to historic records. Existing custom role permissions are preserved.
 
-The same rule covers customer/vendor/product masters, CRM leads/reminders/quotes,
-purchase requests/RFQs/quotations/comparisons/orders/receipts/bills/payments,
-sales quotations/orders/deliveries/invoices/payments, every HR register,
-BoMs, manufacturing orders, expense claims, custom accounts, journals,
-bank statements, stock movements, attachments and activity entries.
+## CRM to Sales handoff
 
-Server-side filtering applies to lists, direct-ID actions, parent references,
-report lines and dashboard aggregates. A guessed record ID or a forged creator
-cannot grant access. Hidden records are preserved when somebody else saves a
-visible subset of a register. Creator identity is immutable through normal saves.
-Automatic journals and stock movements retain the source creator when a manager
-approves or completes the source document.
+CRM creates a shared customer, creates a private lead, and selects **Assign Salesperson**.
+CRM Manager may select an active Salesperson/Representative; Admin may assign any
+appropriate user; a Sales Manager can assign direct reports. Assignment does not change
+who originally created the lead. The assignee and their manager can open the opportunity;
+unrelated salespeople cannot read its private notes.
 
-Standard system reference data (the built-in chart of accounts, Pakistan/PKR,
-company identity and warehouse configuration) remains available where a module
-needs it. These are system settings; user-created business records are private.
-A customer or product created by Admin is Admin-owned, not a public master record.
-Demo opening records are likewise Admin-owned.
+Quotations and subsequent Sales transactions support the assigned Sales team. An
+existing authorized quotation can be progressed without exposing the private lead to
+every teammate. The server updates the linked lead's quotation stage/status, preserving
+its notes and creator. Finance can access orders/invoices/payments where authorized,
+without needing permission to read CRM leads.
 
-Financial reports and dashboard totals are scoped views; only Admin gets the
-company-wide totals. Inventory lists show the visible stock movements' quantities
-and values. The physical single-warehouse stock ledger remains shared internally
-for actual stock validation and perpetual valuation; ownership filtering does not
-create separate warehouses or duplicate stock.
+## Inventory and accounting
 
-## Existing databases
+Authorized inventory users see the actual warehouse stock quantities, movements and
+valuation. Production can use shared products and BoMs created by another authorized
+user. Finance sees complete company journals, balances and reports regardless of the
+source creator or department. Source creator metadata is retained on automatic postings.
+This avoids incomplete company reports and duplicate master records.
 
-Back up the database, update the application files and restart the server. Ownership
-metadata uses the existing Document table; no schema migration or reseeding is needed.
+This is one company and warehouse: there is no separate warehouse/site isolation or
+arbitrary per-document sharing interface. Multi-company/multiwarehouse departments
+would need additional organization scopes.
 
-Existing records with a reliable `createdBy` (or a legacy `ownerId`) retain that
-attribution. Existing journals use their recorded creator and existing expenses use
-their owner. Unattributed legacy records are Admin-only, rather than being exposed
-company-wide or attributed to whichever user first opens them.
+## Updating an existing installation
 
-After reviewing an unattributed legacy record's true creator, a server administrator
-can attribute it using the Flask CLI, for example from the project root:
+Back up the database, update application files and restart the server. No schema
+migration, ownership rewrite, `init-db` or demo reseeding is needed. Shared operational
+records become visible according to current department permissions. Private legacy CRM
+records with no reliable creator or assignee remain Admin-only until reviewed; HR and
+accounting use their department policies, not missing creator metadata.
+
+The reviewed legacy-attribution CLI remains available for audit cleanup, for example:
 
 ```text
-flask --app backend.app assign-legacy-owner --namespace app --collection rfqs --record-id 123 --creator-email staff@example.com
-flask --app backend.app assign-legacy-owner --namespace hr --collection employees --record-id EMP-OLD --creator-email hr@example.com
-flask --app backend.app assign-legacy-owner --namespace bom --record-id 1 --creator-email production@example.com
+flask --app backend.app assign-legacy-owner --namespace app --collection leads --record-id 123 --creator-email crm@example.com
 ```
 
-Supported relational namespaces are `bom`, `manufacturing`, `bank` and `account`.
-The command refuses to overwrite a known creator and audits the reviewed attribution.
-For aggregate source documents, existing generated journals and linked stock movements
-follow that reviewed creator. Review related customers/vendors/products and other
-upstream documents separately; attribution does not silently share a whole chain.
-
-Reassigning a lead's salesperson is a workflow assignment, not a record-visibility
-grant. Creator-based access still applies. If a process needs colleague-to-colleague
-handoff, use the manager/Admin workflow; arbitrary sharing is not part of this policy.
+It never overwrites a known creator. Attribution is audit metadata; it does not make
+operational records private or bypass department/assignment permissions.

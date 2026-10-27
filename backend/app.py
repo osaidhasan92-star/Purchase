@@ -164,7 +164,8 @@ def visible_state(doc):
     # User profiles are needed for ownership selectors; credentials never leave the account table.
     profiles = db.session.scalars(select(User)).all()
     if user.role != 'Admin':
-        profiles = [u for u in profiles if u.id == user.id or u.id == user.manager_id or u.manager_id == user.id]
+        profiles = [u for u in profiles if u.id == user.id or u.id == user.manager_id or u.manager_id == user.id or
+                    (user.role=='CRM Manager' and u.role in ('Salesperson','Sales Representative','Sales Manager'))]
     state['users'] = [u.public() for u in profiles]
     for key, module in COLLECTIONS.items():
         state[key] = [r for r in state.get(key, []) if allowed(user, doc.data, module) and in_scope(user, r, key, doc.data)]
@@ -214,11 +215,17 @@ def merge_collection(key, incoming, existing, state, module):
             previous, target = (before or {}).get('status'), after.get('status')
             if previous != target and target not in stages.get(previous, set()):
                 problem('Invalid sales quotation status transition')
+        if after and key=='leads' and after.get('ownerId') and after.get('ownerId')!=(before or {}).get('ownerId'):
+            from .scope import actor_visible
+            owner=db.session.get(User,str(after['ownerId']))
+            if not owner or not owner.active or not (actor_visible(owner.id) or (g.user.role=='CRM Manager' and owner.role in ('Salesperson','Sales Representative'))):
+                problem('Select yourself, a direct report, or an authorized CRM sales assignee',403)
+            after['managerId']=owner.manager_id
         if after and before is None and key == 'customers':
             after['ownerId'] = g.user.id
             after['managerId'] = g.user.manager_id
         if after and not in_scope(g.user, after, key, state):
-            problem('Record is outside your creator/team scope', 403)
+            problem('Record is outside your permitted department or assignment', 403)
         if after and after.get('status') != (before or {}).get('status') and after.get('status') in APPROVAL_STATUSES:
             # Sales staff can record completed physical deliveries; financial approvals remain restricted.
             if not (key == 'deliveries') and not allowed(g.user, state, module, 'approve'):
@@ -243,10 +250,12 @@ def validate_scope_references(saved, previous):
                     target=relations.get(field)
                     if field=='quotationId' and key in ('leads','salesOrders','deliveries','customerInvoices','customerPayments'):target='salesQuotations'
                     if field=='invoiceId' and key in ('customerPayments','deliveries','salesOrders'):target='customerInvoices'
+                    prior=old.get(str(record['id']),{})
+                    if value is record and field in prior and prior[field]==item:target=None
                     if target and item not in (None,''):
                         parent=next((r for r in saved.get(target,[]) if str(r['id'])==str(item)),None)
                         if parent is not None and not in_scope(g.user,parent,target,saved):
-                            problem('Referenced record is outside your creator/team scope',403)
+                            problem('Referenced record is outside your permitted department or assignment',403)
                     if field=='attachmentPath' and item:
                         from .scope import require_object
                         attachment=db.session.get(Attachment,str(item))
@@ -259,19 +268,36 @@ def validate_scope_references(saved, previous):
             check(record)
 
 
+def sync_crm_from_sales(saved,previous):
+    # Authorized sales handoffs update the private source lead without returning its notes.
+    before={str(q['id']):q for q in previous.get('salesQuotations',[])}
+    stages={'Draft':'Quotation in Preparation','Pending Approval':'Quotation Pending Approval',
+            'Approved':'Quotation Approved','Sent':'Quotation Sent','Accepted':'Closed Won',
+            'Converted':'Closed Won','Rejected':'Closed Lost','Expired':'Closed Lost'}
+    for quote in saved.get('salesQuotations',[]):
+        if quote==before.get(str(quote['id'])):continue
+        lead=next((l for l in saved.get('leads',[]) if str(l['id'])==str(quote.get('leadId'))),None)
+        stage=stages.get(quote.get('status'))
+        if lead is None or not stage:continue
+        lead.update(stage=stage,quotationId=quote['id'],quotationNo=quote.get('quotationNo'),
+                    quotationStatus=quote['status'],lastSalesUpdate=utcnow())
+        if stage=='Closed Won':lead.setdefault('wonAt',utcnow())
+        if stage=='Closed Lost':lead.setdefault('lostAt',utcnow())
+
+
 def validate_hr_references(saved, previous):
     for key in HR_COLLECTIONS:
         old={str(r['id']):r for r in previous.get(key,[])}
         for record in saved.get(key,[]):
             if record==old.get(str(record['id'])):continue
             if key=='employees' and record.get('linkedUserId'):
-                from .scope import actor_visible
+                from .scope import actor_visible, hr_access
                 target=db.session.get(User,str(record['linkedUserId']))
-                if not target or not actor_visible(target.id):problem('Linked account is outside your creator/team scope',403)
+                if not target or not (hr_access(g.user,app_document().data) or actor_visible(target.id)):problem('Linked account is not permitted for this HR action',403)
             for employee in saved.get('employees',[]):
                 label=str(employee.get('employeeId',''))+' - '+str(employee.get('name',''))
                 if (record.get('employeeKey') and str(record['employeeKey'])==str(employee['id'])) or record.get('employee')==label:
-                    if not in_scope(g.user,employee,'employees',saved):problem('Employee is outside your creator/team scope',403)
+                    if not in_scope(g.user,employee,'employees',saved):problem('Employee is outside your permitted HR scope',403)
 
 
 def validate_numbers(record):
@@ -549,6 +575,7 @@ def create_app(config=None):
             else:
                 saved[key] = merge_collection(key, incoming, saved.get(key, []), doc.data, COLLECTIONS[key])
         validate_scope_references(saved, doc.data)
+        sync_crm_from_sales(saved,doc.data)
         validate_business(saved)
         revision = commit_document(doc, data.get('revision'), saved)
         return jsonify(ok=True, revision=revision)
@@ -668,8 +695,8 @@ def create_app(config=None):
         state = app_document().data
         if not allowed(g.user, state, attachment.module):
             problem('Attachment access denied', 403)
-        from .scope import actor_visible
-        if not actor_visible(attachment.uploader_id):
+        from .scope import attachment_visible
+        if not attachment_visible(attachment):
             problem('Attachment access denied', 403)
         return send_file(BytesIO(attachment.content), mimetype='application/pdf',
                          download_name=attachment.filename, as_attachment=True)
@@ -732,7 +759,7 @@ def create_app(config=None):
             remember(record,creator.id)
         audit('Attributed legacy record',dict(namespace=namespace,collection=collection,recordId=record_id,creatorId=creator.id))
         db.session.commit()
-        click.echo('Legacy ownership assigned; creator, direct manager and Admin can access it subject to module permissions.')
+        click.echo('Legacy creator attribution saved; department and assignment permissions still apply.')
 
     @app.cli.command('init-db')
     def init_db():

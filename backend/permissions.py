@@ -88,5 +88,5 @@ def allowed(user, state, module, action='view'):
 
 
 def in_scope(user, record, key, state):
-    from .scope import actor_visible, creator_of_record
-    return actor_visible(creator_of_record(record), user)
+    from .scope import business_visible
+    return business_visible(user,record,key,state)

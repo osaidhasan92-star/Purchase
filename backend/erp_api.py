@@ -10,7 +10,7 @@ from sqlalchemy import select, func
 
 from .app import db, Document, Attachment, body, problem, audit
 from .permissions import allowed
-from .scope import object_visible, require_object, remember, object_creator
+from .scope import object_visible, require_object, remember, object_creator, finance_access
 from .validation import InvalidBusinessState
 from .erp import (Account, JournalEntry, JournalLine, Reconciliation, ERPProduct, StockBalance, StockMove,
                   BillOfMaterials, BOMLine, ManufacturingOrder, ProductionComponent, Expense, BankStatementLine,
@@ -426,6 +426,7 @@ def create_expense():
 def advance_expense(identity,action):
     expense=row(Expense,identity);g.scope_creator=expense.owner_id;state=db.session.get(Document,'app').data
     approver=allowed(g.user,state,'expenses','approve')
+    if action=='pay' and not finance_access(g.user,state):problem('Finance access required to reimburse expenses',403)
     if action in ('approve','pay','reject') and not approver:problem('Expense approval permission required',403)
     if not approver and expense.owner_id!=g.user.id:problem('Expense belongs to another user',403)
     if (action=='approve' and expense.status in ('Approved','Paid')) or (action=='pay' and expense.status=='Paid'):return done(expense_json(expense))
@@ -444,9 +445,11 @@ def advance_expense(identity,action):
 
 
 @bp.route('/bank-statements',methods=['GET','POST'])
-@access('accounting','edit')
+@access('accounting')
 def bank_statements():
     if request.method=='POST':
+        if not allowed(g.user,db.session.get(Document,'app').data,'accounting','create'):problem('Accounting create permission required',403)
+        lock()
         data=body();request_key=key(data);existing=db.session.scalar(select(BankStatementLine).where(BankStatementLine.request_key==request_key))
         if existing:require_object(existing);return done(dict(id=existing.id))
         account=str(data.get('account','1010'))
