@@ -716,7 +716,7 @@ def create_app(config=None):
             query['view'] = [legacy_routes[path]]
             return redirect('/erp.html?' + urlencode(query, doseq=True), code=302)
         # Never expose backend source, environment files, database files or backup JS.
-        public = {'workspace.js', 'workspace-loader.js', 'admin-data.js', 'app.js', 'crm.js', 'sales.js', 'sales_patch.js', 'hr.js', 'backend-client.js', 'erp.js', 'erp.css',
+        public = {'frontend-dist/THIRD_PARTY_LICENSES.txt', 'frontend-dist/workspace-app.js', 'frontend-dist/workspace-app.css', 'workspace.js', 'workspace-loader.js', 'admin-data.js', 'app.js', 'crm.js', 'sales.js', 'sales_patch.js', 'hr.js', 'backend-client.js', 'erp.js', 'erp.css',
                   'shared.css', 'styles.css', 'logo.png', 'dexterra-stamp.jpg'}
         pages = {p.name for p in ROOT.glob('*.html')} - {'bootstrap.html', 'seed.html'}
         asset = path.startswith('assets/') and Path(path).suffix.lower() in ('.png', '.jpg', '.jpeg', '.webp')
@@ -795,6 +795,8 @@ def create_app(config=None):
 
     from .erp_api import init_erp
     init_erp(app)
+    from .customer_api import bp as customer_blueprint
+    app.register_blueprint(customer_blueprint)
     return app
 
 

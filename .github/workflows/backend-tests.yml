@@ -15,6 +15,9 @@ jobs:
       - run: python -m pytest backend -q
       - run: for file in app.js backend-client.js crm.js sales.js sales_patch.js hr.js erp.js workspace.js workspace-loader.js admin-data.js; do node --check "$file"; done
       - run: npm ci
+      - run: npm run check:format
+      - run: npm run build:frontend
+      - run: git diff --exit-code -- frontend-dist
       - run: npm run test:dom
   postgres:
     runs-on: ubuntu-latest
@@ -39,3 +42,21 @@ jobs:
           python-version: '3.12'
       - run: pip install -r backend/requirements.txt pytest
       - run: python -m pytest backend -q
+
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: pip install -r backend/requirements.txt
+      - run: npm ci
+      - run: npm run check:format
+      - run: npm run build:frontend
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:browser

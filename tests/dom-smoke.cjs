@@ -39,6 +39,7 @@ async function main() {
     fetch(url, opts) {return url.startsWith(base) ? super.fetch(url, opts) : null;}
   }
   async function page(name) {
+    const calls=[];
     const console = new VirtualConsole();
     console.on('jsdomError', error => {
       if (!error.message.includes('Could not load') && !error.message.includes('CSS') && !error.message.includes('navigation')) errors.push(name + ': ' + error.message);
@@ -49,15 +50,17 @@ async function main() {
       beforeParse(window) {
         window.structuredClone = structuredClone;
         window.Headers = Headers;
-        window.fetch = (url, options = {}) => fetch(new URL(url, window.location.href), {
+        window.fetch = (url, options = {}) => {calls.push(new URL(url,window.location.href).pathname);return fetch(new URL(url, window.location.href), {
           ...options, headers: {...Object.fromEntries(new Headers(options.headers || {})), Cookie: jar.getCookieStringSync(base)}
-        });
+        });};
         window.HTMLElement.prototype.scrollIntoView = function() {};
         window.matchMedia = () => ({matches: false, addEventListener() {}, removeEventListener() {}});
       }
     });
     await waitFor(() => dom.window.document.querySelector('.sidebar'), 'No sidebar on ' + name);
+    const close=dom.window.close.bind(dom.window);dom.window.close=()=>{dom.window.ModernWorkspace?.dispose();close()};
     const document=dom.window.document;
+    assert.equal(document.querySelector('.module-app').dataset.frontend,'react','Expected the React shell on '+name);
     assert.equal(dom.window.location.pathname,'/erp.html','Every module uses the shared workspace');
     assert.ok(dom.window.location.search.includes('view='),'Every screen has a view route');
     for(const link of document.querySelectorAll('.sidebar a[href],.module-tabs a[href]')){
@@ -74,6 +77,10 @@ async function main() {
       if(module!=='admin')assert.equal(document.querySelectorAll('.module-navigation .module-flow').length,1,'Missing workflow strip: '+name);
     }
     assert.equal(document.querySelectorAll('.sidebar a[href="leads.html"],.sidebar a[href="orders.html"],.sidebar a[href="hr-payroll.html"]').length,0,'Submenus must live in the module content: '+name);
+    if(dom.window.eval('workspacePage()')==='customers.html'){
+      assert.ok(document.querySelector('[data-screen="customers-react"]'));
+      assert.ok(!calls.includes('/api/state')&&!calls.includes('/api/hr/state'),'Customers must not fetch full business/HR aggregates');
+    }
     return dom;
   }
 
@@ -84,7 +91,7 @@ async function main() {
     'erp:overview','erp:accounting','erp:accounts','erp:journals','erp:reports','erp:aged','erp:bank','erp:inventory','erp:stock-moves','erp:manufacturing','erp:production-orders','erp:boms','erp:expenses','erp:expense-claims'];
   for (const name of names) {(await page(name)).window.close();}
   let profilePage=await page('sales');
-  assert.equal(profilePage.window.document.querySelectorAll('#user-dropdown button[onclick*="openCompanyProfile"]').length,1);
+  assert.equal(profilePage.window.document.querySelectorAll('#user-dropdown button[data-action="company-profile"]').length,1);
   await profilePage.window.openCompanyProfile();
   assert.ok(profilePage.window.document.getElementById('profile-name'),'Company profile opens outside ERP overview');
   profilePage.window.close();
@@ -104,7 +111,8 @@ async function main() {
   let handoff=await page('customers?module=crm');handoff.window.openCustomer();
   handoff.window.document.getElementById('cname').value='CRM shared customer';
   await handoff.window.saveCustomer();
-  const sharedCustomer=handoff.window.eval('db().customers.find(c=>c.name==="CRM shared customer")');handoff.window.close();
+  const sharedCustomer=handoff.window.eval('db().customers.find(c=>c.name==="CRM shared customer")');
+  await assert.rejects(handoff.window.eval('save(db())'),/individual record saves/);handoff.window.close();
   handoff=await page('leads');handoff.window.openCrmLead();
   handoff.window.document.getElementById('crm-lead-customer').value=String(sharedCustomer.id);
   handoff.window.document.getElementById('crm-lead-owner').value=assignedSeller.id;
@@ -324,7 +332,7 @@ async function main() {
   dom=await page('sales-quotations');
   assert.equal(dom.window.document.querySelectorAll('.sidebar [data-workspace="hr"],.sidebar [data-workspace="accounting"],.sidebar [data-workspace="manufacturing"]').length,0);
   assert.equal(dom.window.document.querySelector('.module-tabs [aria-current="page"]').textContent,'Quotations');
-  assert.equal(dom.window.document.querySelectorAll('#user-dropdown button[onclick*="openCompanyProfile"]').length,0);
+  assert.equal(dom.window.document.querySelectorAll('#user-dropdown button[data-action="company-profile"]').length,0);
   dom.window.close();
   dom=await page('activities');
   assert.deepEqual([...dom.window.document.querySelectorAll('.module-tab')].map(e=>e.textContent),['Activity Log']);

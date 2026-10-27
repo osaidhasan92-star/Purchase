@@ -10,6 +10,7 @@
 
   const originalRenderCustomers = window.renderCustomers;
   window.renderCustomers = function(){
+    if(window.ModernWorkspace)return originalRenderCustomers();
     if(!guard('sales_customers'))return; const x=sdb();
     layout('customers','Customers','Customer master data for Sales',`<div class="section-card"><div class="section-head"><div><div class="section-title">Customer List</div><div class="hint">Customers shared by Sales and Accounting</div></div><button class="btn-primary" onclick="openCustomer()"><i class="ti ti-plus"></i> Add Customer</button></div><div class="filters"><input id="cust-search" placeholder="Search customer, code, phone" oninput="filterCustomers()"></div><div id="cust-table">${customerRows(x.customers)}</div></div>`)
   };

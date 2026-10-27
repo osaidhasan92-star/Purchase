@@ -1,6 +1,7 @@
 const API_BASE = window.API_BASE || '/api';
 let APP_STATE = null;
 let APP_STATE_LOADING = null;
+let APP_STATE_PARTIAL = false;
 let CURRENT_USER = null;
 
 // Persistent business state is loaded from the authenticated backend.
@@ -53,6 +54,9 @@ async function initAppState() {
 
   APP_STATE_LOADING = (async () => {
     try {
+      if(workspacePage()==='customers.html'&&window.ModernWorkspace){
+        const bootstrap=await api('/ui/bootstrap');CURRENT_USER=bootstrap.user;APP_STATE=bootstrap.state;APP_STATE_PARTIAL=true;HR_STATE=bootstrap.hr;return APP_STATE;
+      }
       const t0 = performance.now();
       const me = await api('/auth/me');
       console.log('[LOAD] /auth/me:', Math.round(performance.now() - t0), 'ms');
@@ -126,6 +130,7 @@ function recordActivity(x,action,module,details='',entity=''){
 }
 async function logActivity(action,module,details='',entity=''){const x=db();recordActivity(x,action,module,details,entity);await save(x)}
 function save(x) {
+  if(APP_STATE_PARTIAL)return Promise.reject(new Error('This screen uses individual record saves. Open the relevant module before saving legacy records.'));
   APP_STATE = x;
   APP_STATE_SAVE = BackendPersistence.save('app', x);
   return APP_STATE_SAVE;
@@ -133,6 +138,7 @@ function save(x) {
 function esc(x=''){return String(x).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]))} function toast(m){const t=document.getElementById('toast')||document.body.appendChild(Object.assign(document.createElement('div'),{id:'toast'}));t.className='toast show';t.textContent=m;setTimeout(()=>t.classList.remove('show'),2500)}
 function layout(active,title,sub,body){
  document.body.classList.add('module-screen');
+ if(window.ModernWorkspace){renderModernWorkspace(active,title,sub,body);return}
  const context=moduleContext(active);
  document.body.innerHTML=`<div class="app module-app" data-module="${context.id}"><aside class="sidebar" id="side"><div class="side-brand"><img src="logo.png" alt="${esc(companySettings().name||'Company')}"></div><div class="sidebar-scroll">${moduleSidebar(context.id)}</div><div class="module-sidebar-foot">Pakistan · PKR · WH / Stock</div></aside><main class="main"><header class="top module-header"><button class="mobile-menu" type="button" aria-label="Open modules" onclick="document.getElementById('side').classList.toggle('open')"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button><div class="module-page-heading"><span class="module-eyebrow">${esc(context.label)}</span><h1>${esc(title)}</h1><p>${esc(sub)}</p></div><div class="user user-menu-wrap">
 <button class="user-menu-trigger" onclick="toggleUserMenu(event)" type="button">
@@ -162,6 +168,7 @@ function toggleUserMenu(event){
 }
 
 function closeUserMenu(){
+ if(window.ModernWorkspace){window.dispatchEvent(new Event('workspace:close-menu'));return}
   const menu=document.getElementById('user-dropdown');
   if(menu)menu.classList.remove('show');
 }
@@ -2045,4 +2052,20 @@ async function saveCompanyProfile(){
  if(currentUser()?.role!=='Admin')return;
  const data={};for(const key of ['name','legalName','address','phone','email','taxNumber'])data[key]=document.getElementById('profile-'+key).value.trim();
  try{await api('/erp/company-profile',{method:'POST',body:JSON.stringify(data)});location.reload()}catch(error){toast(error.message)}
+}
+
+// Typed React boundary. Existing module handlers remain available until their screen migrates.
+function renderModernWorkspace(active,title,subtitle,html,native){
+ const group=moduleContext(active),current=new URL(location.href);
+ const normalize=href=>workspaceUrl(href);
+ const tabs=moduleVisibleTabs(group).map(([label,href])=>{const url=new URL(normalize(href));return {label,href:url.href,active:url.pathname===current.pathname&&(url.searchParams.get('view')||'overview')===(current.searchParams.get('view')||'overview')}});
+ const workspaces=MODULE_WORKSPACES.filter(item=>moduleVisibleTabs(item).length).map(item=>({id:item.id,label:item.label,icon:item.icon,href:normalize(moduleVisibleTabs(item)[0][1])}));
+ window.ModernWorkspace.render({module:group.id,label:group.label,title,subtitle,flow:group.flow,tabs,workspaces,user:currentUser(),companyName:companySettings().name,logo:companySettings().logo||'logo.png',menuStyle:USER_MENU_STYLE,html,native},{
+   request:(path,options)=>api(path,options),can:(module,action='view')=>can(module,action),
+   navigate:href=>{rememberSidebarScroll();BackendPersistence.drain().then(()=>location.assign(href)).catch(()=>{})},
+   toast,changePassword:openChangePassword,companyProfile:openCompanyProfile,logout,
+   cacheCustomers:items=>{APP_STATE.customers=items}
+ });
+ restoreSidebarScroll();
+ requestAnimationFrame(()=>document.querySelector('.module-tabs [aria-current="page"]')?.scrollIntoView({block:'nearest',inline:'nearest'}));
 }

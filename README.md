@@ -307,3 +307,13 @@ accounting. CRM leads remain restricted to their creator, assigned salesperson, 
 manager and Admin. Sales records support team handoffs; HR/payroll and employee expense
 claims retain their privacy rules. Creator identity remains immutable audit metadata.
 See [Department access setup](docs/TEAM_ACCESS.md). No schema migration or reseeding is needed.
+
+
+### Frontend migration
+
+The workspace shell now uses React and strict TypeScript. Customers is the first native
+module, with bounded server search/pagination, individual create/edit APIs, record versions
+and a compact bootstrap. Compiled assets are included for desktop testing. The other
+module contents and aggregate storage remain on a temporary compatibility path.
+See [Frontend migration and development](docs/FRONTEND_MIGRATION.md) for setup, tests and
+remaining relational/API conversions; this is not yet a complete large-scale rewrite.

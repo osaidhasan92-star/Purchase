@@ -6,3 +6,5 @@ __pycache__/
 instance/
 *.sqlite*
 backups/
+node_modules/
+test-results/
