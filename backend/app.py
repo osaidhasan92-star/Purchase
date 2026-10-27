@@ -70,7 +70,27 @@ class LoginAttempt(db.Model):
 class Document(db.Model):
     """Versioned business aggregates. A CAS update prevents lost concurrent writes."""
     name = db.Column(db.String(32), primary_key=True)
-    data = db.Column(db.JSON, nullable=False)
+    stored_data = db.Column('data', db.JSON, nullable=False)
+
+    @property
+    def data(self):
+        from .master_store import project
+        stored = self.stored_data
+        if self.name != 'app':
+            return stored
+        if getattr(self, '_projection_source', None) is not stored:
+            self._projection = project(stored)
+            self._projection_source = stored
+        return self._projection
+
+    @data.setter
+    def data(self, value):
+        from .master_store import MARKER, persist
+        if self.name == 'app' and self.stored_data and self.stored_data.get(MARKER):
+            self.stored_data = persist(value)
+        else:
+            self.stored_data = value
+
     revision = db.Column(db.Integer, nullable=False, default=1)
 
 
@@ -338,8 +358,10 @@ def commit_document(doc, revision, data):
     from .erp import lock, sync_business
     lock()
     previous = deepcopy(doc.data)
+    from .master_store import MARKER, persist
+    stored = persist(data) if doc.name == 'app' and doc.stored_data.get(MARKER) else data
     result = db.session.execute(update(Document).where(Document.name == doc.name, Document.revision == revision)
-                                .values(data=data, revision=revision + 1).execution_options(synchronize_session=False))
+                                .values(stored_data=stored, revision=revision + 1).execution_options(synchronize_session=False))
     if result.rowcount != 1:
         db.session.rollback()
         problem('Another user saved newer data. Reload before trying again.', 409)
@@ -768,7 +790,8 @@ def create_app(config=None):
         if not db.session.get(Document, 'app'):
             state = {key: [] for key in COLLECTIONS}
             state.update(roles=default_roles(), company={}, users=[], activities=[])
-            db.session.add(Document(name='app', data=state, revision=1))
+            from .master_store import persist
+            db.session.add(Document(name='app', stored_data=persist(state), revision=1))
         if not db.session.get(Document, 'hr'):
             db.session.add(Document(name='hr', data={key: [] for key in HR_COLLECTIONS}, revision=1))
         db.session.flush()
@@ -776,6 +799,27 @@ def create_app(config=None):
         initialize()
         db.session.commit()
         click.echo('Database initialized; existing records were preserved.')
+
+    @app.cli.command('migrate-storage')
+    def migrate_storage():
+        """Idempotently move existing masters to relational tables; retain IDs."""
+        db.create_all()
+        from .erp import lock
+        from .master_store import MARKER, MODELS, persist, read
+        lock()
+        doc = app_document()
+        db.session.refresh(doc)
+        if not doc.stored_data.get(MARKER):
+            original=deepcopy(doc.stored_data)
+            doc.stored_data = persist(original)
+            db.session.flush()
+            for key in MODELS:
+                if read(key)!=original.get(key,[]):
+                    db.session.rollback()
+                    raise click.ClickException('Migration stopped: '+key+' could not round-trip exactly. No business data was changed.')
+            doc.revision += 1
+        db.session.commit()
+        click.echo('Relational master migration complete; existing IDs and records preserved.')
 
     @app.cli.command('create-admin')
     @click.option('--email', prompt=True)
@@ -797,6 +841,9 @@ def create_app(config=None):
     init_erp(app)
     from .customer_api import bp as customer_blueprint
     app.register_blueprint(customer_blueprint)
+    from .master_api import bp as master_blueprint
+    from . import crm_api  # Register CRM resource routes on the shared blueprint.
+    app.register_blueprint(master_blueprint)
     return app
 
 

@@ -1,11 +1,13 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { flushSync } from "react-dom";
+import { CrmDashboard } from "./modules/CrmDashboard";
 import { WorkspaceShell } from "./components/WorkspaceShell";
 import {
   CustomersPage,
   type CustomerCommands,
 } from "./modules/customers/CustomersPage";
+import { MastersPage, type MasterCommands } from "./modules/MastersPage";
 import type { Bridge, ShellPage } from "./types";
 import "./styles.css";
 class ScreenBoundary extends Component<
@@ -31,6 +33,7 @@ class ScreenBoundary extends Component<
 }
 let root: Root | undefined;
 const commands: CustomerCommands = { open: () => {}, save: async () => {} };
+const masterCommands: MasterCommands = { open: () => {}, save: async () => {} };
 window.ModernWorkspace = {
   dispose() {
     root?.unmount();
@@ -49,8 +52,20 @@ window.ModernWorkspace = {
       root!.render(
         <ScreenBoundary>
           <WorkspaceShell page={page} bridge={bridge}>
-            {page.native === "customers" ? (
+            {page.native === "crm-dashboard" ? (
+              <CrmDashboard bridge={bridge} />
+            ) : page.native === "customers" ? (
               <CustomersPage bridge={bridge} commands={commands} />
+            ) : page.native === "vendors" ||
+              page.native === "products" ||
+              page.native === "leads" ||
+              page.native === "reminders" ? (
+              <MastersPage
+                key={page.native}
+                kind={page.native}
+                bridge={bridge}
+                commands={masterCommands}
+              />
             ) : (
               <div
                 className="legacy-screen"
@@ -62,6 +77,8 @@ window.ModernWorkspace = {
       ),
     );
   },
+  openMaster: (id) => masterCommands.open(id),
+  saveMaster: () => masterCommands.save(),
   openCustomer: () => commands.open(),
   saveCustomer: () => commands.save(),
 };

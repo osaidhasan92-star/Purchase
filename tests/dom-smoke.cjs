@@ -77,8 +77,9 @@ async function main() {
       if(module!=='admin')assert.equal(document.querySelectorAll('.module-navigation .module-flow').length,1,'Missing workflow strip: '+name);
     }
     assert.equal(document.querySelectorAll('.sidebar a[href="leads.html"],.sidebar a[href="orders.html"],.sidebar a[href="hr-payroll.html"]').length,0,'Submenus must live in the module content: '+name);
-    if(dom.window.eval('workspacePage()')==='customers.html'){
-      assert.ok(document.querySelector('[data-screen="customers-react"]'));
+    if(['customers.html','vendors.html','products.html','leads.html','reminders.html'].includes(dom.window.eval('workspacePage()'))){
+      assert.ok(document.querySelector('[data-screen$="-react"]'));
+      await waitFor(()=>document.querySelector('[aria-busy="false"]'),'Native screen did not finish loading');
       assert.ok(!calls.includes('/api/state')&&!calls.includes('/api/hr/state'),'Customers must not fetch full business/HR aggregates');
     }
     return dom;
@@ -114,6 +115,7 @@ async function main() {
   const sharedCustomer=handoff.window.eval('db().customers.find(c=>c.name==="CRM shared customer")');
   await assert.rejects(handoff.window.eval('save(db())'),/individual record saves/);handoff.window.close();
   handoff=await page('leads');handoff.window.openCrmLead();
+  await waitFor(()=>[...handoff.window.document.getElementById('crm-lead-customer').options].some(o=>o.value===String(sharedCustomer.id))&&[...handoff.window.document.getElementById('crm-lead-owner').options].some(o=>o.value===assignedSeller.id),'CRM reference choices did not load');
   handoff.window.document.getElementById('crm-lead-customer').value=String(sharedCustomer.id);
   handoff.window.document.getElementById('crm-lead-owner').value=assignedSeller.id;
   await handoff.window.saveCrmLead();
@@ -136,6 +138,7 @@ async function main() {
   dom.window.openVendor();
   dom.window.document.getElementById('vname').value = 'Persisted through the interface';
   await dom.window.saveVendor();
+  await waitFor(()=>!dom.window.document.querySelector('[role="dialog"]')&&dom.window.document.querySelector('[aria-busy="false"]')&&dom.window.document.body.textContent.includes('Persisted through the interface'),'Vendor did not refresh');
   assert.match(dom.window.document.body.textContent, /Persisted through the interface/);
   dom.window.close();
   dom = await page('vendors');

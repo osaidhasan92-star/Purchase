@@ -29,11 +29,18 @@ deployment target; SQLite supports local development and automated tests.
   CSRF checks, role permissions, department access with private CRM/HR scope, conflict detection and audit log.
 - Fixed Pakistan/PKR setup. The separate Company Settings page is removed; basic
   company name/contact/NTN details are edited in an administrator profile dialog
-  on the ERP overview. Product forms distinguish goods from services.
+  in the user dropdown. Product forms distinguish goods from services.
 - Explicit demo opening data: raw materials, finished kit, standard BoM, bank/cash
   balances and opening stock. No demo data is loaded without clicking the button.
 - Docker/PostgreSQL configuration, backup instructions, API tests and interface
   workflow checks. See [the client demo walkthrough](docs/DEMO_GUIDE.md).
+
+## Frontend and storage migration
+
+Customers, vendors, products, CRM leads/reminders and the CRM dashboard now use
+native React/TypeScript contents and record-level SQL APIs. Existing databases must
+run `init-db` and `migrate-storage` before using these screens. Other transaction and
+HR screens remain staged migration work. See [upgrade instructions and exact scope](docs/FRONTEND_MIGRATION.md).
 
 ## Local setup (Python 3.12)
 
@@ -49,6 +56,7 @@ on Linux/macOS), then:
 ```bash
 python -m pip install -r backend/requirements.txt
 python -m flask --app backend.app init-db
+python -m flask --app backend.app migrate-storage
 python -m flask --app backend.app create-admin
 ```
 
@@ -90,6 +98,7 @@ each client; this version does not implement multi-tenant company isolation.
 docker compose build
 docker compose up -d db
 docker compose run --rm web flask --app backend.app init-db
+docker compose run --rm web flask --app backend.app migrate-storage
 docker compose run --rm web flask --app backend.app create-admin
 docker compose up -d web
 ```

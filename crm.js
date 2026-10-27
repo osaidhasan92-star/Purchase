@@ -79,3 +79,16 @@ if(!window.__crmExtensionLoaded){window.__crmExtensionLoaded=true;window.addEven
   window.migrateCrmWorkflow=async function(){const x=db();const map={'Contact Made':'Contacted','Demo':'Qualified','Proposal Sent':'Quotation Required','Closed Won':'Closed Won','Closed Lost':'Closed Lost'};let changed=false;(x.leads||[]).forEach(l=>{if(map[l.stage]&&l.stage!==map[l.stage]){l.stage=map[l.stage];changed=true}});if(changed)await save(x)};
 })();
 
+
+// Native resource screens replace legacy CRM register rendering and saves.
+if(window.ModernWorkspace){
+ window.renderCrmDashboard=function(){if(guard('leads'))renderModernWorkspace('crm-dashboard','CRM Dashboard','Customer pipeline and follow-ups','','crm-dashboard')};
+ window.renderCrmLeads=function(){if(guard('leads'))renderModernWorkspace('leads','CRM Leads','Track opportunities through your sales pipeline','','leads')};
+ window.renderCrmReminders=function(){if(guard('reminders'))renderModernWorkspace('reminders','CRM Reminders','Plan and complete customer follow-ups','','reminders')};
+ window.openCrmLead=id=>window.ModernWorkspace.openMaster(id??undefined);
+ window.saveCrmLead=()=>window.ModernWorkspace.saveMaster();
+ window.openCrmReminder=()=>window.ModernWorkspace.openMaster();
+ window.saveCrmReminder=()=>window.ModernWorkspace.saveMaster();
+ const legacyMigrate=window.migrateCrmWorkflow;
+ window.migrateCrmWorkflow=()=>APP_STATE_PARTIAL?Promise.resolve():legacyMigrate?.();
+}

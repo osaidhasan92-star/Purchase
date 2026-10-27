@@ -28,7 +28,13 @@ export interface ShellPage {
   logo: string;
   menuStyle: string;
   html: string;
-  native?: "customers";
+  native?:
+    | "crm-dashboard"
+    | "customers"
+    | "vendors"
+    | "products"
+    | "leads"
+    | "reminders";
 }
 export interface Bridge {
   request<T>(path: string, options?: RequestInit): Promise<T>;
@@ -39,6 +45,10 @@ export interface Bridge {
   companyProfile(): void;
   logout(): void;
   cacheCustomers(items: Customer[]): void;
+  cacheRecords(
+    kind: import("./modules/MastersPage").MasterKind,
+    items: import("./modules/MastersPage").MasterRecord[],
+  ): void;
 }
 export interface Customer {
   id: number | string;
@@ -87,6 +97,8 @@ export interface CustomerPage {
 export interface ModernRuntime {
   dispose(): void;
   render(page: ShellPage, bridge: Bridge): void;
+  openMaster(id?: string | number): void;
+  saveMaster(): Promise<void>;
   openCustomer(): void;
   saveCustomer(): Promise<void>;
 }

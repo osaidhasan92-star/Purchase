@@ -113,6 +113,57 @@ const assert = require("node:assert/strict");
       .getByRole("heading", { name: "Company profile", exact: true })
       .waitFor();
     await page.getByRole("button", { name: "Cancel", exact: true }).click();
+    // Additional native resources use the same compact bootstrap and real forms.
+    requests.length=0;
+    await page.goto(base+'/erp.html?view=vendors');
+    await page.getByText('No vendors found',{exact:true}).waitFor();
+    await page.getByRole('button',{name:'Add Vendor',exact:true}).click();
+    await page.locator('#vname').fill('Browser supplier');
+    await page.locator('#vtrn').fill('NTN-1234567');
+    await page.getByRole('button',{name:'Save',exact:true}).click();
+    await page.getByRole('cell',{name:'Browser supplier',exact:true}).waitFor();
+    await page.getByRole('button',{name:'Edit',exact:true}).click();
+    await page.locator('#vphone').fill('+92 300 7654321');
+    await page.getByRole('button',{name:'Save',exact:true}).click();
+    await page.getByRole('cell',{name:'+92 300 7654321',exact:true}).waitFor();
+    await page.goto(base+'/erp.html?view=products');
+    await page.getByText('No products found',{exact:true}).waitFor();
+    await page.getByRole('button',{name:'Add Product',exact:true}).click();
+    await page.locator('#pname').fill('Browser stock item');
+    await page.locator('#psku').fill('BR-STOCK-1');
+    await page.locator('#prate').fill('125.50');
+    await page.getByRole('button',{name:'Save',exact:true}).click();
+    await page.getByRole('cell',{name:'Browser stock item',exact:true}).waitFor();
+    await page.goto(base+'/erp.html?view=leads');
+    await page.getByText('No leads found',{exact:true}).waitFor();
+    await page.getByRole('button',{name:'Add Lead',exact:true}).click();
+    await page.locator('#crm-lead-customer option').filter({hasText:'Browser customer'}).waitFor({state:'attached'});
+    await page.locator('#crm-lead-customer').selectOption({label:'Browser customer'});
+    assert.equal(await page.locator('#crm-lead-email').inputValue(),'client@example.test');
+    await page.locator('#crm-lead-stage-input').selectOption('Quotation Required');
+    await page.locator('#crm-lead-value').fill('1000');
+    await page.getByRole('button',{name:'Save',exact:true}).click();
+    await page.getByRole('cell',{name:'Quotation Required',exact:true}).waitFor();
+    await page.getByRole('button',{name:'Edit',exact:true}).click();
+    await page.locator('#crm-lead-source').fill('Website');
+    await page.getByRole('button',{name:'Save',exact:true}).click();
+    await page.getByRole('cell',{name:'Website',exact:true}).waitFor();
+    await page.screenshot({path:path.join(cwd,'test-results/leads-desktop.png'),fullPage:true});
+    await page.goto(base+'/erp.html?view=reminders');
+    await page.getByText('No reminders found',{exact:true}).waitFor();
+    await page.getByRole('button',{name:'Add Reminder',exact:true}).click();
+    await page.locator('#crm-reminder-lead option').filter({hasText:'Browser customer'}).waitFor({state:'attached'});
+    await page.locator('#crm-reminder-lead').selectOption({label:'Browser customer'});
+    await page.locator('#crm-reminder-date').fill('2020-01-01');
+    await page.getByRole('button',{name:'Save',exact:true}).click();
+    await page.getByRole('cell',{name:'Open',exact:true}).waitFor();
+    await page.getByRole('button',{name:'Edit',exact:true}).click();
+    await page.locator('#crm-reminder-done').selectOption('Done');
+    await page.getByRole('button',{name:'Save',exact:true}).click();
+    await page.getByRole('cell',{name:'Done',exact:true}).waitFor();
+    await page.goto(base+'/erp.html?view=crm-dashboard');
+    await page.getByText('No follow-ups due',{exact:true}).waitFor();
+    assert.ok(!requests.includes('/api/state')&&!requests.includes('/api/hr/state'));
     for (const view of [
       "sales",
       "purchase-dashboard",
@@ -150,7 +201,7 @@ const assert = require("node:assert/strict");
       JSON.stringify({
         browser: browser.version(),
         checks:
-          "Native customer create/edit/details/search; compact bootstrap; Admin profile; five legacy modules in React shell; mobile navigation and width",
+          "Native customers/vendors/products/leads/reminders CRUD and CRM dashboard; compact bootstrap; Admin profile; five legacy modules in React shell; mobile navigation and width",
         pageErrors: errors,
       }),
     );

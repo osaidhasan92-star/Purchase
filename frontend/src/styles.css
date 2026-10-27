@@ -61,3 +61,16 @@
 [data-screen="customers-react"] td:nth-child(4) {
   white-space: nowrap;
 }
+.modern-reference {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+[data-screen$="-react"] .filters {
+  flex-wrap: wrap;
+}
+[data-screen="vendors-react"] table,
+[data-screen="products-react"] table,
+[data-screen="leads-react"] table {
+  min-width: 850px;
+}
