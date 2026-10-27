@@ -37,10 +37,10 @@ deployment target; SQLite supports local development and automated tests.
 
 ## Frontend and storage migration
 
-Customers, vendors, products, CRM leads/reminders, Sales and Purchasing now use
+Customers, vendors, products, CRM leads/reminders, Sales, Purchasing and HR/payroll now use
 native React/TypeScript contents and record/action SQL APIs. Transaction headers,
 source/product-linked lines and RFQ vendor relationships use relational tables. Existing databases must
-run `init-db` and `migrate-storage` before using these screens. HR and the remaining Accounting/Production/Expenses screen contents remain later migration work. See [upgrade instructions and exact scope](docs/FRONTEND_MIGRATION.md).
+run `init-db` and `migrate-storage` before using these screens. Accounting/Production/Expenses and administration screen contents remain later migration work. See [HR migration and upgrade](docs/HR_MIGRATION.md). See [upgrade instructions and exact scope](docs/FRONTEND_MIGRATION.md).
 
 ## Local setup (Python 3.12)
 
@@ -196,7 +196,8 @@ session cookie automatically. No tokens or credentials are stored in LocalStorag
 | GET/POST/PATCH | `/trade/:register[/:id]` | Scoped SQL transaction lists/details and native record commands |
 | POST | `/trade/:register/:id/actions/:action` | Versioned approval/fulfilment/award actions |
 | GET | `/trade/:register/:id/print` | Authenticated Print / Save as PDF layout |
-| GET/PATCH | `/hr/state` | Permission-filtered HR records / versioned HR save |
+| GET | `/hr/state` | Permission-filtered HR compatibility adapter; production PATCH returns 410 |
+| GET/POST/PATCH | `/hr/records/<register>` | Scoped HR records and versioned workflow actions; see docs/HR_MIGRATION.md |
 | GET/POST | `/users` | Administrator user listing / creation |
 | PUT | `/users/:id` | Administrator account update |
 | POST | `/users/:id/password` | Administrator reset, revoking sessions |
@@ -269,7 +270,7 @@ concepts documented in Odoo 18; this application does not embed or depend on Odo
 - Accounts, journals/lines, reconciliations, stock balances/movements, BoMs,
   manufacturing orders/components, expenses and statement lines use relational
   tables. Customers/vendors/products, CRM leads/reminders and Sales/Purchasing
-  headers/lines also use canonical SQL tables. HR and older CRM company/quote
+  headers/lines and HR/payroll records also use canonical SQL tables. Older CRM company/quote
   registers remain JSON. Native trade actions post into the relational ledgers atomically. A row lock serializes ledger/stock writes, and unique source
   keys prevent duplicate posting. This remains a small single-company demo design.
 - Posted economic documents cannot be changed/deleted. Correct posted manual
@@ -294,12 +295,12 @@ concepts documented in Odoo 18; this application does not embed or depend on Odo
 - Bank reconciliation matches one statement line to one posted bank/cash journal
   item; automated bank feeds and split/combined statement matching are not included.
 - RFQ/quotation “Send” records status; SMTP and payment gateways are not configured.
-- Some legacy operational lines/HR references still use product IDs, array positions
-  or employee labels. Advanced document migrations and normalized transaction APIs
+- Some historical operational lines/HR references retain product IDs, array positions
+  or employee labels in compatibility projections. Query-local write validation and advanced migrations
   remain follow-up work. Future column changes require versioned schema migrations;
   `init-db` is not a general upgrade engine.
 - Automated checks include DOM navigation/HR/production simulations and Chromium
-  native master/CRM/Sales/Purchasing forms, printing and mobile behavior. Production
+  native master/CRM/Sales/Purchasing/HR forms, printing and mobile behavior. Production
   load/security acceptance and a PostgreSQL deployment smoke test remain necessary before handover. PDF uploads are not malware
   scanned and are served as downloads.
 
@@ -323,7 +324,7 @@ See [Department access setup](docs/TEAM_ACCESS.md). Department policy needs no o
 
 ### Frontend migration
 
-The shared shell and Customers, Vendors, Products, CRM, Sales and Purchasing contents
+The shared shell and Customers, Vendors, Products, CRM, Sales, Purchasing and HR contents
 use React/strict TypeScript. Converted screens use compact bootstrap, bounded resource
 reads and versioned/idempotent record actions. Transaction totals, approvals, source
 quantities, parent statuses and automatic postings are enforced on the server. Printing
@@ -332,4 +333,4 @@ uses authenticated browser Print / Save as PDF layouts. Compiled assets are incl
 See [Sales/Purchasing phase and desktop upgrade](docs/TRADE_MIGRATION.md) and
 [Frontend development and remaining scope](docs/FRONTEND_MIGRATION.md). Production
 aggregate writes to converted trade registers return 410. Large-scale readiness still
-requires query-local validation/load testing; HR and remaining module contents are later phases.
+requires query-local validation/load testing; remaining module contents are later phases. See [HR phase details](docs/HR_MIGRATION.md).

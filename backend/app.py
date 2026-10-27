@@ -76,6 +76,12 @@ class Document(db.Model):
     def data(self):
         from .storage import project
         stored = self.stored_data
+        if self.name == 'hr':
+            from .hr_store import project as hr_project
+            if getattr(self, '_projection_source', None) is not stored:
+                self._projection = hr_project(stored)
+                self._projection_source = stored
+            return self._projection
         if self.name != 'app':
             return stored
         if getattr(self, '_projection_source', None) is not stored:
@@ -87,7 +93,10 @@ class Document(db.Model):
     def data(self, value):
         from .storage import persist
         from .master_store import MARKER
-        if self.name == 'app' and self.stored_data and self.stored_data.get(MARKER):
+        if self.name == 'hr' and self.stored_data and self.stored_data.get('_relationalHR'):
+            from .hr_store import persist as hr_persist
+            self.stored_data = hr_persist(value)
+        elif self.name == 'app' and self.stored_data and self.stored_data.get(MARKER):
             self.stored_data = persist(value, include_trade=bool(self.stored_data.get('_relationalTrade')))
         else:
             self.stored_data = value
@@ -362,6 +371,9 @@ def commit_document(doc, revision, data):
     from .master_store import MARKER
     from .storage import persist
     stored = persist(data, include_trade=bool(doc.stored_data.get('_relationalTrade'))) if doc.name == 'app' and doc.stored_data.get(MARKER) else data
+    if doc.name == 'hr' and doc.stored_data.get('_relationalHR'):
+        from .hr_store import persist as hr_persist
+        stored = hr_persist(data)
     result = db.session.execute(update(Document).where(Document.name == doc.name, Document.revision == revision)
                                 .values(stored_data=stored, revision=revision + 1).execution_options(synchronize_session=False))
     if result.rowcount != 1:
@@ -614,6 +626,8 @@ def create_app(config=None):
             filtered = {key: [r for r in value if in_scope(g.user,r,key,state)] if allowed(g.user, state, module) else [] for key, module in HR_COLLECTIONS.items()
                         for value in [deepcopy(doc.data.get(key, []))]}
             return jsonify(state=filtered, revision=doc.revision)
+        if not app.config.get('ENABLE_LEGACY_HR_WRITES', False):
+            problem('Use the record-level HR workflow endpoints', 410)
         data = body()
         changes = data.get('changes')
         if not isinstance(changes, dict) or set(changes) - set(HR_COLLECTIONS):
@@ -743,7 +757,7 @@ def create_app(config=None):
             query['view'] = [legacy_routes[path]]
             return redirect('/erp.html?' + urlencode(query, doseq=True), code=302)
         # Never expose backend source, environment files, database files or backup JS.
-        public = {'frontend-dist/THIRD_PARTY_LICENSES.txt', 'frontend-dist/workspace-app.js', 'frontend-dist/workspace-app.css', 'workspace.js', 'workspace-loader.js', 'trade-workspace.js', 'admin-data.js', 'app.js', 'crm.js', 'sales.js', 'sales_patch.js', 'hr.js', 'backend-client.js', 'erp.js', 'erp.css',
+        public = {'frontend-dist/THIRD_PARTY_LICENSES.txt', 'frontend-dist/workspace-app.js', 'frontend-dist/workspace-app.css', 'workspace.js', 'workspace-loader.js', 'hr-workspace.js', 'trade-workspace.js', 'admin-data.js', 'app.js', 'crm.js', 'sales.js', 'sales_patch.js', 'hr.js', 'backend-client.js', 'erp.js', 'erp.css',
                   'shared.css', 'styles.css', 'logo.png', 'dexterra-stamp.jpg'}
         pages = {p.name for p in ROOT.glob('*.html')} - {'bootstrap.html', 'seed.html'}
         asset = path.startswith('assets/') and Path(path).suffix.lower() in ('.png', '.jpg', '.jpeg', '.webp')
@@ -798,7 +812,8 @@ def create_app(config=None):
             from .storage import persist
             db.session.add(Document(name='app', stored_data=persist(state), revision=1))
         if not db.session.get(Document, 'hr'):
-            db.session.add(Document(name='hr', data={key: [] for key in HR_COLLECTIONS}, revision=1))
+            from .hr_store import persist as hr_persist
+            db.session.add(Document(name='hr', stored_data=hr_persist({key: [] for key in HR_COLLECTIONS}), revision=1))
         db.session.flush()
         from .erp import initialize
         initialize()
@@ -817,11 +832,13 @@ def create_app(config=None):
         db.session.refresh(doc)
         try:
             changed=migrate(doc)
+            from .hr_store import migrate as migrate_hr
+            migrate_hr(db.session.get(Document, 'hr'))
         except (ValueError,ArithmeticError) as error:
             db.session.rollback()
             raise click.ClickException(str(error)) from error
         db.session.commit()
-        click.echo('Relational master and transaction migration complete; existing IDs and records preserved.')
+        click.echo('Relational master, transaction and HR migration complete; existing IDs and records preserved.')
 
     @app.cli.command('create-admin')
     @click.option('--email', prompt=True)
@@ -848,6 +865,8 @@ def create_app(config=None):
     app.register_blueprint(master_blueprint)
     from .trade_api import bp as trade_blueprint
     app.register_blueprint(trade_blueprint)
+    from .hr_api import bp as hr_blueprint
+    app.register_blueprint(hr_blueprint)
     return app
 
 

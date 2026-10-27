@@ -43,12 +43,13 @@ def hr_access(user,state):
 
 
 def employee_is_self(user,record,key,state):
-    from .app import db,Document
+    from .app import db,Document,User
     doc=db.session.get(Document,'hr')
     employees=(doc.data if doc else {}).get('employees',[])
-    if key=='employees':return str(record.get('linkedUserId',''))==str(user.id)
+    actors={str(user.id)}|{str(uid) for uid in db.session.scalars(db.select(User.id).where(User.manager_id==user.id))}
+    if key=='employees':return str(record.get('linkedUserId','')) in actors
     for employee in employees:
-        if str(employee.get('linkedUserId',''))!=str(user.id):continue
+        if str(employee.get('linkedUserId','')) not in actors:continue
         label=str(employee.get('employeeId',''))+' - '+str(employee.get('name',''))
         if str(record.get('employeeKey',''))==str(employee['id']) or record.get('employee')==label:return True
     return False

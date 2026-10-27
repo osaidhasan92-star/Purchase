@@ -110,7 +110,8 @@ Sales and Purchasing native screens, resource/action APIs, headers/lines and the
 migration are now implemented. [Phase 2 details](TRADE_MIGRATION.md) describe workflows,
 API boundaries, printing, permissions, migration preservation and verification.
 
-HR/payroll and administration remain on legacy contents/transport/storage. Accounting,
+HR/payroll now uses native React contents, record/action APIs and seven canonical SQL tables;
+see [phase 3 and upgrade](HR_MIGRATION.md). Administration remains on legacy contents/transport. Accounting,
 inventory, manufacturing and expenses already use relational services, but those screens
 still require native React conversion. Old CRM company/quote registers, company/role
 configuration and creator attribution metadata also remain outside the completed slices.

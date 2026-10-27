@@ -51,3 +51,8 @@ const NATIVE_TRADE_ROUTES={
  'purchase-dashboard.html':{permission:'dashboard',active:'purchase-dashboard',title:'Purchasing Dashboard',area:'purchase'},
  'reports.html':{permission:'reports',active:'reports',title:'Purchase Reports',area:'purchase'}
 };
+
+const NATIVE_HR_ROUTES={
+'hr-employees.html':{resource:'employees',permission:'hr_employees',active:'hr-employees',title:'Employees'},'hr-manpower.html':{resource:'manpower',permission:'hr_manpower',active:'hr-manpower',title:'Manpower Requests'},'hr-recruitment.html':{resource:'candidates',permission:'hr_recruitment',active:'hr-recruitment',title:'Recruitment'},'hr-attendance.html':{resource:'attendance',permission:'hr_attendance',active:'hr-attendance',title:'Attendance'},'hr-leave.html':{resource:'leaves',permission:'hr_leave',active:'hr-leave',title:'Leave Requests'},'hr-payroll.html':{resource:'payroll',permission:'hr_payroll',active:'hr-payroll',title:'Payroll'},'hr-separation.html':{resource:'separations',permission:'hr_separation',active:'hr-separation',title:'Employee Separation'},
+'hr-dashboard.html':{permission:'hr_dashboard',active:'hr-dashboard',title:'HR Dashboard'},'hr-reports.html':{permission:'hr_reports',active:'hr-reports',title:'HR Reports',reports:true}
+};

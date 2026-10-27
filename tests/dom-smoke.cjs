@@ -77,6 +77,10 @@ async function main() {
       if(module!=='admin')assert.equal(document.querySelectorAll('.module-navigation .module-flow').length,1,'Missing workflow strip: '+name);
     }
     assert.equal(document.querySelectorAll('.sidebar a[href="leads.html"],.sidebar a[href="orders.html"],.sidebar a[href="hr-payroll.html"]').length,0,'Submenus must live in the module content: '+name);
+    if(dom.window.eval('!!NATIVE_HR_ROUTES[workspacePage()]')){
+      await waitFor(()=>document.querySelector('[data-native-hr]')&&!document.querySelector('[data-native-hr] [role="status"]')&&document.querySelector('[data-native-hr]').getAttribute('aria-busy')!=='true','Native HR did not load');
+      assert.ok(!calls.includes('/api/state')&&!calls.includes('/api/hr/state'),'HR must use compact resources');
+    }
     if(dom.window.eval('!!NATIVE_TRADE_ROUTES[workspacePage()]')){
       await waitFor(()=>document.querySelector('[data-screen^="trade-"] [aria-busy="false"]'),'Native transaction did not load');
       assert.ok(!calls.includes('/api/state')&&!calls.includes('/api/hr/state'),'Transactions must use compact resources');
@@ -130,7 +134,7 @@ async function main() {
   assert.equal(handoff.window.eval('db().leads.length'),1);
   assert.equal(handoff.window.eval('db().leads[0].id'),assignedLead.id);handoff.window.close();
   handoff=await page('sales-quotations?leadId='+assignedLead.id);
-  await waitFor(()=>handoff.window.document.querySelector('select[name=customerId]'),'Assigned seller cannot open CRM handoff');
+  await waitFor(()=>handoff.window.document.querySelector('select[name=customerId]')?.value===String(sharedCustomer.id),'Assigned seller cannot open CRM handoff');
   assert.equal(handoff.window.document.querySelector('select[name=customerId]').value,String(sharedCustomer.id));handoff.window.close();
   jar.setCookieSync(login.headers.get('set-cookie'),base);
   // Shared master-data links retain their originating module's submenu.
@@ -147,17 +151,6 @@ async function main() {
   dom.window.close();
   dom = await page('vendors');
   assert.match(dom.window.document.body.textContent, /Persisted through the interface/);
-  dom.window.close();
-
-  dom = await page('hr-employees');
-  const form = dom.window.document.querySelector('form.hr-form');
-  for (const [key, value] of Object.entries({employeeId: 'EMP-1', name: 'Database Employee', department: 'Finance',
-      designation: 'Accountant', joiningDate: '2026-10-26', salary: '10000'})) form.elements[key].value = value;
-  await dom.window.hrSubmit({preventDefault() {}, target: form}, 'employees');
-  assert.match(dom.window.document.body.textContent, /Database Employee/);
-  dom.window.close();
-  dom = await page('hr-employees');
-  assert.match(dom.window.document.body.textContent, /Database Employee/);
   dom.window.close();
 
   const {rawId}=await require('./trade-dom.cjs')({page,assert});
@@ -184,50 +177,7 @@ async function main() {
   await dom.window.erpAction(`/expenses/${expenseId}/pay`,{account:'1010'});
   assert.equal(dom.window.eval('ERP_CACHE.expenses[0].status'),'Paid');dom.window.close();
 
-  // Payroll approval and payment automatically create the two salary journals.
-  dom=await page('hr-payroll');const payrollForm=dom.window.document.querySelector('form.hr-form');
-  for(const [key,value] of Object.entries({month:'2026-10',basic:'10000',allowances:'500',deductions:'100'}))payrollForm.elements[key].value=value;
-  await dom.window.hrSubmit({preventDefault(){},target:payrollForm},'payroll');
-  const payrollId=dom.window.hrState().payroll[0].id;
-  await dom.window.hrSetPayrollStatus(payrollId,'Approved');await dom.window.hrSetPayrollStatus(payrollId,'Paid');dom.window.close();
-  dom=await page('erp:journals');
-  assert.ok(dom.window.eval(`ERP_CACHE.entries.some(e=>e.source==='payroll:${payrollId}')`));
-  assert.ok(dom.window.eval(`ERP_CACHE.entries.some(e=>e.source==='payroll:${payrollId}:payment')`));
-  dom.window.close();
-  // Exercise remaining HR registers and their actual UI action handlers.
-  async function hrRecord(screen,group,values){
-    const view=await page(screen);const form=view.window.document.querySelector('form.hr-form');
-    for(const [key,value] of Object.entries(values))form.elements[key].value=value;
-    await view.window.hrSubmit({preventDefault(){},target:form},group);
-    return view;
-  }
-  dom=await hrRecord('hr-manpower','manpower',{department:'Production',position:'Machine operator',count:'1',reason:'Demo expansion',requestedBy:'Demo manager'});
-  await dom.window.hrAdvance(dom.window.hrState().manpower[0].id);
-  assert.equal(dom.window.hrState().manpower[0].status,'Approved');dom.window.close();
-  dom=await hrRecord('hr-recruitment','candidates',{name:'Demo candidate',position:'Machine operator',contact:'candidate@example.test',stage:'Hired'});
-  assert.equal(dom.window.hrState().candidates[0].stage,'Hired');dom.window.close();
-  dom=await hrRecord('hr-attendance','attendance',{date:'2026-10-26',attendanceStatus:'Present'});
-  assert.equal(dom.window.hrState().attendance[0].attendanceStatus,'Present');
-  const alerts=[];dom.window.alert=message=>alerts.push(message);
-  let attendanceForm=dom.window.document.querySelector('form.hr-form');
-  attendanceForm.elements.date.value='2026-10-26';
-  await dom.window.hrSubmit({preventDefault(){},target:attendanceForm},'attendance');
-  assert.equal(dom.window.hrState().attendance.length,1);assert.equal(alerts.length,1);dom.window.close();
-  dom=await hrRecord('hr-leave','leaves',{from:'2026-11-01',to:'2026-11-02',reason:'Demo leave',leaveType:'Annual'});
-  assert.equal(dom.window.hrState().leaves[0].days,2);
-  await dom.window.hrSetLeaveStatus(dom.window.hrState().leaves[0].id,'Approved');
-  assert.equal(dom.window.hrState().leaves[0].status,'Approved');
-  dom.window.alert=message=>alerts.push(message);
-  const leaveForm=dom.window.document.querySelector('form.hr-form');
-  leaveForm.elements.from.value='2026-11-02';leaveForm.elements.to.value='2026-11-03';leaveForm.elements.reason.value='Overlapping leave';
-  await dom.window.hrSubmit({preventDefault(){},target:leaveForm},'leaves');
-  assert.equal(dom.window.hrState().leaves.length,1);assert.equal(alerts.length,2);dom.window.close();
-  dom=await hrRecord('hr-separation','separations',{lastWorkingDate:'2026-11-30',reason:'Demo separation',finalSettlement:'0'});
-  const separationId=dom.window.hrState().separations[0].id;
-  await dom.window.hrSeparationStatus(separationId,'Approved');
-  await dom.window.hrSeparationStatus(separationId,'Completed');
-  assert.equal(dom.window.hrState().employees[0].status,'Separated');dom.window.close();
-  dom=await page('hr-reports');assert.match(dom.window.document.body.textContent,/Separated Employees/);dom.window.close();
+  await require('./hr-dom.cjs')({page,assert});
   dom = await page('sales-payments');
   const persisted=await dom.window.eval("BackendPersistence.request('/trade/customerInvoices')");
   assert.equal(persisted.items[0].paidAmount,40);

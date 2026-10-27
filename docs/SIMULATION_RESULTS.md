@@ -4,7 +4,7 @@ The original 26 October baseline is retained below. The Sales/Purchasing phase a
 native React form execution in Chromium and canonical SQL header/line storage.
 [Phase 2](TRADE_MIGRATION.md) describes current scope and upgrade instructions.
 
-Current checks include 63 backend scenarios, 48 shared screen/view renders and real
+Current checks include 73 backend scenarios, 48 shared screen/view renders and real
 browser flows: request → RFQ → comparison/award → PO → two receipts/bills → partial
 and full payments; CRM lead → draft edit/print → approval/acceptance → order → two
 deliveries/invoices → partial and full collections. Backend cases independently
@@ -91,11 +91,21 @@ exercise Chromium native forms and print layouts, including responsive behavior.
 They do not establish production load or deployment acceptance. PostgreSQL is covered
 by the repository CI job; local backend runs use SQLite.
 
-Recruitment is a candidate register: selecting Hired does not automatically create an
-employee. Create the employee separately. Stock returns update physical stock and
+Recruitment stages are now server actions. Create an employee and select an offered
+candidate to mark the candidate Hired atomically; direct employee creation is also supported. Stock returns update physical stock and
 related cost postings; commercial refunds/credit notes are separate. Separation records
 store final-settlement amounts but do not provide a complete final-settlement accounting
 workflow. Attendance and leave do not automatically calculate payroll deductions.
 Pakistan statutory payroll/tax filing, advanced manufacturing planning and full Odoo
 feature parity remain outside this demo. Passing these tests establishes the executed
 scenarios, not every possible user action or production readiness.
+
+
+## HR migration phase
+
+Native HR adds 10 backend scenarios for journals, immutable approvals, idempotency,
+versions, validation/overlap, SQL scope, atomic account creation, session revocation,
+offboarding rollback, recruitment, migration and safe CSV export. The 48-view DOM
+suite now checks native HR resources/read models. Chromium exercises actual HR
+forms/actions, duplicate attendance errors, payroll approval/payment, payslips,
+account creation, separation and mobile dialogs. See [HR phase scope](HR_MIGRATION.md).

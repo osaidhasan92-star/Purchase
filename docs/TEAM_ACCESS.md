@@ -14,8 +14,8 @@ record-sharing restriction. Admin can access all company records.
 | Sales quotes, orders, deliveries, invoices and payments | Creator/assigned Sales team; source workflow participants; Finance where its module permissions permit |
 | Inventory, stock moves, BoMs, manufacturing orders | Shared with authorized inventory/production users in this one-company/warehouse deployment |
 | Accounting, custom accounts, journals, reports, bank statements | Company-wide for users authorized for Accounting |
-| HR records | Authorized HR staff; employees see only their own linked records when self-service view permission is granted |
-| Payroll | HR administration or the employee's own linked payroll records; not ordinary sales/team-manager access |
+| HR records | Authorized HR staff; other roles need explicit module permissions and see linked self/direct-report records |
+| Payroll | HR administration or linked self/direct-report payroll records with explicit HR permissions; no implied Sales/Finance grant |
 | Expense claims and receipts | Submitter, their direct manager, authorized Finance users, Admin |
 | Activity log | Actor/direct manager, Admin; account administration and full audit export remain Admin-only |
 

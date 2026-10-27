@@ -19,7 +19,7 @@ def app(tmp_path):
     if test_url and not test_url.split('?',1)[0].endswith('/purchase_test'):
         raise RuntimeError('TEST_DATABASE_URL must point to an isolated database named purchase_test')
     # Exercise the explicit historical transport compatibility mode in this regression suite.
-    application = create_app({'ENABLE_LEGACY_TRADE_WRITES': True, 'TESTING': True, 'COOKIE_SECURE': False,
+    application = create_app({'ENABLE_LEGACY_HR_WRITES': True, 'ENABLE_LEGACY_TRADE_WRITES': True, 'TESTING': True, 'COOKIE_SECURE': False,
                               'SQLALCHEMY_DATABASE_URI': test_url or 'sqlite:///' + str(tmp_path / 'test.sqlite')})
     if test_url:
         with application.app_context():

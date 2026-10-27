@@ -136,3 +136,11 @@ Old `.html` addresses redirect to the matching workspace view and preserve query
 such as CRM lead IDs and the originating module for shared customer/product screens.
 Purchasing reports use `view=purchase-reports`; accounting reports retain `view=reports`.
 Login remains `index.html`. No database migration or reseeding is needed for this UI update.
+
+
+HR screens now use native React and record-level APIs. For existing databases, follow
+[HR migration](HR_MIGRATION.md) before opening these screens. In Recruitment, use the
+Shortlist → Schedule Interview → Select Candidate → Issue Offer actions. Add an
+employee and optionally select an offered candidate to mark them Hired atomically.
+Payroll uses Approve followed by Record Payment; Print Payslip is available after
+approval. Final settlement is an estimate and does not post a payment.

@@ -28,9 +28,13 @@ export interface ShellPage {
   logo: string;
   menuStyle: string;
   html: string;
+  hrResource?: import("./modules/hr/config").Resource;
+  hrReports?: boolean;
   tradeResource?: import("./modules/trade/types").Resource;
   tradeArea?: "sales" | "purchase";
   native?:
+    | "hr"
+    | "hr-dashboard"
     | "trade"
     | "trade-dashboard"
     | "crm-dashboard"
