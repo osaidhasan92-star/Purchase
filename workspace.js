@@ -64,3 +64,5 @@ function nativeInventoryView(){const view=new URLSearchParams(location.search).g
 function nativeProductionView(){const view=new URLSearchParams(location.search).get('view');return workspacePage()==='erp.html'&&['manufacturing','boms','production-orders'].includes(view)?view:null;}
 
 function nativeExpenseView(){const view=new URLSearchParams(location.search).get('view');return workspacePage()==='erp.html'&&['expenses','expense-claims'].includes(view)?view:null;}
+
+function nativeAdminView(){return {'users.html':'users','activities.html':'activities','admin-data.html':'data'}[workspacePage()]||null;}

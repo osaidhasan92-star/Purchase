@@ -77,6 +77,10 @@ async function main() {
       if(module!=='admin')assert.equal(document.querySelectorAll('.module-navigation .module-flow').length,1,'Missing workflow strip: '+name);
     }
     assert.equal(document.querySelectorAll('.sidebar a[href="leads.html"],.sidebar a[href="orders.html"],.sidebar a[href="hr-payroll.html"]').length,0,'Submenus must live in the module content: '+name);
+    if(dom.window.eval('!!nativeAdminView()')){
+      await waitFor(()=>document.querySelector('[data-native-admin][aria-busy="false"]'),'Native administration did not load');
+      assert.ok(!calls.includes('/api/state')&&!calls.includes('/api/hr/state')&&!calls.includes('/api/users'),'Administration must use bounded resources');
+    }
     if(dom.window.eval('!!nativeExpenseView()')){
       await waitFor(()=>document.querySelector('[data-native-expenses][aria-busy="false"]'),'Native expenses did not load');
       assert.ok(!calls.includes('/api/state')&&!calls.includes('/api/hr/state')&&!calls.includes('/api/erp/expenses'),'Expenses must use scoped SQL APIs');
@@ -118,20 +122,13 @@ async function main() {
   let profilePage=await page('sales');
   assert.equal(profilePage.window.document.querySelectorAll('#user-dropdown button[data-action="company-profile"]').length,1);
   await profilePage.window.openCompanyProfile();
-  assert.ok(profilePage.window.document.getElementById('profile-name'),'Company profile opens outside ERP overview');
+  await waitFor(()=>profilePage.window.document.getElementById('profile-name'),'Company profile opens outside ERP overview');
   profilePage.window.close();
-  const userSetup=await page('users');userSetup.window.openUser();
-  const setupDoc=userSetup.window.document;
-  setupDoc.getElementById('user-role').value='Procurement Staff';userSetup.window.toggleUserManagerField();
-  assert.equal(setupDoc.getElementById('user-manager-wrap').style.display,'block');
-  setupDoc.getElementById('user-name').value='Procurement team user';
-  setupDoc.getElementById('user-email').value='procurement-team@example.test';
-  setupDoc.getElementById('user-password').value=password;
-  setupDoc.getElementById('user-manager').value=userSetup.window.currentUser().id;
-  await userSetup.window.saveUser('');
-  const teamUser=userSetup.window.eval('db().users.find(u=>u.email==="procurement-team@example.test")');
+  const userSetup=await page('users');
+  const adminRequest=userSetup.window.eval('BackendPersistence.request');
+  const teamUser=(await adminRequest('/administration/commands/create-user',{method:'POST',body:JSON.stringify({requestKey:'admin-dom-procurement',name:'Procurement team user',email:'procurement-team@example.test',password,role:'Procurement Staff',managerId:userSetup.window.currentUser().id,active:true})})).record;
   assert.equal(teamUser.managerId,userSetup.window.currentUser().id);
-  const assignedSeller=await userSetup.window.eval('BackendPersistence.request')('/users',{method:'POST',body:JSON.stringify({name:'Assigned seller',email:'assigned-seller@example.test',password,role:'Salesperson',managerId:userSetup.window.currentUser().id,active:true})});
+  const assignedSeller=(await adminRequest('/administration/commands/create-user',{method:'POST',body:JSON.stringify({requestKey:'admin-dom-seller',name:'Assigned seller',email:'assigned-seller@example.test',password,role:'Salesperson',managerId:userSetup.window.currentUser().id,active:true})})).record;
   userSetup.window.close();
   let handoff=await page('customers?module=crm');handoff.window.openCustomer();
   handoff.window.document.getElementById('cname').value='CRM shared customer';
@@ -204,7 +201,7 @@ async function main() {
   jar.setCookieSync(login.headers.get('set-cookie'),base);
 
   assert.deepEqual(errors, []);
-  console.log(`${names.length} pages/views rendered with shared module navigation; active tabs, module context and restricted roles passed; native Expenses/Production/Inventory/Finance/Sales/Purchasing/HR API and React read models, manufacturing and expense flows passed.`);
+  console.log(`${names.length} pages/views rendered with shared module navigation; active tabs, module context and restricted roles passed; native Administration/Expenses/Production/Inventory/Finance/Sales/Purchasing/HR API and React read models, manufacturing and expense flows passed.`);
 }
 
 main().catch(error => {console.error(error); process.exitCode = 1;}).finally(() => {

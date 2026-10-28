@@ -28,6 +28,7 @@ export interface ShellPage {
   logo: string;
   menuStyle: string;
   html: string;
+  adminView?: "users" | "activities" | "data";
   expenseView?: "expenses" | "expense-claims";
   productionView?: import("./modules/production/ProductionPage").ProductionView;
   inventoryView?: "inventory" | "stock-moves";
@@ -37,6 +38,7 @@ export interface ShellPage {
   tradeResource?: import("./modules/trade/types").Resource;
   tradeArea?: "sales" | "purchase";
   native?:
+    | "admin"
     | "expenses"
     | "production"
     | "inventory"

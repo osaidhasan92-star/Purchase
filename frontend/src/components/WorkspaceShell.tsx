@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode, type MouseEvent } from "react";
+import { CompanyProfile } from "../modules/admin/CompanyProfile";
 import type { Bridge, ShellPage } from "../types";
 export function WorkspaceShell({
   page,
@@ -9,6 +10,14 @@ export function WorkspaceShell({
   bridge: Bridge;
   children: ReactNode;
 }) {
+  const [company, setCompany] = useState(false);
+  useEffect(() => {
+    const open = () => {
+      if (page.user.role === "Admin") setCompany(true);
+    };
+    window.addEventListener("workspace:company-profile", open);
+    return () => window.removeEventListener("workspace:company-profile", open);
+  }, [page.user.role]);
   const [menu, setMenu] = useState(false),
     [mobile, setMobile] = useState(false),
     [logoFailed, setLogoFailed] = useState(false);
@@ -140,7 +149,7 @@ export function WorkspaceShell({
                   <button
                     type="button"
                     data-action="company-profile"
-                    onClick={() => action(bridge.companyProfile)}
+                    onClick={() => action(() => setCompany(true))}
                   >
                     <i className="ti ti-building" />
                     <span>Company profile</span>
@@ -186,6 +195,9 @@ export function WorkspaceShell({
           </section>
         </main>
       </div>
+      {company && page.user.role === "Admin" && (
+        <CompanyProfile bridge={bridge} onClose={() => setCompany(false)} />
+      )}
       <div id="toast" />
       <div dangerouslySetInnerHTML={{ __html: page.menuStyle }} />
     </>

@@ -401,3 +401,34 @@
 .trade-dialog .expense-form .modal-foot {
   position: static;
 }
+
+.trade-dialog .admin-form input[type="checkbox"] {
+  width: auto;
+  min-height: 0;
+  display: inline-block;
+}
+.admin-audit-details {
+  max-width: 440px;
+  overflow-wrap: anywhere;
+}
+
+.trade-dialog .admin-form .form-grid .admin-active {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.trade-dialog .admin-form input[type="checkbox"] {
+  margin: 0;
+  padding: 0;
+}
+[data-native-admin] .modern-pagination button {
+  padding: 8px 12px;
+  border: 1px solid #dbe3ed;
+  border-radius: 8px;
+  background: #fff;
+  color: #475569;
+}
+
+.admin-form > .form-grid + .form-grid {
+  margin-top: 16px;
+}
