@@ -432,3 +432,9 @@
 .admin-form > .form-grid + .form-grid {
   margin-top: 16px;
 }
+.crm-register-fields {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}

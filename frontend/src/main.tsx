@@ -1,6 +1,7 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { flushSync } from "react-dom";
+import { RemainingPage } from "./modules/RemainingPage";
 import { AdminPage } from "./modules/admin/AdminPage";
 import { ExpensePage } from "./modules/expenses/ExpensePage";
 import { ProductionPage } from "./modules/production/ProductionPage";
@@ -59,7 +60,14 @@ window.ModernWorkspace = {
       root!.render(
         <ScreenBoundary>
           <WorkspaceShell page={page} bridge={bridge}>
-            {page.native === "admin" && page.adminView ? (
+            {page.native === "remaining" && page.remainingView ? (
+              <RemainingPage
+                key={page.remainingView}
+                view={page.remainingView}
+                bridge={bridge}
+                workspaces={page.workspaces}
+              />
+            ) : page.native === "admin" && page.adminView ? (
               <AdminPage
                 key={page.adminView}
                 view={page.adminView}

@@ -475,8 +475,9 @@ def company_profile():
 def seed_demo():
     if g.user.role!='Admin':problem('Administrator access required',403)
     lock()
-    if db.session.scalar(select(JournalEntry.id).limit(1)) or db.session.scalar(select(StockMove.id).limit(1)):
-        raise InvalidBusinessState('Demo opening data can only be loaded into an empty ledger')
+    from .overview_api import can_seed
+    if not can_seed():
+        raise InvalidBusinessState('Demo opening data requires empty operational registers and ledger')
     doc=row(Document,'app');state=deepcopy(doc.data)
     if state.get('products') or any(state.get(k) for k in ('orders','receipts','invoices','customerInvoices','payments','customerPayments')):
         raise InvalidBusinessState('Load demo data before creating or importing products and transactions')

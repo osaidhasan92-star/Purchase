@@ -1,15 +1,16 @@
 """Versioned migration and compatibility facade over domain tables."""
 
 from copy import deepcopy
-from . import master_store as masters, trade_store as trade
+from . import master_store as masters, trade_store as trade, crm_register_store as crm
 from .app import db
 
 
 def project(stored):
-    return trade.project(masters.project(stored))
+    return crm.project(trade.project(masters.project(stored)))
 
 
 def persist(data, include_trade=True):
+    data = crm.persist(data)
     master_data = masters.persist(data)
     if not include_trade:
         return master_data
@@ -26,12 +27,12 @@ def persist(data, include_trade=True):
 
 
 def migrate(doc):
-    if doc.stored_data.get(masters.MARKER) and doc.stored_data.get(trade.MARKER):
+    if all(doc.stored_data.get(m) for m in (masters.MARKER, trade.MARKER, crm.MARKER)):
         return False
     original = deepcopy(doc.data)
     stored = persist(original)
     db.session.flush()
-    for module in (masters, trade):
+    for module in (masters, trade, crm):
         for key in module.MODELS:
             if module.read(key) != original.get(key, []):
                 raise ValueError(

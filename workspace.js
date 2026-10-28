@@ -66,3 +66,5 @@ function nativeProductionView(){const view=new URLSearchParams(location.search).
 function nativeExpenseView(){const view=new URLSearchParams(location.search).get('view');return workspacePage()==='erp.html'&&['expenses','expense-claims'].includes(view)?view:null;}
 
 function nativeAdminView(){return {'users.html':'users','activities.html':'activities','admin-data.html':'data'}[workspacePage()]||null;}
+
+function nativeRemainingView(){const page=workspacePage();return page==='companies.html'?'companies':page==='crm-quotes.html'?'crmQuotes':page==='erp.html'&&(new URLSearchParams(location.search).get('view')||'overview')==='overview'?'overview':null;}

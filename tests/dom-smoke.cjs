@@ -77,6 +77,10 @@ async function main() {
       if(module!=='admin')assert.equal(document.querySelectorAll('.module-navigation .module-flow').length,1,'Missing workflow strip: '+name);
     }
     assert.equal(document.querySelectorAll('.sidebar a[href="leads.html"],.sidebar a[href="orders.html"],.sidebar a[href="hr-payroll.html"]').length,0,'Submenus must live in the module content: '+name);
+    if(dom.window.eval('!!nativeRemainingView()')){
+      await waitFor(()=>document.querySelector('[data-native-remaining][aria-busy="false"]'),'Native overview/register did not load');
+      assert.ok(!calls.includes('/api/state')&&!calls.includes('/api/hr/state')&&!calls.includes('/api/erp/overview'),'Overview/registers must use compact SQL APIs');
+    }
     if(dom.window.eval('!!nativeAdminView()')){
       await waitFor(()=>document.querySelector('[data-native-admin][aria-busy="false"]'),'Native administration did not load');
       assert.ok(!calls.includes('/api/state')&&!calls.includes('/api/hr/state')&&!calls.includes('/api/users'),'Administration must use bounded resources');
@@ -113,7 +117,7 @@ async function main() {
     return dom;
   }
 
-  const names = ['dashboard', 'users', 'vendors', 'products', 'requests', 'rfqs', 'quotations', 'comparison', 'orders',
+  const names = ['companies','crm-quotes','dashboard', 'users', 'vendors', 'products', 'requests', 'rfqs', 'quotations', 'comparison', 'orders',
     'receipts', 'invoices', 'payments', 'crm-dashboard', 'leads', 'reminders', 'sales', 'customers', 'sales-quotations',
     'sales-orders', 'sales-deliveries', 'sales-invoices', 'sales-payments', 'hr-dashboard', 'hr-employees', 'hr-manpower',
     'admin-data', 'hr-recruitment', 'hr-attendance', 'hr-leave', 'hr-payroll', 'hr-separation', 'hr-reports', 'reports', 'activities',
@@ -201,7 +205,7 @@ async function main() {
   jar.setCookieSync(login.headers.get('set-cookie'),base);
 
   assert.deepEqual(errors, []);
-  console.log(`${names.length} pages/views rendered with shared module navigation; active tabs, module context and restricted roles passed; native Administration/Expenses/Production/Inventory/Finance/Sales/Purchasing/HR API and React read models, manufacturing and expense flows passed.`);
+  console.log(`${names.length} pages/views rendered with shared module navigation; active tabs, module context and restricted roles passed; native Overview/CRM registers/Administration/Expenses/Production/Inventory/Finance/Sales/Purchasing/HR API and React read models, manufacturing and expense flows passed.`);
 }
 
 main().catch(error => {console.error(error); process.exitCode = 1;}).finally(() => {
