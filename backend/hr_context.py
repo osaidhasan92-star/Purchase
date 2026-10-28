@@ -94,14 +94,22 @@ class Context:
                     if value.get("status") in ("Rejected", "Cancelled"):
                         continue
                     query = query.where(
-                        model.status.notin_(["Rejected", "Cancelled"]),
+                        or_(
+                            model.status.is_(None),
+                            model.status.notin_(["Rejected", "Cancelled"]),
+                        ),
                         model.date <= value["to"],
                         model.end_date >= value["from"],
                     )
                 else:
                     if value.get("status") in ("Completed", "Rejected"):
                         continue
-                    query = query.where(model.status.notin_(["Completed", "Rejected"]))
+                    query = query.where(
+                        or_(
+                            model.status.is_(None),
+                            model.status.notin_(["Completed", "Rejected"]),
+                        )
+                    )
                 if db.session.scalar(query.limit(1)):
                     problem(
                         (

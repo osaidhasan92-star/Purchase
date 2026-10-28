@@ -142,6 +142,62 @@ def test_global_conflicts_across_unrelated_workflows(app):
         c.post("/api/hr/records/employees", headers=h, json=payload).status_code == 409
     )
 
+    with app.app_context():
+        valid = {k: set() for k in hr.MODELS}
+        valid["employees"] = {e["id"]}
+        valid["user"] = set()
+        for key, value in [
+            (
+                "leaves",
+                dict(
+                    id="legacy-null-leave",
+                    employeeKey=e["id"],
+                    employee=e["employeeId"] + " - " + e["name"],
+                    status=None,
+                    **{"from": "2026-11-01", "to": "2026-11-02"},
+                    leaveType="Annual",
+                ),
+            ),
+            (
+                "separations",
+                dict(
+                    id="legacy-null-exit",
+                    employeeKey=e["id"],
+                    employee=e["employeeId"] + " - " + e["name"],
+                    status=None,
+                    lastWorkingDate="2026-12-01",
+                ),
+            ),
+        ]:
+            row = hr.MODELS[key](id=value["id"])
+            hr.write_one(key, value, row, 0, valid, [])
+            db.session.add(row)
+        db.session.commit()
+    response = c.post(
+        "/api/hr/records/leaves",
+        headers=h,
+        json={
+            "requestKey": "null-status-overlap",
+            "employeeKey": e["id"],
+            "from": "2026-11-01",
+            "to": "2026-11-02",
+            "leaveType": "Annual",
+            "reason": "Overlap",
+        },
+    )
+    assert response.status_code == 409, response.json
+    response = c.post(
+        "/api/hr/records/separations",
+        headers=h,
+        json={
+            "requestKey": "null-status-exit",
+            "employeeKey": e["id"],
+            "lastWorkingDate": "2026-12-02",
+            "reason": "Duplicate exit",
+        },
+    )
+    assert response.status_code == 409, response.json
+
 
 def test_unrelated_volume_does_not_load_or_rewrite_registers(app):
     c, h = session(app)
