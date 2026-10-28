@@ -1,6 +1,7 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { flushSync } from "react-dom";
+import { InventoryPage } from "./modules/inventory/InventoryPage";
 import { FinancePage } from "./modules/finance/FinancePage";
 import { HrPage, HrDashboard } from "./modules/hr/HrPage";
 import { TradePage, TradeDashboard } from "./modules/trade/TradePage";
@@ -55,7 +56,13 @@ window.ModernWorkspace = {
       root!.render(
         <ScreenBoundary>
           <WorkspaceShell page={page} bridge={bridge}>
-            {page.native === "finance" && page.financeView ? (
+            {page.native === "inventory" && page.inventoryView ? (
+              <InventoryPage
+                key={page.inventoryView}
+                view={page.inventoryView}
+                bridge={bridge}
+              />
+            ) : page.native === "finance" && page.financeView ? (
               <FinancePage
                 key={page.financeView}
                 view={page.financeView}

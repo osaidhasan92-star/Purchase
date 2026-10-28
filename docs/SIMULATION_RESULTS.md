@@ -4,7 +4,7 @@ The original 26 October baseline is retained below. The Sales/Purchasing phase a
 native React form execution in Chromium and canonical SQL header/line storage.
 [Phase 2](TRADE_MIGRATION.md) describes current scope and upgrade instructions.
 
-Current checks include 84 backend scenarios, 48 shared screen/view renders and real
+Current checks include 91 backend scenarios, 48 shared screen/view renders and real
 browser flows: request → RFQ → comparison/award → PO → two receipts/bills → partial
 and full payments; CRM lead → draft edit/print → approval/acceptance → order → two
 deliveries/invoices → partial and full collections. Backend cases independently
@@ -119,3 +119,13 @@ idempotency, partial AR matching, bank statement matching, period locks, safe CS
 upgrade without reposting. The 48-view DOM suite adds native finance resource/read-model
 simulations. Chromium exercises actual accounts, journals, transfers, statement and AR
 matching, reports, locks, print and mobile forms. See [Finance phase](FINANCE_MIGRATION.md).
+
+
+## Inventory migration phase
+
+Seven native stock scenarios cover adjustment/scrap ledger tie-outs, negative stock,
+versions/idempotency, partial vendor/customer returns and exact cents, company access,
+SQL reads/writes without aggregate projection, paging/export and upgrade preservation.
+The shared DOM suite adds native inventory simulations. Chromium exercises real stock
+forms, source returns, insufficient-stock errors, movement details/export and mobile
+layouts. See [Inventory scope and upgrade](INVENTORY_MIGRATION.md).

@@ -58,3 +58,5 @@ const NATIVE_HR_ROUTES={
 };
 
 function nativeFinanceView(){const view=new URLSearchParams(location.search).get('view');return workspacePage()==='erp.html'&&['accounting','accounts','journals','reports','aged','bank'].includes(view)?view:null;}
+
+function nativeInventoryView(){const view=new URLSearchParams(location.search).get('view');return workspacePage()==='erp.html'&&['inventory','stock-moves'].includes(view)?view:null;}
