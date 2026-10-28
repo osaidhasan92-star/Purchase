@@ -202,6 +202,25 @@ def source_link(source):
                 label="Open source document",
                 href="/api/trade/" + key + "/" + identity + "/print",
             )
+    if (
+        key == "expense"
+        and re.fullmatch(r"[1-9][0-9]{0,9}", identity)
+        and int(identity) <= 2147483647
+        and all(
+            allowed(g.user, app_document().stored_data, "expenses", a)
+            for a in ("view", "export")
+        )
+    ):
+        from .expense_api import scope
+        from .erp import Expense
+
+        if db.session.scalar(
+            select(Expense.id).where(Expense.id == int(identity), scope())
+        ):
+            return dict(
+                label="Open expense claim",
+                href="/api/expenses/claims/" + identity + "/print",
+            )
     if key == "payroll" and all(
         allowed(g.user, app_document().stored_data, "hr_payroll", a)
         for a in ("view", "export")

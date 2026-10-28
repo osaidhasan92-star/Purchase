@@ -4,7 +4,7 @@ The original 26 October baseline is retained below. The Sales/Purchasing phase a
 native React form execution in Chromium and canonical SQL header/line storage.
 [Phase 2](TRADE_MIGRATION.md) describes current scope and upgrade instructions.
 
-Current checks include 100 backend scenarios, 48 shared screen/view renders and real
+Current checks include 105 backend scenarios, 48 shared screen/view renders and real
 browser flows: request → RFQ → comparison/award → PO → two receipts/bills → partial
 and full payments; CRM lead → draft edit/print → approval/acceptance → order → two
 deliveries/invoices → partial and full collections. Backend cases independently
@@ -12,6 +12,10 @@ check quantities, PKR totals, split tax rounding, discounted GRNI clearing, sour
 foreign keys, migration of posted data without reposting, private Sales pagination,
 version conflicts and command idempotency. Native routes are checked for compact
 network access without business/HR aggregate loading or saving.
+
+Current Expenses coverage includes protected PDF upload, owner/direct-manager/Finance
+SQL scope, versioned approval/reimbursement, cash payment, rejection and mobile forms.
+See [phase 7](EXPENSES_MIGRATION.md).
 
 ## Earlier baseline — 26 October 2026
 

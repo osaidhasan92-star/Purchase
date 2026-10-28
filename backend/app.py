@@ -712,7 +712,7 @@ def create_app(config=None):
     @app.post('/api/attachments')
     def upload_attachment():
         module = request.form.get('module')
-        if module not in ('requests', 'quotations', 'orders', 'expenses') or not allowed(g.user, app_document().data, module, 'create'):
+        if module not in ('requests', 'quotations', 'orders', 'expenses') or not allowed(g.user, app_document().stored_data, module, 'create'):
             problem('Attachment upload permission required', 403)
         file = request.files.get('file')
         if not file:
@@ -733,7 +733,7 @@ def create_app(config=None):
         attachment = db.session.get(Attachment, attachment_id)
         if not attachment:
             abort(404)
-        state = app_document().data
+        state = app_document().stored_data
         if not allowed(g.user, state, attachment.module):
             problem('Attachment access denied', 403)
         from .scope import attachment_visible
@@ -757,7 +757,7 @@ def create_app(config=None):
             query['view'] = [legacy_routes[path]]
             return redirect('/erp.html?' + urlencode(query, doseq=True), code=302)
         # Never expose backend source, environment files, database files or backup JS.
-        public = {'frontend-dist/THIRD_PARTY_LICENSES.txt', 'frontend-dist/workspace-app.js', 'frontend-dist/workspace-app.css', 'workspace.js', 'workspace-loader.js', 'production-workspace.js', 'inventory-workspace.js', 'finance-workspace.js', 'hr-workspace.js', 'trade-workspace.js', 'admin-data.js', 'app.js', 'crm.js', 'sales.js', 'sales_patch.js', 'hr.js', 'backend-client.js', 'erp.js', 'erp.css',
+        public = {'frontend-dist/THIRD_PARTY_LICENSES.txt', 'frontend-dist/workspace-app.js', 'frontend-dist/workspace-app.css', 'workspace.js', 'workspace-loader.js', 'expense-workspace.js', 'production-workspace.js', 'inventory-workspace.js', 'finance-workspace.js', 'hr-workspace.js', 'trade-workspace.js', 'admin-data.js', 'app.js', 'crm.js', 'sales.js', 'sales_patch.js', 'hr.js', 'backend-client.js', 'erp.js', 'erp.css',
                   'shared.css', 'styles.css', 'logo.png', 'dexterra-stamp.jpg'}
         pages = {p.name for p in ROOT.glob('*.html')} - {'bootstrap.html', 'seed.html'}
         asset = path.startswith('assets/') and Path(path).suffix.lower() in ('.png', '.jpg', '.jpeg', '.webp')
@@ -871,6 +871,8 @@ def create_app(config=None):
     app.register_blueprint(finance_blueprint)
     from .inventory_api import bp as inventory_blueprint
     app.register_blueprint(inventory_blueprint)
+    from .expense_api import bp as expense_blueprint
+    app.register_blueprint(expense_blueprint)
     from .production_api import bp as production_blueprint
     app.register_blueprint(production_blueprint)
     return app

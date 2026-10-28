@@ -62,3 +62,5 @@ function nativeFinanceView(){const view=new URLSearchParams(location.search).get
 function nativeInventoryView(){const view=new URLSearchParams(location.search).get('view');return workspacePage()==='erp.html'&&['inventory','stock-moves'].includes(view)?view:null;}
 
 function nativeProductionView(){const view=new URLSearchParams(location.search).get('view');return workspacePage()==='erp.html'&&['manufacturing','boms','production-orders'].includes(view)?view:null;}
+
+function nativeExpenseView(){const view=new URLSearchParams(location.search).get('view');return workspacePage()==='erp.html'&&['expenses','expense-claims'].includes(view)?view:null;}

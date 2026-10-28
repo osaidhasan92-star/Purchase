@@ -421,17 +421,8 @@ def advance_expense(identity,action):
     if action in ('approve','pay','reject') and not approver:problem('Expense approval permission required',403)
     if not approver and expense.owner_id!=g.user.id:problem('Expense belongs to another user',403)
     if (action=='approve' and expense.status in ('Approved','Paid')) or (action=='pay' and expense.status=='Paid'):return done(expense_json(expense))
-    if action=='submit' and expense.status=='Draft':expense.status='Submitted'
-    elif action=='reject' and expense.status=='Submitted':expense.status='Rejected'
-    elif action=='approve' and expense.status=='Submitted':
-        post_entry(f'expense:{expense.id}',expense.number,[dict(account=expense.account,debit=expense.amount),dict(account='1300',debit=expense.tax),
-                   dict(account='2350',credit=expense.amount+expense.tax,partner='employee:'+expense.employee)],expense.date);expense.status='Approved'
-    elif action=='pay' and expense.status=='Approved':
-        data=body();cash=str(data.get('account','1010'))
-        if cash not in ('1000','1010'):raise InvalidBusinessState('Choose cash or bank')
-        entry=journal_pair(f'expense:{expense.id}:payment','Reimbursement '+expense.number,'2350',cash,expense.amount+expense.tax,data.get('date'),partner='employee:'+expense.employee)
-        auto_reconcile(f'expense:{expense.id}',entry,'2350');expense.status='Paid'
-    else:raise InvalidBusinessState('Invalid expense transition')
+    from .expense_api import transition
+    transition(expense,action,body())
     audit('Updated expense',{'number':expense.number,'status':expense.status});return done(expense_json(expense))
 
 

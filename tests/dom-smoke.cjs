@@ -77,6 +77,10 @@ async function main() {
       if(module!=='admin')assert.equal(document.querySelectorAll('.module-navigation .module-flow').length,1,'Missing workflow strip: '+name);
     }
     assert.equal(document.querySelectorAll('.sidebar a[href="leads.html"],.sidebar a[href="orders.html"],.sidebar a[href="hr-payroll.html"]').length,0,'Submenus must live in the module content: '+name);
+    if(dom.window.eval('!!nativeExpenseView()')){
+      await waitFor(()=>document.querySelector('[data-native-expenses][aria-busy="false"]'),'Native expenses did not load');
+      assert.ok(!calls.includes('/api/state')&&!calls.includes('/api/hr/state')&&!calls.includes('/api/erp/expenses'),'Expenses must use scoped SQL APIs');
+    }
     if(dom.window.eval('!!nativeProductionView()')){
       await waitFor(()=>document.querySelector('[data-native-production][aria-busy="false"]'),'Native manufacturing did not load');
       assert.ok(!calls.includes('/api/state')&&!calls.includes('/api/hr/state')&&!calls.includes('/api/erp/manufacturing')&&!calls.includes('/api/erp/boms'),'Production must use bounded SQL APIs');
@@ -169,13 +173,7 @@ async function main() {
 
   await require('./production-dom.cjs')({page,assert,rawId});
 
-  // Expense approval and reimbursement through the same interface.
-  dom=await page('erp:expenses');dom.window.erpNewExpense();
-  dom.window.document.getElementById('expense-description').value='Demo client visit';dom.window.document.getElementById('expense-amount').value='25';
-  await dom.window.erpSaveExpense();const expenseId=dom.window.eval('ERP_CACHE.expenses[0].id');
-  for(const action of ['submit','approve'])await dom.window.erpAction(`/expenses/${expenseId}/${action}`);
-  await dom.window.erpAction(`/expenses/${expenseId}/pay`,{account:'1010'});
-  assert.equal(dom.window.eval('ERP_CACHE.expenses[0].status'),'Paid');dom.window.close();
+  await require('./expense-dom.cjs')({page,assert});
 
   await require('./hr-dom.cjs')({page,assert});
   await require('./finance-dom.cjs')({page,assert});
@@ -206,7 +204,7 @@ async function main() {
   jar.setCookieSync(login.headers.get('set-cookie'),base);
 
   assert.deepEqual(errors, []);
-  console.log(`${names.length} pages/views rendered with shared module navigation; active tabs, module context and restricted roles passed; native Production/Inventory/Finance/Sales/Purchasing/HR API and React read models, manufacturing and expense flows passed.`);
+  console.log(`${names.length} pages/views rendered with shared module navigation; active tabs, module context and restricted roles passed; native Expenses/Production/Inventory/Finance/Sales/Purchasing/HR API and React read models, manufacturing and expense flows passed.`);
 }
 
 main().catch(error => {console.error(error); process.exitCode = 1;}).finally(() => {

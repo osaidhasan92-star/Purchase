@@ -88,7 +88,7 @@ def business_visible(user,record,key,state):
 def attachment_visible(attachment,user=None):
     from .app import db,Document
     from .permissions import allowed
-    user=user or g.user;state=db.session.get(Document,'app').data
+    user=user or g.user;state=db.session.get(Document,'app').stored_data
     if user.role=='Admin':return True
     if not allowed(user,state,attachment.module):return False
     if attachment.module=='expenses':return finance_access(user,state) or actor_visible(attachment.uploader_id,user)

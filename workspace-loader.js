@@ -1,6 +1,7 @@
 const screen=workspacePage();
 const scripts=['backend-client.js','app.js','frontend-dist/workspace-app.js'];
-if(nativeProductionView())scripts.push('production-workspace.js');
+if(nativeExpenseView())scripts.push('expense-workspace.js');
+else if(nativeProductionView())scripts.push('production-workspace.js');
 else if(nativeInventoryView())scripts.push('inventory-workspace.js');
 else if(nativeFinanceView())scripts.push('finance-workspace.js');
 else if(NATIVE_HR_ROUTES[screen])scripts.push('hr-workspace.js');

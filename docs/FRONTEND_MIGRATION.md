@@ -115,8 +115,7 @@ see [phase 3 and upgrade](HR_MIGRATION.md). Accounting/Finance now uses native s
 versioned commands; see [phase 4](FINANCE_MIGRATION.md). Administration remains on legacy
 contents/transport. Inventory now uses native stock balances/movements and versioned commands; see
 [phase 5](INVENTORY_MIGRATION.md). Manufacturing now uses native BoM/order screens with snapshots, availability and
-versioned actions; see [phase 6](MANUFACTURING_MIGRATION.md). Expenses already uses
-relational services, but its screens still require native React conversion. Old CRM company/quote registers, company/role
+versioned actions; see [phase 6](MANUFACTURING_MIGRATION.md). Expenses now uses native scoped claims, receipts and versioned approval/reimbursement commands; see [phase 7](EXPENSES_MIGRATION.md). Old CRM company/quote registers, company/role
 configuration and creator attribution metadata also remain outside the completed slices.
 
 Trade commands still reuse server-side cross-register compatibility validation/posting,

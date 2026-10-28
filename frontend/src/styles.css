@@ -382,3 +382,22 @@
   padding: 16px;
   margin-bottom: 20px;
 }
+.expense-form-body {
+  display: grid;
+  gap: 16px;
+}
+.expense-form-body textarea {
+  display: block;
+  width: 100%;
+  min-height: 80px;
+  margin-top: 6px;
+  padding: 10px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  font: inherit;
+  resize: vertical;
+}
+
+.trade-dialog .expense-form .modal-foot {
+  position: static;
+}
