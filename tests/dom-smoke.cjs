@@ -77,6 +77,10 @@ async function main() {
       if(module!=='admin')assert.equal(document.querySelectorAll('.module-navigation .module-flow').length,1,'Missing workflow strip: '+name);
     }
     assert.equal(document.querySelectorAll('.sidebar a[href="leads.html"],.sidebar a[href="orders.html"],.sidebar a[href="hr-payroll.html"]').length,0,'Submenus must live in the module content: '+name);
+    if(dom.window.eval('!!nativeFinanceView()')){
+      await waitFor(()=>document.querySelector('[data-native-finance]')&&!document.querySelector('[data-native-finance][aria-busy="true"]'),'Native finance did not load');
+      assert.ok(!calls.includes('/api/state')&&!calls.includes('/api/hr/state'),'Finance must use compact resources');
+    }
     if(dom.window.eval('!!NATIVE_HR_ROUTES[workspacePage()]')){
       await waitFor(()=>document.querySelector('[data-native-hr]')&&!document.querySelector('[data-native-hr] [role="status"]')&&document.querySelector('[data-native-hr]').getAttribute('aria-busy')!=='true','Native HR did not load');
       assert.ok(!calls.includes('/api/state')&&!calls.includes('/api/hr/state'),'HR must use compact resources');
@@ -178,6 +182,7 @@ async function main() {
   assert.equal(dom.window.eval('ERP_CACHE.expenses[0].status'),'Paid');dom.window.close();
 
   await require('./hr-dom.cjs')({page,assert});
+  await require('./finance-dom.cjs')({page,assert});
   dom = await page('sales-payments');
   const persisted=await dom.window.eval("BackendPersistence.request('/trade/customerInvoices')");
   assert.equal(persisted.items[0].paidAmount,40);
@@ -204,7 +209,7 @@ async function main() {
   jar.setCookieSync(login.headers.get('set-cookie'),base);
 
   assert.deepEqual(errors, []);
-  console.log(`${names.length} pages/views rendered with shared module navigation; active tabs, module context and restricted roles passed; native Sales/Purchasing API plus React read models, manufacturing, expenses, payroll, manpower, recruitment, attendance, leave and separation flows passed.`);
+  console.log(`${names.length} pages/views rendered with shared module navigation; active tabs, module context and restricted roles passed; native Finance/Sales/Purchasing/HR API and React read models, manufacturing and expense flows passed.`);
 }
 
 main().catch(error => {console.error(error); process.exitCode = 1;}).finally(() => {

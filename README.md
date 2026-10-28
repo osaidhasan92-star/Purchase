@@ -37,10 +37,10 @@ deployment target; SQLite supports local development and automated tests.
 
 ## Frontend and storage migration
 
-Customers, vendors, products, CRM leads/reminders, Sales, Purchasing and HR/payroll now use
+Customers, vendors, products, CRM leads/reminders, Sales, Purchasing, HR/payroll and Accounting/Finance now use
 native React/TypeScript contents and record/action SQL APIs. Transaction headers,
 source/product-linked lines and RFQ vendor relationships use relational tables. Existing databases must
-run `init-db` and `migrate-storage` before using these screens. Accounting/Production/Expenses and administration screen contents remain later migration work. See [HR migration and upgrade](docs/HR_MIGRATION.md). See [upgrade instructions and exact scope](docs/FRONTEND_MIGRATION.md).
+run `init-db` and `migrate-storage` before using these screens. Inventory/Production/Expenses and administration screen contents remain later migration work. See [Finance migration and upgrade](docs/FINANCE_MIGRATION.md). See [HR migration and upgrade](docs/HR_MIGRATION.md). See [upgrade instructions and exact scope](docs/FRONTEND_MIGRATION.md).
 
 ## Local setup (Python 3.12)
 
@@ -300,7 +300,7 @@ concepts documented in Odoo 18; this application does not embed or depend on Odo
   remain follow-up work. Future column changes require versioned schema migrations;
   `init-db` is not a general upgrade engine.
 - Automated checks include DOM navigation/HR/production simulations and Chromium
-  native master/CRM/Sales/Purchasing/HR forms, printing and mobile behavior. Production
+  native Finance/master/CRM/Sales/Purchasing/HR forms, printing and mobile behavior. Production
   load/security acceptance and a PostgreSQL deployment smoke test remain necessary before handover. PDF uploads are not malware
   scanned and are served as downloads.
 
@@ -324,7 +324,7 @@ See [Department access setup](docs/TEAM_ACCESS.md). Department policy needs no o
 
 ### Frontend migration
 
-The shared shell and Customers, Vendors, Products, CRM, Sales, Purchasing and HR contents
+The shared shell and Customers, Vendors, Products, CRM, Sales, Purchasing, HR and Accounting/Finance contents
 use React/strict TypeScript. Converted screens use compact bootstrap, bounded resource
 reads and versioned/idempotent record actions. Transaction totals, approvals, source
 quantities, parent statuses and automatic postings are enforced on the server. Printing
@@ -332,5 +332,8 @@ uses authenticated browser Print / Save as PDF layouts. Compiled assets are incl
 
 See [Sales/Purchasing phase and desktop upgrade](docs/TRADE_MIGRATION.md) and
 [Frontend development and remaining scope](docs/FRONTEND_MIGRATION.md). Production
-aggregate writes to converted trade registers return 410. Large-scale readiness still
+aggregate writes to converted trade/HR registers return 410. Native finance uses bounded SQL resources and versioned commands; the older ERP API remains a compatibility API. Large-scale readiness still
 requires query-local validation/load testing; remaining module contents are later phases. See [HR phase details](docs/HR_MIGRATION.md).
+
+
+Native Accounting/Finance phase: [workflows, reports, APIs and desktop upgrade](docs/FINANCE_MIGRATION.md). Finance permissions remain company-wide for authorized accounting staff.

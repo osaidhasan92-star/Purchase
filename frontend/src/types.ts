@@ -28,11 +28,13 @@ export interface ShellPage {
   logo: string;
   menuStyle: string;
   html: string;
+  financeView?: import("./modules/finance/types").FinanceView;
   hrResource?: import("./modules/hr/config").Resource;
   hrReports?: boolean;
   tradeResource?: import("./modules/trade/types").Resource;
   tradeArea?: "sales" | "purchase";
   native?:
+    | "finance"
     | "hr"
     | "hr-dashboard"
     | "trade"

@@ -166,6 +166,7 @@ const assert = require("node:assert/strict");
     assert.ok(!requests.includes('/api/state')&&!requests.includes('/api/hr/state'));
     await require('./trade-browser.cjs')(page,base,requests);
     await require('./hr-browser.cjs')(page,base,requests);
+    await require('./finance-browser.cjs')(page,base,requests);
     for (const view of [
       "sales",
       "purchase-dashboard",
@@ -203,7 +204,7 @@ const assert = require("node:assert/strict");
       JSON.stringify({
         browser: browser.version(),
         checks:
-          "Native masters/CRM, Sales/Purchasing and complete HR forms/actions; partial fulfilment, billing, payments, payroll journals, account creation, separation and payslips; compact bootstrap; Admin profile; legacy production/finance shells; mobile dialogs/navigation",
+          "Native Finance, masters/CRM, Sales/Purchasing and HR real forms/actions; journal edit/post/reverse, reports, bank/AR matching, transfer, period lock, print/export and mobile dialogs; compact bootstrap; Admin profile; legacy production shells",
         pageErrors: errors,
       }),
     );
