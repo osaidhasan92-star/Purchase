@@ -22,6 +22,7 @@ services:
       DATABASE_URL: postgresql+psycopg://purchase:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@db:5432/purchase
       PUBLIC_ORIGIN: ${PUBLIC_ORIGIN:?Set PUBLIC_ORIGIN in .env}
       COOKIE_SECURE: "true"
+      ERP_LOCK_TIMEOUT_MS: ${ERP_LOCK_TIMEOUT_MS:-5000}
     depends_on:
       db:
         condition: service_healthy

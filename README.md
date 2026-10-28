@@ -341,3 +341,17 @@ Native Accounting/Finance phase: [workflows, reports, APIs and desktop upgrade](
 Native Inventory phase: [stock workflows, APIs and upgrade](docs/INVENTORY_MIGRATION.md).
 
 Native Manufacturing phase: [BoM, order, stock/accounting flow and upgrade](docs/MANUFACTURING_MIGRATION.md).
+
+### Capacity engineering
+
+[Capacity plan and repeatable benchmark](docs/CAPACITY_PLAN.md) records provisional
+client capacity targets, isolated concurrent API measurements, bounded PostgreSQL
+ERP-lock waits and the safe path to resource-level locking. Run the desktop baseline
+without touching your existing database:
+
+```bat
+python -m backend.capacity_probe --rows 1000 --workers 1 4 8 --iterations 5 --output capacity-report.json
+```
+
+This is a service baseline, not evidence of enterprise readiness. The shared write
+lock remains until replacement strategies pass concurrent economic invariants.

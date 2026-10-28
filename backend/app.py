@@ -396,6 +396,9 @@ def create_app(config=None):
                       PUBLIC_ORIGIN=os.environ.get('PUBLIC_ORIGIN', ''), SESSION_HOURS=8)
     if config:
         app.config.update(config)
+    app.config.setdefault('ERP_LOCK_TIMEOUT_MS', int(os.environ.get('ERP_LOCK_TIMEOUT_MS', '5000')))
+    if not isinstance(app.config['ERP_LOCK_TIMEOUT_MS'], int) or not 1 <= app.config['ERP_LOCK_TIMEOUT_MS'] <= 60000:
+        raise ValueError('ERP_LOCK_TIMEOUT_MS must be between 1 and 60000')
     db.init_app(app)
 
     @app.before_request
@@ -431,6 +434,13 @@ def create_app(config=None):
     @app.errorhandler(HTTPException)
     def http_error(error):
         return jsonify(error=error.description), error.code
+
+    from .db_contention import DatabaseBusy
+
+    @app.errorhandler(DatabaseBusy)
+    def database_busy(error):
+        db.session.rollback()
+        return jsonify(error='System is busy. Please try again shortly.'), 503, {'Retry-After': '1'}
 
     @app.errorhandler(IntegrityError)
     def integrity_error(error):

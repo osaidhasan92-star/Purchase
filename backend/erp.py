@@ -9,7 +9,7 @@ from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from copy import deepcopy
 
 from flask import g
-from sqlalchemy import select, update, func
+from sqlalchemy import select, func
 
 from .app import db, Document, User, LoginSession, audit
 from .permissions import default_roles
@@ -199,9 +199,8 @@ def day(value=None):
 
 
 def lock():
-    result = db.session.execute(update(ERPControl).where(ERPControl.id == 1).values(revision=ERPControl.revision + 1))
-    if result.rowcount != 1:
-        raise InvalidBusinessState('Run init-db to initialize ERP tables')
+    from .db_contention import acquire
+    acquire()
 
 
 def next_number(prefix):
