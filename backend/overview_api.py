@@ -9,9 +9,9 @@ from .permissions import allowed
 from .erp import StockBalance, ManufacturingOrder, Expense, JournalEntry, StockMove
 from .finance_api import summary_values, report_totals
 from .expense_api import scope as expense_scope
-from .master_store import MODELS as masters
-from .trade_store import MODELS as trades
-from .crm_register_store import MODELS as registers
+from .master_store import MODELS as masters, MARKER as master_marker
+from .trade_store import MODELS as trades, MARKER as trade_marker
+from .crm_register_store import MODELS as registers, MARKER as register_marker
 from .erp import BankStatementLine, BillOfMaterials
 
 bp = Blueprint("overview", __name__, url_prefix="/api/overview")
@@ -49,6 +49,11 @@ def summary():
 
 
 def can_seed():
+    if not all(
+        app_document().stored_data.get(m)
+        for m in (master_marker, trade_marker, register_marker)
+    ):
+        return False
     models = (
         list(masters.values())
         + list(trades.values())

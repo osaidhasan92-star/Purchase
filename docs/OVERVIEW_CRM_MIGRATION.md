@@ -20,7 +20,7 @@ resources, without fetching `/api/state`, `/api/hr/state` or `/api/erp/overview`
 Admin sees Load demo opening data only when the operational registers and ledger
 are empty. The server rechecks under its write lock and rejects seeding if customers,
 vendors, CRM records, products, trade documents, claims, stock or journals already
-exist. This prevents the historical demo action from replacing existing master data.
+exist. Seeding is also blocked until required storage migrations are complete. This prevents the historical demo action from replacing existing master data.
 Demo setup remains explicit and uses the established posting service; it is not an
 automatic migration step or production opening-balance import.
 

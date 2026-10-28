@@ -108,6 +108,9 @@ def test_crm_register_roundtrip_upgrade_and_no_reposting(app):
         stored.update(original)
         doc.stored_data = stored
         db.session.commit()
+    c, h = session(app)
+    assert c.get("/api/overview/summary").json["canSeed"] is False
+    assert c.post("/api/erp/seed-demo", headers=h, json={}).status_code == 400
     runner = app.test_cli_runner()
     r = runner.invoke(args=["migrate-storage"])
     assert r.exit_code == 0, r.output
