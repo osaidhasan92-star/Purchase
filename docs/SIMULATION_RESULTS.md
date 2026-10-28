@@ -4,7 +4,7 @@ The original 26 October baseline is retained below. The Sales/Purchasing phase a
 native React form execution in Chromium and canonical SQL header/line storage.
 [Phase 2](TRADE_MIGRATION.md) describes current scope and upgrade instructions.
 
-Current checks include 91 backend scenarios, 48 shared screen/view renders and real
+Current checks include 100 backend scenarios, 48 shared screen/view renders and real
 browser flows: request → RFQ → comparison/award → PO → two receipts/bills → partial
 and full payments; CRM lead → draft edit/print → approval/acceptance → order → two
 deliveries/invoices → partial and full collections. Backend cases independently
@@ -129,3 +129,14 @@ SQL reads/writes without aggregate projection, paging/export and upgrade preserv
 The shared DOM suite adds native inventory simulations. Chromium exercises real stock
 forms, source returns, insufficient-stock errors, movement details/export and mobile
 layouts. See [Inventory scope and upgrade](INVENTORY_MIGRATION.md).
+
+
+## Manufacturing migration phase
+
+Nine native production scenarios independently verify material/output cost, WIP and
+conversion accrual, snapshot preservation after BoM edits, versions/idempotency,
+shortage/period-lock rollback, permissions, SQL paging/aggregate avoidance, print
+escaping, large shortage estimates and upgrade without reposting. The 48-view DOM
+suite now uses native production resources/read models. Chromium covers actual BoM
+create/edit, source handoff, order actions, shortage errors, cancellation, print and
+mobile layouts. See [Manufacturing scope and upgrade](MANUFACTURING_MIGRATION.md).

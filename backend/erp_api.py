@@ -377,17 +377,8 @@ def advance_mo(identity,action):
         if order.state!=before:raise InvalidBusinessState('Invalid production transition')
         order.state=after
     elif action=='complete':
-        if order.state not in ('Confirmed','In Progress'):raise InvalidBusinessState('Confirm the manufacturing order first')
-        g.scope_creator=object_creator(order)
-        check_period(order.date);total=Decimal(0)
-        for index,line in enumerate(order.lines):
-            move=stock_move(line.product_id,-line.quantity,f'mo:{order.id}:component:{index}','Manufacturing Consumption','1250',value_date=order.date)
-            total-=move.value
-        if order.conversion_cost:
-            journal_pair(f'mo:{order.id}:conversion','Accrued production conversion cost','1250','2400',order.conversion_cost,order.date)
-        total+=order.conversion_cost
-        stock_move(order.product_id,order.quantity,f'mo:{order.id}:output','Manufacturing Output','1250',value_date=order.date,total_value=total)
-        order.actual_cost=total;order.state='Done'
+        from .erp import finish_manufacturing
+        finish_manufacturing(order)
     else:problem('Unknown production action',404)
     audit('Updated manufacturing order',{'number':order.number,'state':order.state});return done(mo_json(order))
 

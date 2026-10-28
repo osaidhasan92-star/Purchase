@@ -49,7 +49,9 @@ export function InventoryPage({
     }),
     [summary, setSummary] = useState<Summary | null>(null),
     [page, setPage] = useState(1),
-    [search, setSearch] = useState(""),
+    [search, setSearch] = useState(
+      () => new URLSearchParams(location.search).get("search") || "",
+    ),
     [type, setType] = useState("stock"),
     [productId, setProductId] = useState(
       () => new URLSearchParams(location.search).get("productId") || "",

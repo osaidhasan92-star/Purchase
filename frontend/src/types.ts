@@ -28,6 +28,7 @@ export interface ShellPage {
   logo: string;
   menuStyle: string;
   html: string;
+  productionView?: import("./modules/production/ProductionPage").ProductionView;
   inventoryView?: "inventory" | "stock-moves";
   financeView?: import("./modules/finance/types").FinanceView;
   hrResource?: import("./modules/hr/config").Resource;
@@ -35,6 +36,7 @@ export interface ShellPage {
   tradeResource?: import("./modules/trade/types").Resource;
   tradeArea?: "sales" | "purchase";
   native?:
+    | "production"
     | "inventory"
     | "finance"
     | "hr"

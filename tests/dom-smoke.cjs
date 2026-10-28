@@ -77,6 +77,10 @@ async function main() {
       if(module!=='admin')assert.equal(document.querySelectorAll('.module-navigation .module-flow').length,1,'Missing workflow strip: '+name);
     }
     assert.equal(document.querySelectorAll('.sidebar a[href="leads.html"],.sidebar a[href="orders.html"],.sidebar a[href="hr-payroll.html"]').length,0,'Submenus must live in the module content: '+name);
+    if(dom.window.eval('!!nativeProductionView()')){
+      await waitFor(()=>document.querySelector('[data-native-production][aria-busy="false"]'),'Native manufacturing did not load');
+      assert.ok(!calls.includes('/api/state')&&!calls.includes('/api/hr/state')&&!calls.includes('/api/erp/manufacturing')&&!calls.includes('/api/erp/boms'),'Production must use bounded SQL APIs');
+    }
     if(dom.window.eval('!!nativeInventoryView()')){
       await waitFor(()=>document.querySelector('[data-native-inventory][aria-busy="false"]'),'Native inventory did not load');
       assert.ok(!calls.includes('/api/state')&&!calls.includes('/api/hr/state')&&!calls.includes('/api/erp/inventory'),'Inventory must use bounded SQL APIs');
@@ -163,19 +167,7 @@ async function main() {
 
   const {rawId}=await require('./trade-dom.cjs')({page,assert});
 
-  // Manufacturing through the new screens, using the raw material received above.
-  dom=await page('products');dom.window.openProduct();
-  dom.window.document.getElementById('pname').value='Workflow finished kit';dom.window.document.getElementById('psku').value='FG-UI-1';
-  await dom.window.saveProduct();const finishedId=dom.window.eval('db().products.at(-1).id');dom.window.close();
-  dom=await page('erp:boms');await dom.window.erpNewBOM();
-  dom.window.document.getElementById('bom-name').value='Workflow kit BoM';dom.window.document.getElementById('bom-product').value=String(finishedId);
-  dom.window.document.querySelector('.bom-component').value=String(rawId);dom.window.document.querySelector('.bom-component-qty').value='2';
-  await dom.window.erpSaveBOM();dom.window.close();
-  dom=await page('erp:manufacturing');dom.window.erpNewMO();
-  const moSave=dom.window.document.getElementById('erp-submit').getAttribute('onclick');await dom.window.eval(moSave);
-  const moId=dom.window.ERP_CACHE?.orders?.[0]?.id||dom.window.eval('ERP_CACHE.orders[0].id');
-  for(const action of ['confirm','start','complete'])await dom.window.erpAction(`/manufacturing/${moId}/${action}`);
-  assert.equal(dom.window.eval('ERP_CACHE.orders[0].state'),'Done');dom.window.close();
+  await require('./production-dom.cjs')({page,assert,rawId});
 
   // Expense approval and reimbursement through the same interface.
   dom=await page('erp:expenses');dom.window.erpNewExpense();
@@ -214,7 +206,7 @@ async function main() {
   jar.setCookieSync(login.headers.get('set-cookie'),base);
 
   assert.deepEqual(errors, []);
-  console.log(`${names.length} pages/views rendered with shared module navigation; active tabs, module context and restricted roles passed; native Inventory/Finance/Sales/Purchasing/HR API and React read models, manufacturing and expense flows passed.`);
+  console.log(`${names.length} pages/views rendered with shared module navigation; active tabs, module context and restricted roles passed; native Production/Inventory/Finance/Sales/Purchasing/HR API and React read models, manufacturing and expense flows passed.`);
 }
 
 main().catch(error => {console.error(error); process.exitCode = 1;}).finally(() => {

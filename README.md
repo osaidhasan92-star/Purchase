@@ -37,10 +37,10 @@ deployment target; SQLite supports local development and automated tests.
 
 ## Frontend and storage migration
 
-Customers, vendors, products, CRM leads/reminders, Sales, Purchasing, HR/payroll, Accounting/Finance and Inventory now use
+Customers, vendors, products, CRM leads/reminders, Sales, Purchasing, HR/payroll, Accounting/Finance, Inventory and Manufacturing now use
 native React/TypeScript contents and record/action SQL APIs. Transaction headers,
 source/product-linked lines and RFQ vendor relationships use relational tables. Existing databases must
-run `init-db` and `migrate-storage` before using these screens. Production/Expenses and administration screen contents remain later migration work. See [Inventory migration](docs/INVENTORY_MIGRATION.md). See [Finance migration and upgrade](docs/FINANCE_MIGRATION.md). See [HR migration and upgrade](docs/HR_MIGRATION.md). See [upgrade instructions and exact scope](docs/FRONTEND_MIGRATION.md).
+run `init-db` and `migrate-storage` before using these screens. Expenses and administration screen contents remain later migration work. See [Manufacturing migration](docs/MANUFACTURING_MIGRATION.md). See [Inventory migration](docs/INVENTORY_MIGRATION.md). See [Finance migration and upgrade](docs/FINANCE_MIGRATION.md). See [HR migration and upgrade](docs/HR_MIGRATION.md). See [upgrade instructions and exact scope](docs/FRONTEND_MIGRATION.md).
 
 ## Local setup (Python 3.12)
 
@@ -324,7 +324,7 @@ See [Department access setup](docs/TEAM_ACCESS.md). Department policy needs no o
 
 ### Frontend migration
 
-The shared shell and Customers, Vendors, Products, CRM, Sales, Purchasing, HR, Accounting/Finance and Inventory contents
+The shared shell and Customers, Vendors, Products, CRM, Sales, Purchasing, HR, Accounting/Finance, Inventory and Manufacturing contents
 use React/strict TypeScript. Converted screens use compact bootstrap, bounded resource
 reads and versioned/idempotent record actions. Transaction totals, approvals, source
 quantities, parent statuses and automatic postings are enforced on the server. Printing
@@ -339,3 +339,5 @@ requires query-local validation/load testing; remaining module contents are late
 Native Accounting/Finance phase: [workflows, reports, APIs and desktop upgrade](docs/FINANCE_MIGRATION.md). Finance permissions remain company-wide for authorized accounting staff.
 
 Native Inventory phase: [stock workflows, APIs and upgrade](docs/INVENTORY_MIGRATION.md).
+
+Native Manufacturing phase: [BoM, order, stock/accounting flow and upgrade](docs/MANUFACTURING_MIGRATION.md).

@@ -511,3 +511,28 @@ def sync_business(previous, current, namespace):
                 audit('Disabled separated employee account',{'userId':target.id})
     db.session.flush()
     g.pop('scope_creator',None)
+
+
+def finish_manufacturing(order):
+    """Complete one production order in the caller's stock/accounting transaction."""
+    from .scope import object_creator
+    if order.state == 'Done':
+        return order
+    if order.state not in ('Confirmed','In Progress'):
+        raise InvalidBusinessState('Confirm the manufacturing order first')
+    g.scope_creator = object_creator(order) or g.user.id
+    check_period(order.date)
+    total = Decimal(0)
+    for index,line in enumerate(sorted(order.lines,key=lambda l:l.id)):
+        move=stock_move(line.product_id,-line.quantity,f'mo:{order.id}:component:{index}',
+                        'Manufacturing Consumption','1250',value_date=order.date)
+        total-=move.value
+    if order.conversion_cost:
+        journal_pair(f'mo:{order.id}:conversion','Accrued production conversion cost',
+                     '1250','2400',order.conversion_cost,order.date)
+    total+=order.conversion_cost
+    stock_move(order.product_id,order.quantity,f'mo:{order.id}:output','Manufacturing Output',
+               '1250',value_date=order.date,total_value=total)
+    order.actual_cost=total
+    order.state='Done'
+    return order

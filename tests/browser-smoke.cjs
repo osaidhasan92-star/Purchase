@@ -168,6 +168,7 @@ const assert = require("node:assert/strict");
     await require('./hr-browser.cjs')(page,base,requests);
     await require('./finance-browser.cjs')(page,base,requests);
     await require('./inventory-browser.cjs')(page,base,requests);
+    await require('./production-browser.cjs')(page,base,requests);
     for (const view of [
       "sales",
       "purchase-dashboard",
@@ -205,7 +206,7 @@ const assert = require("node:assert/strict");
       JSON.stringify({
         browser: browser.version(),
         checks:
-          "Native Inventory/Finance, masters/CRM, Sales/Purchasing and HR real forms/actions; journal edit/post/reverse, reports, bank/AR matching, transfer, period lock, print/export and mobile dialogs; compact bootstrap; Admin profile; legacy production shells",
+          "Native Production/Inventory/Finance, masters/CRM, Sales/Purchasing and HR real forms/actions; journal edit/post/reverse, reports, bank/AR matching, transfer, period lock, print/export and mobile dialogs; compact bootstrap; Admin profile; legacy production shells",
         pageErrors: errors,
       }),
     );

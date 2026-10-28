@@ -114,8 +114,9 @@ HR/payroll now uses native React contents, record/action APIs and seven canonica
 see [phase 3 and upgrade](HR_MIGRATION.md). Accounting/Finance now uses native screens with SQL reports, paginated resources and
 versioned commands; see [phase 4](FINANCE_MIGRATION.md). Administration remains on legacy
 contents/transport. Inventory now uses native stock balances/movements and versioned commands; see
-[phase 5](INVENTORY_MIGRATION.md). Manufacturing and expenses already use relational
-services, but their screens still require native React conversion. Old CRM company/quote registers, company/role
+[phase 5](INVENTORY_MIGRATION.md). Manufacturing now uses native BoM/order screens with snapshots, availability and
+versioned actions; see [phase 6](MANUFACTURING_MIGRATION.md). Expenses already uses
+relational services, but its screens still require native React conversion. Old CRM company/quote registers, company/role
 configuration and creator attribution metadata also remain outside the completed slices.
 
 Trade commands still reuse server-side cross-register compatibility validation/posting,

@@ -217,6 +217,23 @@ def source_link(source):
                 label="Open payslip",
                 href="/api/hr/records/payroll/" + identity + "/print",
             )
+    if (
+        key == "mo"
+        and all(
+            allowed(g.user, app_document().stored_data, "manufacturing", a)
+            for a in ("view", "export")
+        )
+        and re.fullmatch(r"[1-9][0-9]{0,9}", identity)
+    ):
+        from .erp import ManufacturingOrder
+
+        if int(identity) < 2147483648 and db.session.get(
+            ManufacturingOrder, int(identity)
+        ):
+            return dict(
+                label="Open manufacturing order",
+                href="/api/production/orders/" + identity + "/print",
+            )
     return None
 
 
