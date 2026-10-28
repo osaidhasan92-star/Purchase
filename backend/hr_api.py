@@ -6,7 +6,7 @@ import re
 import secrets
 from flask import Blueprint, g, jsonify, request, render_template_string, make_response
 from sqlalchemy import select, or_, func, update
-from werkzeug.security import generate_password_hash
+from werkzeug.security import generate_password_hash, check_password_hash
 from .app import (
     db,
     Document,
@@ -542,10 +542,20 @@ def command(key, identity=None, action=None):
         )
     )
     lock()
+    from .workflow_keys import revalidate_actor
+
+    revalidate_actor()
+    permit(key)
+    permit(key, permission)
+    if action == "login" and g.user.role != "Admin":
+        problem("Only administrators create login accounts", 403)
     doc = require_migrated()
     db.session.refresh(doc)
-    original = deepcopy(doc.data)
-    state = deepcopy(original)
+    from .hr_context import Context
+
+    context = Context(key, identity, data)
+    original = context.original
+    state = context.state
     row = find(state, key, identity) if identity is not None else None
     if row is not None:
         scoped(key, identity)
@@ -553,7 +563,19 @@ def command(key, identity=None, action=None):
     if receipt:
         if receipt.fingerprint != fingerprint:
             problem("Request key has already been used", 409)
-        return jsonify(record=output(key, scoped(key, receipt.identity)))
+        replay = scoped(key, receipt.identity)
+        if action == "login":
+            check_password(data.get("password"))
+            account = (
+                db.session.get(User, replay.linked_user_id)
+                if replay.linked_user_id
+                else None
+            )
+            if not account or not check_password_hash(
+                account.password_hash, data["password"]
+            ):
+                problem("Credential changed; use a new request key", 409)
+        return jsonify(record=output(key, replay))
     if row is not None:
         if not data.get("version"):
             problem("Record version is required", 428)
@@ -658,11 +680,12 @@ def command(key, identity=None, action=None):
             problem("Only editable HR records may change", 409)
         normalize(key, data, row, state, False)
     validate_state(state)
-    stored = store.persist(state)
+    context.validate()
+    context.persist()
     result = db.session.execute(
         update(Document)
         .where(Document.name == "hr", Document.revision == doc.revision)
-        .values(stored_data=stored, revision=doc.revision + 1)
+        .values(revision=doc.revision + 1)
         .execution_options(synchronize_session=False)
     )
     if result.rowcount != 1:

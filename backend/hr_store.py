@@ -192,6 +192,65 @@ def read(key):
     ]
 
 
+def write_one(key, value, row, position, valid, employees):
+    row.original_id = value["id"]
+    row.position = position
+    row.record_version = version(value)
+    row.search_text = " ".join(
+        str(v) for v in value.values() if isinstance(v, (str, int, float))
+    ).casefold()
+    meta = dict(
+        present=[f for f in SPECS[key] if f in value],
+        null=[],
+        ints=[],
+        strings={},
+        unresolved={},
+    )
+    for field, column in SPECS[key].items():
+        item = value.get(field)
+        if field in NUMBERS and isinstance(item, int) and not isinstance(item, bool):
+            meta["ints"].append(field)
+        if item is None:
+            meta["null"].append(field)
+        if field in LINKS and item is not None:
+            if str(item) not in valid[LINKS[field]]:
+                meta["unresolved"][field] = item
+                item = None
+            else:
+                if isinstance(item, int):
+                    meta["ints"].append(field)
+                item = str(item)
+        if field in NUMBERS and item is not None:
+            if isinstance(item, str):
+                meta["strings"][field] = item
+            item = Decimal(str(item))
+            if not item.is_finite():
+                raise ValueError("Non-finite HR number")
+        setattr(row, column, item)
+    if (
+        key in ("attendance", "leaves", "payroll", "separations")
+        and not row.employee_id
+        and not value.get("employeeKey")
+    ):
+        matches = [
+            e
+            for e in employees
+            if str(e.get("employeeId", "")) + " - " + str(e.get("name", ""))
+            == value.get("employee")
+        ]
+        if len(matches) == 1:
+            row.employee_id = str(matches[0]["id"])
+    row.extras = {
+        **{
+            k: deepcopy(v)
+            for k, v in value.items()
+            if k not in SPECS[key] and k != "id"
+        },
+        "_hrMeta": meta,
+    }
+    return row
+
+
 def persist(data):
     from .app import User
 
@@ -210,69 +269,17 @@ def persist(data):
             if row is None:
                 row = model(id=str(value["id"]))
                 db.session.add(row)
-            row.original_id = value["id"]
-            row.position = pos
-            row.record_version = version(value)
-            row.search_text = " ".join(
-                str(v) for v in value.values() if isinstance(v, (str, int, float))
-            ).casefold()
-            meta = dict(
-                present=[f for f in SPECS[key] if f in value],
-                null=[],
-                ints=[],
-                strings={},
-                unresolved={},
-            )
-            for field, column in SPECS[key].items():
-                item = value.get(field)
-                if (
-                    field in NUMBERS
-                    and isinstance(item, int)
-                    and not isinstance(item, bool)
-                ):
-                    meta["ints"].append(field)
-                if item is None:
-                    meta["null"].append(field)
-                if field in LINKS and item is not None:
-                    if str(item) not in valid[LINKS[field]]:
-                        meta["unresolved"][field] = item
-                        item = None
-                    else:
-                        if isinstance(item, int):
-                            meta["ints"].append(field)
-                        item = str(item)
-                if field in NUMBERS and item is not None:
-                    if isinstance(item, str):
-                        meta["strings"][field] = item
-                    item = Decimal(str(item))
-                    if not item.is_finite():
-                        raise ValueError("Non-finite HR number")
-                setattr(row, column, item)
-            if (
-                key in ("attendance", "leaves", "payroll", "separations")
-                and not row.employee_id
-                and not value.get("employeeKey")
-            ):
-                matches = [
-                    e
-                    for e in data.get("employees", [])
-                    if str(e.get("employeeId", "")) + " - " + str(e.get("name", ""))
-                    == value.get("employee")
-                ]
-                if len(matches) == 1:
-                    row.employee_id = str(matches[0]["id"])
-            row.extras = {
-                **{
-                    k: deepcopy(v)
-                    for k, v in value.items()
-                    if k not in SPECS[key] and k != "id"
-                },
-                "_hrMeta": meta,
-            }
+            write_one(key, value, row, pos, valid, data.get("employees", []))
+            from .workflow_keys import replace
+
+            replace(key, value)
         db.session.flush()
     # Delete children before referenced rows. Historical imports preserve unresolved links explicitly.
     for key in reversed(MODELS):
         for row in existing[key].values():
+            from .workflow_keys import remove
+
+            remove(key, row.id)
             db.session.delete(row)
         db.session.flush()
     return {**{k: v for k, v in data.items() if k not in MODELS}, MARKER: 1}

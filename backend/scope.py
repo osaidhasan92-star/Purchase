@@ -143,7 +143,7 @@ def object_creator(value):
 def object_visible(value):
     from .app import db,Document
     from .permissions import allowed
-    user=g.user;state=db.session.get(Document,'app').data
+    user=g.user;state=db.session.get(Document,'app').stored_data
     if user.role=='Admin':return True
     table=value.__tablename__
     if table in ('journal_entry','journal_line','bank_statement_line','account'):

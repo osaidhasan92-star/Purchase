@@ -802,6 +802,26 @@ def create_app(config=None):
         db.session.commit()
         click.echo('Legacy creator attribution saved; department and assignment permissions still apply.')
 
+    @app.cli.command('workflow-health')
+    def workflow_health():
+        """Read-only ledger, inventory and derived-conflict checks."""
+        from .workflow_health import report
+        result=report()
+        click.echo(json.dumps(result,sort_keys=True))
+        if not result['healthy']:raise click.ClickException('Review the reported workflow issues before handover')
+
+    @app.cli.command('rebuild-workflow-indexes')
+    def rebuild_workflow_indexes():
+        """Rebuild derived conflict/reference indexes after controlled SQL repair."""
+        from .erp import lock
+        from .workflow_keys import initialize
+        lock()
+        marker=db.session.get(Document,'workflow_indexes')
+        if marker:marker.stored_data={}
+        initialize()
+        db.session.commit()
+        click.echo('Derived workflow indexes rebuilt; business and journal records unchanged.')
+
     @app.cli.command('init-db')
     def init_db():
         """Create the initial schema and empty company (run once before workers start)."""
@@ -817,6 +837,8 @@ def create_app(config=None):
         db.session.flush()
         from .erp import initialize
         initialize()
+        from .workflow_keys import initialize as initialize_workflow_keys
+        initialize_workflow_keys()
         db.session.commit()
         click.echo('Database initialized; existing records were preserved.')
 
@@ -834,6 +856,8 @@ def create_app(config=None):
             changed=migrate(doc)
             from .hr_store import migrate as migrate_hr
             migrate_hr(db.session.get(Document, 'hr'))
+            from .workflow_keys import initialize as initialize_workflow_keys
+            initialize_workflow_keys()
         except (ValueError,ArithmeticError) as error:
             db.session.rollback()
             raise click.ClickException(str(error)) from error

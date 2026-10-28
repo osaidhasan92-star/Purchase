@@ -40,7 +40,7 @@ deployment target; SQLite supports local development and automated tests.
 Customers, vendors, products, CRM leads/reminders, Sales, Purchasing, HR/payroll, Accounting/Finance, Inventory and Manufacturing now use
 native React/TypeScript contents and record/action SQL APIs. Transaction headers,
 source/product-linked lines and RFQ vendor relationships use relational tables. Existing databases must
-run `init-db` and `migrate-storage` before using these screens. Expenses now uses native scoped claims, receipt upload, approval and reimbursement screens; Administration now uses native accounts/roles/audit/import-export screens and an Admin-only company dialog. ERP Overview and the remaining CRM Companies/Quote Register screens are now native too; see [phase 9 and upgrade](docs/OVERVIEW_CRM_MIGRATION.md). See [Administration migration and upgrade](docs/ADMINISTRATION_MIGRATION.md). See [Expenses migration and upgrade](docs/EXPENSES_MIGRATION.md). See [Manufacturing migration](docs/MANUFACTURING_MIGRATION.md). See [Inventory migration](docs/INVENTORY_MIGRATION.md). See [Finance migration and upgrade](docs/FINANCE_MIGRATION.md). See [HR migration and upgrade](docs/HR_MIGRATION.md). See [upgrade instructions and exact scope](docs/FRONTEND_MIGRATION.md).
+run `init-db` and `migrate-storage` before using these screens. Expenses now uses native scoped claims, receipt upload, approval and reimbursement screens; Administration now uses native accounts/roles/audit/import-export screens and an Admin-only company dialog. Native Sales/Purchasing and HR commands now use query-local SQL contexts and changed-row persistence, with indexed conflicts, concurrency and backup/restore checks; see [phase 10 and upgrade](docs/QUERY_LOCAL_HARDENING.md). ERP Overview and the remaining CRM Companies/Quote Register screens are now native too; see [phase 9 and upgrade](docs/OVERVIEW_CRM_MIGRATION.md). See [Administration migration and upgrade](docs/ADMINISTRATION_MIGRATION.md). See [Expenses migration and upgrade](docs/EXPENSES_MIGRATION.md). See [Manufacturing migration](docs/MANUFACTURING_MIGRATION.md). See [Inventory migration](docs/INVENTORY_MIGRATION.md). See [Finance migration and upgrade](docs/FINANCE_MIGRATION.md). See [HR migration and upgrade](docs/HR_MIGRATION.md). See [upgrade instructions and exact scope](docs/FRONTEND_MIGRATION.md).
 
 ## Local setup (Python 3.12)
 
@@ -333,7 +333,7 @@ uses authenticated browser Print / Save as PDF layouts. Compiled assets are incl
 See [Sales/Purchasing phase and desktop upgrade](docs/TRADE_MIGRATION.md) and
 [Frontend development and remaining scope](docs/FRONTEND_MIGRATION.md). Production
 aggregate writes to converted trade/HR registers return 410. Native finance uses bounded SQL resources and versioned commands; the older ERP API remains a compatibility API. Large-scale readiness still
-requires query-local validation/load testing; remaining module contents are later phases. See [HR phase details](docs/HR_MIGRATION.md).
+uses query-local trade/HR validation; representative throughput and client acceptance testing remain. See [query-local workflow verification](docs/QUERY_LOCAL_HARDENING.md). See [HR phase details](docs/HR_MIGRATION.md).
 
 
 Native Accounting/Finance phase: [workflows, reports, APIs and desktop upgrade](docs/FINANCE_MIGRATION.md). Finance permissions remain company-wide for authorized accounting staff.

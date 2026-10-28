@@ -23,6 +23,7 @@ from .permissions import COLLECTIONS, allowed, in_scope
 from .erp import lock, next_number, sync_business, dec
 from .validation import validate_business
 from . import trade_store as store
+from . import workflow_keys
 
 MONEY = Decimal("0.01")
 QTY = Decimal("0.0001")
@@ -258,7 +259,9 @@ def parent(state, key, identity, data):
 
 def add(state, key, values):
     identity = int(time.time() * 1000) * 1000 + secrets.randbelow(1000)
-    while any(str(r["id"]) == str(identity) for r in state.get(key, [])):
+    while db.session.get(store.MODELS[key], str(identity)) or any(
+        str(r["id"]) == str(identity) for r in state.get(key, [])
+    ):
         identity += 1
     record = {
         **values,
@@ -270,7 +273,15 @@ def add(state, key, values):
     field = store.SPECS[key][1]
     if field and not record.get(field):
         candidate = next_number(PREFIXES[key])
-        while any(r.get(field) == candidate for r in state.get(key, [])):
+        while (
+            db.session.scalar(
+                select(store.MODELS[key].id)
+                .where(store.MODELS[key].number == candidate)
+                .limit(1)
+            )
+            or workflow_keys.number_taken(key, {**record, field: candidate})
+            or any(r.get(field) == candidate for r in state.get(key, []))
+        ):
             candidate = next_number(PREFIXES[key])
         record[field] = candidate
     state.setdefault(key, []).insert(0, record)
@@ -1450,12 +1461,24 @@ def execute(key, identity=None, action=None):
         }
     )
     lock()
+    workflow_keys.revalidate_actor()
+    permit(key, "view")
+    if identity is None:
+        permit(key, "create")
     doc = app_document()
     db.session.refresh(doc)
     if not doc.stored_data.get(store.MARKER):
         problem("Run flask --app backend.app migrate-storage", 503)
-    original = deepcopy(doc.data)
-    state = deepcopy(original)
+    from .trade_context import Context
+
+    receipt = db.session.get(TradeCommand, (g.user.id, request_key))
+    context = Context(
+        receipt.resource if receipt else key,
+        receipt.identity if receipt else identity,
+        data,
+    )
+    original = context.original
+    state = context.state
     row = find(state, key, identity) if identity is not None else None
     if row:
         permission = action_permission(key, action, row) if action else "edit"
@@ -1488,13 +1511,11 @@ def execute(key, identity=None, action=None):
         for value in state.get(resource, []):
             validate_numbers(value)
     # Existing immutable stock/accounting services participate in this same transaction.
-    from .storage import persist
-
-    stored = persist(state)
+    context.persist()
     result = db.session.execute(
         update(Document)
         .where(Document.name == "app", Document.revision == doc.revision)
-        .values(stored_data=stored, revision=doc.revision + 1)
+        .values(revision=doc.revision + 1)
         .execution_options(synchronize_session=False)
     )
     if result.rowcount != 1:

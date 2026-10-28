@@ -497,8 +497,16 @@ def persist(data):
         db.session.flush()
     for key, value, row in pending:
         assign_lines(key, value, row, available)
+        from .workflow_keys import replace, links
+
+        replace(key, value)
+        links(key, row)
     db.session.flush()
     for row in reversed(removed):
+        from .workflow_keys import remove
+
+        key = next(k for k, m in MODELS.items() if isinstance(row, m))
+        remove(key, row.id)
         db.session.delete(row)
     return {**{k: v for k, v in data.items() if k not in SPECS}, MARKER: 1}
 

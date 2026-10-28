@@ -116,8 +116,12 @@ versioned commands; see [phase 4](FINANCE_MIGRATION.md). Administration now uses
 [phase 5](INVENTORY_MIGRATION.md). Manufacturing now uses native BoM/order screens with snapshots, availability and
 versioned actions; see [phase 6](MANUFACTURING_MIGRATION.md). Expenses now uses native scoped claims, receipts and versioned approval/reimbursement commands; see [phase 7](EXPENSES_MIGRATION.md). Overview and the older CRM company/quote registers now use native screens; the latter have two canonical SQL tables. See [phase 9](OVERVIEW_CRM_MIGRATION.md). Company/role configuration and creator attribution remain finite stored metadata.
 
-Trade commands still reuse server-side cross-register compatibility validation/posting,
-so further query-local validation/load testing is required for large data volumes.
+Native trade and HR commands now load query-local workflow/employee records and write
+only changed rows, retaining shared financial calculations/posting. CRM lead/reminder
+scope checks also avoid aggregate projection. [Phase 10](QUERY_LOCAL_HARDENING.md)
+covers derived conflict indexes, concurrent actions, backup/restore drills and remaining
+single-workflow/throughput limits. Bulk adapters remain for explicit compatibility,
+import/export and migration operations.
 Full-page view navigation remains. Accessibility, document acceptance beyond the tested
 print layouts, organization scopes and multicurrency remain separate work. This stage
 alone does not establish large-scale production readiness.

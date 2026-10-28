@@ -4,7 +4,7 @@ The original 26 October baseline is retained below. The Sales/Purchasing phase a
 native React form execution in Chromium and canonical SQL header/line storage.
 [Phase 2](TRADE_MIGRATION.md) describes current scope and upgrade instructions.
 
-Current checks include 119 backend scenarios, 50 shared screen/view renders and real
+Current checks include 128 backend scenarios, 50 shared screen/view renders and real
 browser flows: request → RFQ → comparison/award → PO → two receipts/bills → partial
 and full payments; CRM lead → draft edit/print → approval/acceptance → order → two
 deliveries/invoices → partial and full collections. Backend cases independently
@@ -24,6 +24,10 @@ forms/import-export. See [phase 8](ADMINISTRATION_MIGRATION.md).
 Overview and remaining CRM register coverage includes exact historical migration/rollback,
 quote/lead privacy, non-posting tracking statuses, safe seed eligibility and native browser
 forms. See [phase 9](OVERVIEW_CRM_MIGRATION.md).
+
+Query-local workflow verification now includes aggregate-projection barriers, 1,000
+unrelated trade rows plus 1,000 employees, concurrent payroll, derived index integrity
+and full SQLite/PostgreSQL backup/restore drills. See [phase 10](QUERY_LOCAL_HARDENING.md).
 
 ## Earlier baseline — 26 October 2026
 

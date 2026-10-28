@@ -128,6 +128,20 @@ def values(key, data, previous=None):
     return result
 
 
+def crm_scope_state(key, *values):
+    """CRM ownership checks need config and referenced leads, not every register."""
+    state = {"roles": configuration()["roles"], "leads": []}
+    if key == "reminders":
+        from .master_store import Lead
+
+        identities = {
+            str(v["leadId"]) for v in values if v and v.get("leadId") is not None
+        }
+        for lead in db.session.scalars(select(Lead).where(Lead.id.in_(identities))):
+            state["leads"].append(record("leads", lead))
+    return state
+
+
 def save_record(key, identity, normalize):
     """A native save touches one SQL master and metadata, never the aggregate lists."""
     permit(key, "create" if identity is None else "edit")
@@ -141,7 +155,7 @@ def save_record(key, identity, normalize):
     if old and key in ("leads", "reminders"):
         from .permissions import in_scope
 
-        if not in_scope(g.user, old, key, doc.data):
+        if not in_scope(g.user, old, key, crm_scope_state(key, old)):
             problem("Record not found", 404)
     if identity is not None:
         if old is None:
@@ -220,7 +234,7 @@ def save_record(key, identity, normalize):
         from .app import merge_collection
         from .permissions import in_scope
 
-        state = doc.data
+        state = crm_scope_state(key, old, changed)
         if old and not in_scope(g.user, old, key, state):
             problem("Record not found", 404)
         changed = merge_collection(key, [changed], [old] if old else [], state, key)[0]
