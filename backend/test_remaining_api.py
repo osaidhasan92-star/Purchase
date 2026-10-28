@@ -210,6 +210,7 @@ def test_crm_register_versions_replay_validation_and_paging(app):
 
 def test_overview_permission_filtered_totals_and_seed(app):
     c, h = session(app)
+    assert "view=overview" in c.get("/dashboard.html").headers["Location"]
     assert c.get("/api/overview/summary").json["canSeed"] is True
     assert c.post("/api/erp/seed-demo", headers=h, json={}).status_code == 200
     r = c.get("/api/overview/summary").json

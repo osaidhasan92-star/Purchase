@@ -4,7 +4,7 @@ ERP Overview (`erp.html?view=overview`), CRM Companies (`view=companies`) and th
 CRM Quote Register (`view=crm-quotes`) now use React/strict TypeScript in the shared
 workspace. CRM submenus expose the two registers only when the user already has
 Companies / crmQuotes view grants. Existing role grants are not silently broadened.
-No blue dashboard hero, Refresh control or Company profile page is added.
+The old dashboard URL and `view=dashboard` resolve to the same native Overview, removing the duplicate legacy executive dashboard. No blue dashboard hero, Refresh control or Company profile page is added.
 
 ## Overview
 

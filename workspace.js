@@ -27,6 +27,7 @@ document.addEventListener('click',event=>{
 
 if(location.pathname.endsWith('/erp.html')){
  const url=new URL(location.href),view=url.searchParams.get('view')||'overview';
+ if(view==='dashboard')url.searchParams.set('view','overview');
  if(!Object.hasOwn(WORKSPACE_ROUTES,view)&&!['overview', 'accounting', 'accounts', 'journals', 'reports', 'aged', 'bank', 'inventory', 'manufacturing', 'boms', 'expenses', 'stock-moves', 'production-orders', 'expense-claims'].includes(view))url.searchParams.set('view','overview');
  else if(!url.searchParams.has('view'))url.searchParams.set('view','overview');
  if(url.href!==location.href)history.replaceState(null,'',url);
