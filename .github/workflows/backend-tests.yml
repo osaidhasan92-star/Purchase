@@ -1,0 +1,82 @@
+name: Backend and frontend checks
+on: [push, pull_request]
+jobs:
+  sqlite:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: pip install -r backend/requirements.txt pytest
+      - run: python -m pytest backend -q
+      - run: for file in app.js backend-client.js crm.js sales.js sales_patch.js hr.js erp.js workspace.js workspace-loader.js trade-workspace.js finance-workspace.js inventory-workspace.js production-workspace.js expense-workspace.js admin-workspace.js remaining-workspace.js hr-workspace.js admin-data.js; do node --check "$file"; done
+      - run: npm ci
+      - run: npm run check:format
+      - run: npm run build:frontend
+      - run: git diff --exit-code -- frontend-dist
+      - run: npm run test:dom
+  postgres:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: purchase_test
+          POSTGRES_USER: purchase
+          POSTGRES_PASSWORD: isolated-test-password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U purchase -d purchase_test"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+    env:
+      TEST_DATABASE_URL: postgresql+psycopg://purchase:isolated-test-password@localhost:5432/purchase_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r backend/requirements.txt pytest
+      - run: python -m pytest backend -q
+      - name: Isolated PostgreSQL capacity baseline
+        env:
+          POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
+          CAPACITY_DATABASE_URL: postgresql+psycopg://purchase:isolated-test-password@localhost:5432/purchase_capacity_test
+        run: |
+          docker exec "$POSTGRES_CONTAINER" createdb -U purchase purchase_capacity_test
+          python -m backend.capacity_probe --rows 1000 --workers 1 4 8 --iterations 3 --output capacity-report.json
+          cat capacity-report.json
+      - name: Verify PostgreSQL backup and restore
+        env:
+          POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
+          BACKUP_SOURCE_URL: postgresql+psycopg://purchase:isolated-test-password@localhost:5432/purchase_backup_source
+          BACKUP_RESTORE_URL: postgresql+psycopg://purchase:isolated-test-password@localhost:5432/purchase_backup_restore
+        run: |
+          docker exec "$POSTGRES_CONTAINER" createdb -U purchase purchase_backup_source
+          docker exec "$POSTGRES_CONTAINER" createdb -U purchase purchase_backup_restore
+          python -m backend.backup_verify prepare
+          docker exec "$POSTGRES_CONTAINER" pg_dump -U purchase -Fc purchase_backup_source > /tmp/purchase-backup-drill.dump
+          docker exec -i "$POSTGRES_CONTAINER" pg_restore -U purchase -d purchase_backup_restore < /tmp/purchase-backup-drill.dump
+          python -m backend.backup_verify compare
+
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: pip install -r backend/requirements.txt
+      - run: npm ci
+      - run: npm run check:format
+      - run: npm run build:frontend
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:browser

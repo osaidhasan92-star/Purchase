@@ -1,0 +1,29 @@
+{
+  "name": "purchase-erp",
+  "private": true,
+  "scripts": {
+    "test:dom": "node tests/dom-smoke.cjs",
+    "typecheck": "tsc -p frontend/tsconfig.json",
+    "build:frontend": "npm run typecheck && node frontend/build.mjs",
+    "dev:frontend": "node frontend/build.mjs --watch",
+    "test:browser": "node tests/browser-smoke.cjs",
+    "format:frontend": "prettier --write frontend",
+    "check:format": "prettier --check frontend"
+  },
+  "devDependencies": {
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "esbuild": "0.28.2",
+    "jsdom": "26.1.0",
+    "playwright": "1.64.1",
+    "prettier": "3.9.10",
+    "typescript": "7.0.2"
+  },
+  "dependencies": {
+    "react": "19.3.1",
+    "react-dom": "19.3.1"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
