@@ -151,3 +151,36 @@ class Context:
                 )
                 db.session.flush()
                 replace(key, value)
+
+
+def resource_references(key, target, data, creating):
+    """Resolve immutable references under the shared global gate, before validation."""
+    from .db_contention import ReferenceLock
+
+    source = (
+        store.record(key, target) if target is not None else data if creating else {}
+    )
+    if key == "candidates":
+        parent = source.get("manpowerId")
+        if not isinstance(parent, bool) and isinstance(parent, (str, int)):
+            return [ReferenceLock(store.Manpower, parent)]
+    elif key == "attendance":
+        if creating or source.get("employeeKey"):
+            parent = source.get("employeeKey")
+            if not isinstance(parent, bool) and isinstance(parent, (str, int)):
+                return [ReferenceLock(store.Employee, parent, shared=False)]
+        elif source.get("employee"):
+            # Match the existing canonical/legacy normalization exactly. Employee
+            # mutations require the exclusive global gate, so this bounded lookup
+            # stays stable until the transaction ends. Never invent an ambiguous FK.
+            label = (
+                func.coalesce(store.Employee.number, "")
+                + " - "
+                + func.coalesce(store.Employee.name, "")
+            )
+            matches = db.session.scalars(
+                select(store.Employee.id).where(label == source["employee"]).limit(2)
+            ).all()
+            if len(matches) == 1:
+                return [ReferenceLock(store.Employee, matches[0], shared=False)]
+    return []

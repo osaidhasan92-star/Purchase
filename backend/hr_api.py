@@ -550,26 +550,18 @@ def command(key, identity=None, action=None):
         )
     )
     resource_path = False
-    if key in ("manpower", "candidates") and current_app.config["HR_RESOURCE_LOCKING"]:
+    if (
+        key in ("manpower", "candidates", "attendance")
+        and current_app.config["HR_RESOURCE_LOCKING"]
+    ):
         from .db_contention import acquire_resource
-
-        def references(target):
-            if key != "candidates":
-                return []
-            # Existing candidate links are immutable; retain legacy unresolved
-            # references by decoding the canonical record rather than only its FK.
-            source = (
-                store.record(key, target)
-                if target is not None
-                else data if identity is None else {}
-            )
-            parent = source.get("manpowerId")
-            if isinstance(parent, bool) or not isinstance(parent, (str, int)):
-                return []
-            return [(store.Manpower, parent)]
+        from .hr_context import resource_references
 
         resource_path = acquire_resource(
-            store.MODELS[key], identity, request_key, references
+            store.MODELS[key],
+            identity,
+            request_key,
+            lambda target: resource_references(key, target, data, identity is None),
         )
     else:
         lock()
@@ -731,7 +723,7 @@ def command(key, identity=None, action=None):
         problem("Another user saved newer records", 409)
     if not resource_path:
         sync_business(original, state, "hr")
-    # Manpower and candidate commands have no ledger, stock, employee or account effects.
+    # Manpower, candidate and attendance commands have no economic or account effects.
     # Calling the legacy economic adapter here would upgrade the shared gate and
     # reintroduce global serialization (or a lock-upgrade deadlock).
     db.session.add(

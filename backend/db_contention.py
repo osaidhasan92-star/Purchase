@@ -1,5 +1,6 @@
 """Bounded ERP lock acquisition; a busy transaction rolls back before HTTP retry."""
 
+from typing import NamedTuple
 from flask import current_app
 from sqlalchemy import select, update, func
 from sqlalchemy.exc import OperationalError
@@ -7,6 +8,12 @@ from sqlalchemy.exc import OperationalError
 
 class DatabaseBusy(Exception):
     pass
+
+
+class ReferenceLock(NamedTuple):
+    model: type
+    identity: str | int
+    shared: bool = True
 
 
 def acquire():
@@ -98,13 +105,13 @@ def acquire_resource(model, identity, request_key, references=None):
         # References are resolved from the locked current target, not a stale
         # pre-lock read or editable caller input. Lock parents before validation.
         parents = references(target) if references else []
-        for parent_model, parent_id in sorted(
-            parents, key=lambda p: (p[0].__tablename__, str(p[1]))
+        for parent in sorted(
+            parents, key=lambda p: (p.model.__tablename__, str(p.identity))
         ):
             db.session.scalar(
-                select(parent_model)
-                .where(parent_model.id == str(parent_id))
-                .with_for_update(read=True)
+                select(parent.model)
+                .where(parent.model.id == str(parent.identity))
+                .with_for_update(read=parent.shared)
                 .execution_options(populate_existing=True)
             )
         # Legacy account/session endpoints do not all take the ERP lock. Protect

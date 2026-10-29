@@ -31,9 +31,47 @@ def manpower(c, h, key):
     return r.json["record"]
 
 
+def employee(c, h, key):
+    r = c.post(
+        "/api/hr/records/employees",
+        headers=h,
+        json=dict(
+            requestKey="employee-" + key,
+            employeeId="EMP-" + key,
+            name="Synthetic employee",
+            department="Production",
+            designation="Operator",
+            joiningDate="2020-01-01",
+            salary=10000,
+        ),
+    )
+    assert r.status_code == 200, r.json
+    return r.json["record"]
+
+
+def edit_values(resource, value):
+    if resource == "attendance":
+        return {"attendanceStatus": "Absent" if str(value).endswith("0") else "Late"}
+    return {"reason" if resource == "manpower" else "contact": value}
+
+
 def make_record(c, h, key, resource, parent=None):
     if resource == "manpower":
         return manpower(c, h, key)
+    if resource == "attendance":
+        parent = parent or employee(c, h, key)
+        r = c.post(
+            "/api/hr/records/attendance",
+            headers=h,
+            json=dict(
+                requestKey=key,
+                employeeKey=parent["id"],
+                date="2026-10-29",
+                attendanceStatus="Present",
+            ),
+        )
+        assert r.status_code == 200, r.json
+        return r.json["record"]
     payload = dict(
         requestKey=key,
         name="Synthetic candidate",
@@ -78,7 +116,7 @@ def _process_edit(url, identity, version, key, barrier, output, resource="manpow
             json={
                 "requestKey": key,
                 "version": version,
-                "reason" if resource == "manpower" else "contact": key,
+                **edit_values(resource, key),
             },
         )
         output.put(dict(status=r.status_code))
@@ -90,7 +128,7 @@ def _process_edit(url, identity, version, key, barrier, output, resource="manpow
             db.engine.dispose()
 
 
-@pytest.mark.parametrize("resource", ["manpower", "candidates"])
+@pytest.mark.parametrize("resource", ["manpower", "candidates", "attendance"])
 def test_postgres_independent_records_overlap_across_processes(app, resource):
     require_postgres(app)
     c, h = session(app)
@@ -144,16 +182,19 @@ def test_postgres_independent_records_overlap_across_processes(app, resource):
         output.close()
 
 
-@pytest.mark.parametrize("resource", ["manpower", "candidates"])
+@pytest.mark.parametrize("resource", ["manpower", "candidates", "attendance"])
 def test_postgres_same_key_replays_and_same_record_rejects_stale_edit(app, resource):
     require_postgres(app)
     clients = [session(app), session(app)]
+    parent = (
+        employee(*clients[0], "same-key-parent") if resource == "attendance" else None
+    )
     barrier = Barrier(2)
 
     def create(i):
         c, h = clients[i]
         barrier.wait(timeout=10)
-        return make_record(c, h, "same-key-resource", resource)
+        return make_record(c, h, "same-key-resource", resource, parent)
 
     with ThreadPoolExecutor(max_workers=2) as pool:
         rows = list(pool.map(create, range(2)))
@@ -174,7 +215,7 @@ def test_postgres_same_key_replays_and_same_record_rejects_stale_edit(app, resou
             json={
                 "requestKey": "race-edit-" + str(i),
                 "version": rows[0]["version"],
-                "reason" if resource == "manpower" else "contact": str(i),
+                **edit_values(resource, str(i)),
             },
         ).status_code
 
@@ -233,19 +274,25 @@ def test_postgres_resource_gate_and_global_writer_exclude_each_other(app):
     manpower(c, h, "exclusive-gate-test")
 
 
-@pytest.mark.parametrize("resource", ["manpower", "candidates"])
+@pytest.mark.parametrize("resource", ["manpower", "candidates", "attendance"])
 def test_resource_locking_rollback_switch_keeps_original_global_path(app, resource):
     app.config["HR_RESOURCE_LOCKING"] = False
     c, h = session(app)
+    parent = employee(c, h, "fallback-parent") if resource == "attendance" else None
     with app.app_context():
         before = db.session.get(ERPControl, 1).revision
-    row = make_record(c, h, "fallback-resource-001", resource)
-    assert row["status"] == ("Pending" if resource == "manpower" else "Applied")
+    row = make_record(c, h, "fallback-resource-001", resource, parent)
+    assert (
+        row["status"]
+        == {"manpower": "Pending", "candidates": "Applied", "attendance": "Recorded"}[
+            resource
+        ]
+    )
     with app.app_context():
         assert db.session.get(ERPControl, 1).revision > before
 
 
-@pytest.mark.parametrize("resource", ["manpower", "candidates"])
+@pytest.mark.parametrize("resource", ["manpower", "candidates", "attendance"])
 def test_resource_write_failure_rolls_back_record_revision_and_receipt(
     app, monkeypatch, resource
 ):
@@ -263,12 +310,9 @@ def test_resource_write_failure_rolls_back_record_revision_and_receipt(
         original(self)
         raise InvalidBusinessState("Injected rollback check")
 
-    field = "reason" if resource == "manpower" else "contact"
-    payload = {
-        "requestKey": "rollback-edit-001",
-        "version": row["version"],
-        field: "Changed",
-    }
+    changes = edit_values(resource, "Changed")
+    field = next(iter(changes))
+    payload = {"requestKey": "rollback-edit-001", "version": row["version"], **changes}
     monkeypatch.setattr(Context, "persist", fail)
     response = c.patch(
         "/api/hr/records/" + resource + "/" + row["id"], headers=h, json=payload
@@ -369,3 +413,162 @@ def test_candidate_rejection_and_onboarding_race_remain_consistent(app):
         assert employees == int(onboard == 200)
         assert db.session.scalar(select(func.count()).select_from(JournalEntry)) == 0
     assert result["stage"] == ("Hired" if onboard == 200 else "Rejected")
+
+
+def test_attendance_duplicate_employee_day_and_date_edit_conflict(app):
+    c, h = session(app)
+    parent = employee(c, h, "duplicate-day-parent")
+    clients = [session(app), session(app)]
+    barrier = Barrier(2)
+
+    def create(i):
+        client, headers = clients[i]
+        barrier.wait(timeout=10)
+        return client.post(
+            "/api/hr/records/attendance",
+            headers=headers,
+            json=dict(
+                requestKey="duplicate-day-" + str(i),
+                employeeKey=parent["id"],
+                date="2026-10-29",
+                attendanceStatus="Present",
+            ),
+        ).status_code
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        assert sorted(pool.map(create, range(2))) == [200, 409]
+    with app.app_context():
+        assert db.session.scalar(select(func.count()).select_from(hr.Attendance)) == 1
+    other = c.post(
+        "/api/hr/records/attendance",
+        headers=h,
+        json=dict(
+            requestKey="duplicate-day-other",
+            employeeKey=parent["id"],
+            date="2026-10-30",
+            attendanceStatus="Present",
+        ),
+    )
+    assert other.status_code == 200, other.json
+    row = other.json["record"]
+    response = c.patch(
+        "/api/hr/records/attendance/" + row["id"],
+        headers=h,
+        json=dict(
+            requestKey="duplicate-day-edit", version=row["version"], date="2026-10-29"
+        ),
+    )
+    assert response.status_code == 409, response.json
+    assert (
+        c.get("/api/hr/records/attendance/" + row["id"]).json["record"]["date"]
+        == "2026-10-30"
+    )
+
+
+def test_postgres_attendance_employee_lock_timeout_without_partial_create(app):
+    require_postgres(app)
+    c, h = session(app)
+    parent = employee(c, h, "employee-lock-parent")
+    app.config["ERP_LOCK_TIMEOUT_MS"] = 50
+    payload = dict(
+        requestKey="employee-lock-attendance",
+        employeeKey=parent["id"],
+        date="2026-10-29",
+        attendanceStatus="Present",
+    )
+    with app.app_context():
+        db.session.execute(
+            select(hr.Employee).where(hr.Employee.id == parent["id"]).with_for_update()
+        )
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            response = pool.submit(
+                lambda: c.post("/api/hr/records/attendance", headers=h, json=payload)
+            ).result(timeout=10)
+        assert response.status_code == 503, response.json
+        db.session.rollback()
+        assert db.session.scalar(select(func.count()).select_from(hr.Attendance)) == 0
+    response = c.post("/api/hr/records/attendance", headers=h, json=payload)
+    assert response.status_code == 200, response.json
+    replay = c.post("/api/hr/records/attendance", headers=h, json=payload)
+    assert replay.json["record"]["id"] == response.json["record"]["id"]
+
+
+def test_attendance_legacy_label_resolution_and_duplicate_guard(app):
+    from backend.hr_context import resource_references
+
+    c, h = session(app)
+    parent = employee(c, h, "legacy-label-parent")
+    label = parent["employeeId"] + " - " + parent["name"]
+    value = dict(
+        id="legacy-attendance",
+        employee=label,
+        date="2026-10-29",
+        attendanceStatus="Present",
+        status="Recorded",
+        createdBy="admin",
+    )
+    with app.app_context():
+        row = hr.Attendance(id=value["id"])
+        valid = {k: set() for k in hr.MODELS}
+        valid["user"] = {"admin"}
+        hr.write_one("attendance", value, row, 0, valid, [])
+        db.session.add(row)
+        db.session.commit()
+        assert row.employee_id is None
+        references = resource_references("attendance", row, {}, False)
+        assert len(references) == 1 and references[0].identity == parent["id"]
+        assert references[0].shared is False
+    response = c.post(
+        "/api/hr/records/attendance",
+        headers=h,
+        json=dict(
+            requestKey="legacy-label-duplicate",
+            employeeKey=parent["id"],
+            date="2026-10-29",
+            attendanceStatus="Present",
+        ),
+    )
+    assert response.status_code == 409, response.json
+    old = c.get("/api/hr/records/attendance/legacy-attendance").json["record"]
+    response = c.patch(
+        "/api/hr/records/attendance/legacy-attendance",
+        headers=h,
+        json=dict(
+            requestKey="legacy-label-edit",
+            version=old["version"],
+            attendanceStatus="Late",
+        ),
+    )
+    assert response.status_code == 200, response.json
+    assert response.json["record"]["employeeKey"] == parent["id"]
+    with app.app_context():
+        assert (
+            db.session.get(hr.Attendance, "legacy-attendance").employee_id
+            == parent["id"]
+        )
+    # Preserve an ambiguous historical label instead of assigning an arbitrary FK.
+    with app.app_context():
+        duplicate = {k: v for k, v in parent.items() if k != "version"}
+        duplicate["id"] = "duplicate-legacy-employee"
+        e = hr.Employee(id=duplicate["id"])
+        hr.write_one("employees", duplicate, e, 1, valid, [])
+        db.session.add(e)
+        ambiguous = {**value, "id": "ambiguous-attendance", "date": "2026-10-30"}
+        a = hr.Attendance(id=ambiguous["id"])
+        hr.write_one("attendance", ambiguous, a, 1, valid, [])
+        db.session.add(a)
+        db.session.commit()
+        assert resource_references("attendance", a, {}, False) == []
+    old = c.get("/api/hr/records/attendance/ambiguous-attendance").json["record"]
+    response = c.patch(
+        "/api/hr/records/attendance/ambiguous-attendance",
+        headers=h,
+        json=dict(
+            requestKey="ambiguous-label-edit",
+            version=old["version"],
+            attendanceStatus="Late",
+        ),
+    )
+    assert response.status_code == 409, response.json
+    with app.app_context():
+        assert db.session.get(hr.Attendance, "ambiguous-attendance").employee_id is None
