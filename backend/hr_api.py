@@ -441,8 +441,8 @@ def normalize(key, data, row, state, creating):
     if key == "leaves":
         if row["leaveType"] not in ("Annual", "Sick", "Casual", "Unpaid"):
             problem("Invalid leave type")
-        start = date.fromisoformat(row["from"])
-        end = date.fromisoformat(row["to"])
+        start = date.fromisoformat(on_date(row, "from"))
+        end = date.fromisoformat(on_date(row, "to"))
         if end < start:
             problem("Leave end must follow its start")
         row["days"] = (end - start).days + 1
@@ -551,7 +551,7 @@ def command(key, identity=None, action=None):
     )
     resource_path = False
     if (
-        key in ("manpower", "candidates", "attendance")
+        key in ("manpower", "candidates", "attendance", "leaves")
         and current_app.config["HR_RESOURCE_LOCKING"]
     ):
         from .db_contention import acquire_resource
@@ -704,6 +704,15 @@ def command(key, identity=None, action=None):
         if not editable(key, row):
             problem("Only editable HR records may change", 409)
         normalize(key, data, row, state, False)
+    # Live leave actions must retain the date validation previously performed by
+    # the global economic adapter. Reject/cancel remain available for bad history.
+    if key == "leaves" and row.get("status") not in ("Rejected", "Cancelled"):
+        if action == "approve":
+            employee_for(state, row)
+        start = on_date(row, "from")
+        end = on_date(row, "to")
+        if end < start:
+            problem("Leave end must follow its start")
     validate_state(state)
     context.validate()
     context.persist()
@@ -723,7 +732,7 @@ def command(key, identity=None, action=None):
         problem("Another user saved newer records", 409)
     if not resource_path:
         sync_business(original, state, "hr")
-    # Manpower, candidate and attendance commands have no economic or account effects.
+    # Manpower, candidate, attendance and leave commands have no economic/account effects.
     # Calling the legacy economic adapter here would upgrade the shared gate and
     # reintroduce global serialization (or a lock-upgrade deadlock).
     db.session.add(

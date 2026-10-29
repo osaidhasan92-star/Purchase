@@ -1,12 +1,12 @@
-# Resource concurrency — phases 12–14
+# Resource concurrency — phases 12–15
 
 ## Converted non-economic HR workflows
 
-Native **HR manpower requests, recruitment candidates and attendance** use
+Native **HR manpower requests, recruitment candidates, attendance and leave** use
 resource-level locking on PostgreSQL: create, edit, supported status actions and
 command replay. These workflows create no stock, journals, payroll, employees or
 login accounts. Candidate onboarding is still an explicit employee-create command
-using the global economic lock. Employee changes, leave, payroll, offboarding and
+using the global economic lock. Employee changes, payroll, offboarding and
 Sales/Purchase/Inventory/Finance/Manufacturing mutations retain the global economic
 write lock. SQLite retains the previous global path for all commands.
 
@@ -32,9 +32,10 @@ scale in parallel or that the system is ready for large companies.
    manpower row before validation. Two candidates can share one approved parent while
    a parent edit/approval waits. Missing/optional historical references retain their
    existing validation and transition behavior; no invented link is introduced.
-   Attendance takes an **exclusive employee-row lock** instead of a shared parent
-   lock, before its employee/date conflict query. Different employees can proceed
-   together; the same employee's attendance commands serialize, even across dates.
+   Attendance and leave take an **exclusive employee-row lock** instead of a shared parent
+   lock before employee/date or leave-range conflict queries. Different employees can
+   proceed together; one employee's attendance and leave commands serialize, even
+   across dates and across these two registers.
    An existing record's employee reference is immutable. A legacy label-only record
    uses a bounded lookup and locks the employee only when exactly one match exists.
    Ambiguous/missing labels do not acquire a guessed foreign key and edits fail.
@@ -46,7 +47,10 @@ scale in parallel or that the system is ready for large companies.
    business number or cross-record uniqueness rule; candidates likewise have no
    unique-name/contact rule. Database primary keys and the request-key mutex protect
    identities and receipts. Attendance's SQL employee/date uniqueness check is
-   protected by its exclusive employee lock across create and date edits. Legacy
+   protected by its exclusive employee lock across create and date edits. Leave's
+   inclusive range check uses that same lock for submissions, edits and transitions;
+   Pending/Approved (and other nonterminal legacy statuses) reserve their dates,
+   while Rejected/Cancelled requests do not. Legacy
    aggregate writers are excluded by the shared ERP gate. No new database unique
    constraint is introduced: historical duplicates remain preserved and direct SQL
    writers outside this protocol are not supported. Unchanged parents are not rewritten.
@@ -58,12 +62,12 @@ scale in parallel or that the system is ready for large companies.
    record without changing the revision or writing another receipt/audit.
 
 Resource commands deliberately bypass the legacy HR economic synchronization adapter,
-which reacquires an exclusive ERP lock. Only the allowlisted manpower/candidate/attendance paths
+which reacquires an exclusive ERP lock. Only the allowlisted manpower/candidate/attendance/leave paths
 do so; their state has no posting or offboarding effects. Candidate stage actions do
 not fabricate employees. The employee-create/onboarding path remains globally locked,
 so it cannot read an offer while a candidate rejection changes it. If rejection wins,
 onboarding fails; if onboarding wins, the candidate is Hired and rejection is unavailable.
-Extending resource locking to payroll, employees, leave or stock requires separate
+Extending resource locking to payroll, employees or stock requires separate
 invariant and lock-order analysis.
 
 ERP lock waiting, target/parent-row locks, account/session locks and advisory-mutex waits
@@ -71,6 +75,25 @@ use `ERP_LOCK_TIMEOUT_MS` during acquisition (default 5000ms). The prior Postgre
 transaction timeout is restored afterward. Recognized timeout/deadlock failures roll
 back and return 503 with `Retry-After: 1`; versions and same-key retry semantics remain.
 There is no sleeping or automatic retry inside a transaction.
+
+## Leave workflow and validation
+
+Leave uses the existing permission and employee/self/direct-manager scope checks.
+Approval remains a separate permission; having a manager relationship alone does not
+supply that permission. The existing transitions remain Pending → Approved, Rejected
+or Cancelled. Approved requests remain immutable and cannot be cancelled through this
+API. Rejected/Cancelled dates can be requested again. This phase does not introduce
+leave balances, accruals, holiday calendars or automatic payroll deductions.
+
+Live leave dates are validated explicitly before persistence, including approval of
+historical rows, because the resource path bypasses the legacy economic adapter that
+previously checked them. Approval also requires an unambiguous valid employee reference; unresolved historical
+labels must be reviewed rather than assigned an arbitrary employee. Invalid/reversed
+dates fail without partial changes; rejecting
+or cancelling a malformed Pending record remains possible. Historical overlapping
+Pending rows cannot both be approved: resolve the conflicting request first. The new
+range check preserves existing behavior, including treating missing legacy status as
+live. No database exclusion constraint or rewrite of historical leave is introduced.
 
 ## Upgrade and rollback
 
@@ -80,7 +103,7 @@ installations upgrading across earlier phases. Do not reseed existing installati
 The frontend and compiled assets are unchanged.
 
 `HR_RESOURCE_LOCKING=true` is the default. Set `HR_RESOURCE_LOCKING=false` in the
-environment and restart all workers to restore the original global manpower/candidate/attendance paths.
+environment and restart all workers to restore the original global manpower/candidate/attendance/leave paths.
 The Compose configuration passes this setting through. It does not change stored
 business data or undo previous valid commands. Keep all workers on the same release
 and use the normal stopped-worker upgrade procedure for predictable deployment.
@@ -91,14 +114,14 @@ The regression suite includes:
 
 - Two **separate spawned processes**, each with its own Flask application, pool,
   session and connection, editing distinct manpower requests, distinct candidates,
-  or attendance for different employees. Candidates share one approved manpower
+  or attendance/leave for different employees. Candidates share one approved manpower
   parent; attendance uses distinct employee parents. A synchronization barrier inside
   validation can complete only if both commands have reached that point while holding
   their locks. Both succeed; HR revision increases by two, the global ERP revision
   stays unchanged and no journal is created.
 - Concurrent identical-key creates return one identity and one stored record for
   each resource. Concurrent edits of the same version yield one success and one 409
-  conflict. All three resources also have rollback and global-fallback coverage.
+  conflict. All four resources also have rollback and global-fallback coverage.
 - A global exclusive writer blocks a resource command, and a resource shared gate
   blocks a global writer; bounded waits return 503 without partial records.
 - An injected failure after row persistence rolls back the record, revision and
@@ -116,8 +139,16 @@ lock test verifies bounded wait, no partial attendance and same-key retry/replay
 release. Legacy tests cover both unambiguous label conversion and rejection of
 ambiguous labels without inventing a foreign key.
 
-Nine PostgreSQL-specific cases skip on SQLite and run in PostgreSQL CI. The fallback,
-failure, duplicate/date-edit, legacy-label and onboarding-race regressions run on both
+Leave verification also races overlapping submissions with a shared inclusive date,
+checks that adjacent days are allowed and overlapping date edits roll back, and races
+new submissions against cancellation/rejection. Approval versus cancellation yields
+one success and one stale conflict; exact-key replay writes no second audit. Legacy
+overlapping approvals fail until one request is rejected. Manager, self and unrelated
+users exercise separate permission/scope rules. Malformed or ambiguously linked historical approvals fail while rejection remains
+available without inventing an employee link.
+
+Twelve PostgreSQL-specific cases skip on SQLite and run in PostgreSQL CI. The fallback,
+failure, duplicate/date-edit, leave-range/transition/scope, legacy-label and onboarding-race regressions run on both
 databases. A successful two-process
 rendezvous proves overlap and correctness at that boundary; it does not measure
 sustained HTTP throughput or demonstrate that 25 production users are supported.

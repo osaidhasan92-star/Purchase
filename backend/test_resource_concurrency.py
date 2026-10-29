@@ -52,12 +52,30 @@ def employee(c, h, key):
 def edit_values(resource, value):
     if resource == "attendance":
         return {"attendanceStatus": "Absent" if str(value).endswith("0") else "Late"}
+    if resource == "leaves":
+        return {"reason": value}
     return {"reason" if resource == "manpower" else "contact": value}
 
 
 def make_record(c, h, key, resource, parent=None):
     if resource == "manpower":
         return manpower(c, h, key)
+    if resource == "leaves":
+        parent = parent or employee(c, h, key)
+        r = c.post(
+            "/api/hr/records/leaves",
+            headers=h,
+            json={
+                "requestKey": key,
+                "employeeKey": parent["id"],
+                "from": "2026-11-01",
+                "to": "2026-11-03",
+                "leaveType": "Annual",
+                "reason": "Personal",
+            },
+        )
+        assert r.status_code == 200, r.json
+        return r.json["record"]
     if resource == "attendance":
         parent = parent or employee(c, h, key)
         r = c.post(
@@ -128,7 +146,7 @@ def _process_edit(url, identity, version, key, barrier, output, resource="manpow
             db.engine.dispose()
 
 
-@pytest.mark.parametrize("resource", ["manpower", "candidates", "attendance"])
+@pytest.mark.parametrize("resource", ["manpower", "candidates", "attendance", "leaves"])
 def test_postgres_independent_records_overlap_across_processes(app, resource):
     require_postgres(app)
     c, h = session(app)
@@ -182,12 +200,14 @@ def test_postgres_independent_records_overlap_across_processes(app, resource):
         output.close()
 
 
-@pytest.mark.parametrize("resource", ["manpower", "candidates", "attendance"])
+@pytest.mark.parametrize("resource", ["manpower", "candidates", "attendance", "leaves"])
 def test_postgres_same_key_replays_and_same_record_rejects_stale_edit(app, resource):
     require_postgres(app)
     clients = [session(app), session(app)]
     parent = (
-        employee(*clients[0], "same-key-parent") if resource == "attendance" else None
+        employee(*clients[0], "same-key-parent")
+        if resource in ("attendance", "leaves")
+        else None
     )
     barrier = Barrier(2)
 
@@ -274,25 +294,32 @@ def test_postgres_resource_gate_and_global_writer_exclude_each_other(app):
     manpower(c, h, "exclusive-gate-test")
 
 
-@pytest.mark.parametrize("resource", ["manpower", "candidates", "attendance"])
+@pytest.mark.parametrize("resource", ["manpower", "candidates", "attendance", "leaves"])
 def test_resource_locking_rollback_switch_keeps_original_global_path(app, resource):
     app.config["HR_RESOURCE_LOCKING"] = False
     c, h = session(app)
-    parent = employee(c, h, "fallback-parent") if resource == "attendance" else None
+    parent = (
+        employee(c, h, "fallback-parent")
+        if resource in ("attendance", "leaves")
+        else None
+    )
     with app.app_context():
         before = db.session.get(ERPControl, 1).revision
     row = make_record(c, h, "fallback-resource-001", resource, parent)
     assert (
         row["status"]
-        == {"manpower": "Pending", "candidates": "Applied", "attendance": "Recorded"}[
-            resource
-        ]
+        == {
+            "manpower": "Pending",
+            "candidates": "Applied",
+            "attendance": "Recorded",
+            "leaves": "Pending",
+        }[resource]
     )
     with app.app_context():
         assert db.session.get(ERPControl, 1).revision > before
 
 
-@pytest.mark.parametrize("resource", ["manpower", "candidates", "attendance"])
+@pytest.mark.parametrize("resource", ["manpower", "candidates", "attendance", "leaves"])
 def test_resource_write_failure_rolls_back_record_revision_and_receipt(
     app, monkeypatch, resource
 ):
@@ -465,16 +492,22 @@ def test_attendance_duplicate_employee_day_and_date_edit_conflict(app):
     )
 
 
-def test_postgres_attendance_employee_lock_timeout_without_partial_create(app):
+@pytest.mark.parametrize("resource", ["attendance", "leaves"])
+def test_postgres_employee_lock_timeout_without_partial_create(app, resource):
     require_postgres(app)
     c, h = session(app)
     parent = employee(c, h, "employee-lock-parent")
     app.config["ERP_LOCK_TIMEOUT_MS"] = 50
-    payload = dict(
-        requestKey="employee-lock-attendance",
-        employeeKey=parent["id"],
-        date="2026-10-29",
-        attendanceStatus="Present",
+    payload = dict(requestKey="employee-lock-" + resource, employeeKey=parent["id"])
+    payload.update(
+        dict(date="2026-10-29", attendanceStatus="Present")
+        if resource == "attendance"
+        else {
+            "from": "2026-11-01",
+            "to": "2026-11-03",
+            "leaveType": "Annual",
+            "reason": "Personal",
+        }
     )
     with app.app_context():
         db.session.execute(
@@ -482,14 +515,17 @@ def test_postgres_attendance_employee_lock_timeout_without_partial_create(app):
         )
         with ThreadPoolExecutor(max_workers=1) as pool:
             response = pool.submit(
-                lambda: c.post("/api/hr/records/attendance", headers=h, json=payload)
+                lambda: c.post("/api/hr/records/" + resource, headers=h, json=payload)
             ).result(timeout=10)
         assert response.status_code == 503, response.json
         db.session.rollback()
-        assert db.session.scalar(select(func.count()).select_from(hr.Attendance)) == 0
-    response = c.post("/api/hr/records/attendance", headers=h, json=payload)
+        assert (
+            db.session.scalar(select(func.count()).select_from(hr.MODELS[resource]))
+            == 0
+        )
+    response = c.post("/api/hr/records/" + resource, headers=h, json=payload)
     assert response.status_code == 200, response.json
-    replay = c.post("/api/hr/records/attendance", headers=h, json=payload)
+    replay = c.post("/api/hr/records/" + resource, headers=h, json=payload)
     assert replay.json["record"]["id"] == response.json["record"]["id"]
 
 
