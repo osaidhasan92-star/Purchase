@@ -358,8 +358,9 @@ lock remains until replacement strategies pass concurrent economic invariants.
 
 ### Resource concurrency
 
-[Phase-12 resource concurrency](docs/RESOURCE_CONCURRENCY.md) enables PostgreSQL
-manpower-request commands to work on independent records in parallel, with a shared
-compatibility gate, per-record locking and same-key retry protection. Economic writes
-and SQLite retain the global path. `HR_RESOURCE_LOCKING=false` restores global
-manpower locking. This is incremental work toward concurrency, not enterprise certification.
+[Resource concurrency, phases 12–13](docs/RESOURCE_CONCURRENCY.md) enables PostgreSQL
+manpower and recruitment-candidate commands to work on independent records in parallel,
+with a shared compatibility gate, per-record and parent-reference locking, and same-key
+retry protection. Employee onboarding, economic writes and SQLite retain the global
+path. `HR_RESOURCE_LOCKING=false` restores global non-economic HR locking. This is
+incremental work toward concurrency, not enterprise certification.
