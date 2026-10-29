@@ -16,7 +16,7 @@ scale in parallel or that the system is ready for large companies.
 
 1. Acquire `SELECT ... FOR SHARE` on the existing ERP control row. Multiple resource
    commands can share this gate; every existing global writer's UPDATE conflicts
-   with it. Bulk HR adapters, recruitment readers/writers, economic posting, role
+   with it. Bulk HR and onboarding adapters, economic posting, role
    configuration and native administration remain excluded until the resource
    transaction finishes. No new lock table or migration is needed.
 2. Acquire a transaction-scoped PostgreSQL advisory mutex derived from actor ID and
@@ -55,7 +55,7 @@ onboarding fails; if onboarding wins, the candidate is Hired and rejection is un
 Extending resource locking to payroll, employees, leave or stock requires separate
 invariant and lock-order analysis.
 
-ERP lock waiting, target-row locks, account/session locks and advisory-mutex waits
+ERP lock waiting, target/parent-row locks, account/session locks and advisory-mutex waits
 use `ERP_LOCK_TIMEOUT_MS` during acquisition (default 5000ms). The prior PostgreSQL
 transaction timeout is restored afterward. Recognized timeout/deadlock failures roll
 back and return 503 with `Retry-After: 1`; versions and same-key retry semantics remain.
