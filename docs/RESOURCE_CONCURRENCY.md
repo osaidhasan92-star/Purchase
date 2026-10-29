@@ -1,0 +1,96 @@
+# Resource concurrency — phase 12
+
+## First converted workflow
+
+Native **HR manpower requests only** use resource-level locking on PostgreSQL:
+create, edit, approve, reject and command replay. They have no stock, journal,
+payroll, employee or login-account side effects. Every other HR workflow and all
+Sales/Purchase/Inventory/Finance/Manufacturing mutations retain the global economic
+write lock. SQLite retains the previous global path for all commands.
+
+This is an incremental concurrency change, not a claim that economic writes now
+scale in parallel or that the system is ready for large companies.
+
+## PostgreSQL transaction order
+
+1. Acquire `SELECT ... FOR SHARE` on the existing ERP control row. Multiple resource
+   commands can share this gate; every existing global writer's UPDATE conflicts
+   with it. Bulk HR adapters, recruitment readers/writers, economic posting, role
+   configuration and native administration remain excluded until the resource
+   transaction finishes. No new lock table or migration is needed.
+2. Acquire a transaction-scoped PostgreSQL advisory mutex derived from actor ID and
+   request key. It serializes identical-key retries even before a receipt exists.
+   The hash is a stable signed 64-bit SHA-256 prefix. A collision causes extra
+   serialization, never permission expansion or loss of uniqueness.
+3. For an existing request, lock its row `FOR UPDATE` and refresh its values. Stale
+   version checks use this current record. Unrelated requests hold different row
+   locks and can validate/write independently.
+4. Share-lock the acting account and login session, then refresh/revalidate session,
+   account and permission configuration. The account/session locks also coordinate
+   legacy account and logout endpoints that do not take the ERP control lock.
+5. Run the existing permission, scope, normalization, status and version checks.
+   Persist changed records, command receipt and audit together. Manpower has no
+   business number or cross-record uniqueness rule; database primary keys and the
+   request-key mutex protect identities and receipts.
+6. Atomically increment `hr` document revision with `revision = revision + 1`.
+   This keeps legacy revision semantics without a stale whole-document compare and
+   swap. The metadata row still serializes a brief final portion of each commit;
+   this phase does not eliminate all shared rows.
+7. Commit, releasing all row/advisory locks. Replayed commands return the stored
+   record without changing the revision or writing another receipt/audit.
+
+Resource commands deliberately bypass the legacy HR economic synchronization adapter,
+which reacquires an exclusive ERP lock. Only the allowlisted manpower path does so;
+its state has no posting or offboarding effects. Extending this to payroll, employees,
+candidates, leave or stock requires separate invariant and lock-order analysis.
+
+ERP lock waiting, target-row locks, account/session locks and advisory-mutex waits
+use `ERP_LOCK_TIMEOUT_MS` during acquisition (default 5000ms). The prior PostgreSQL
+transaction timeout is restored afterward. Recognized timeout/deadlock failures roll
+back and return 503 with `Retry-After: 1`; versions and same-key retry semantics remain.
+There is no sleeping or automatic retry inside a transaction.
+
+## Upgrade and rollback
+
+Back up the database, replace application files and restart workers. This phase adds
+no schema or ledger migration. Standard `init-db`/`migrate-storage` remain safe for
+installations upgrading across earlier phases. Do not reseed existing installations.
+The frontend and compiled assets are unchanged.
+
+`HR_RESOURCE_LOCKING=true` is the default. Set `HR_RESOURCE_LOCKING=false` in the
+environment and restart all workers to restore the original global manpower path.
+The Compose configuration passes this setting through. It does not change stored
+business data or undo previous valid commands. Keep all workers on the same release
+and use the normal stopped-worker upgrade procedure for predictable deployment.
+
+## Verification
+
+The regression suite includes:
+
+- Two **separate spawned processes**, each with its own Flask application, pool,
+  session and connection, editing distinct requests. A synchronization barrier inside
+  validation can complete only if both commands have reached that point while holding
+  their locks. Both succeed; HR revision increases by two, the global ERP revision
+  stays unchanged and no journal is created.
+- Concurrent identical-key creates return one identity and one stored record.
+  Concurrent edits of the same version yield one success and one 409 conflict.
+- A global exclusive writer blocks a resource command, and a resource shared gate
+  blocks a global writer; bounded waits return 503 without partial records.
+- An injected failure after row persistence rolls back the record, revision and
+  receipt. The same key can subsequently succeed. Missing targets return 404.
+- Disabling the feature exercises the existing global path. Existing HR recruitment,
+  onboarding, access, payroll, offboarding and financial regressions remain required.
+
+The three PostgreSQL concurrency scenarios skip on SQLite and run in PostgreSQL CI.
+The fallback and failure regressions run on both databases. A successful two-process
+rendezvous proves overlap and correctness at that boundary; it does not measure
+sustained HTTP throughput or demonstrate that 25 production users are supported.
+
+## Remaining work
+
+Measure deployed multi-process HTTP traffic on a representative PostgreSQL host.
+Then convert the next workflow with its required database uniqueness and consistent
+resource lock order. Payroll/stock/period-close/reconciliation and source-line
+conservation must keep their existing exclusive lock until their replacements are
+explicitly tested. The phase-11 SQLite 25-client failure remains a valid recorded
+observation; this manpower-only change does not resolve the payroll bottleneck.

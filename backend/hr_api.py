@@ -4,7 +4,15 @@ from copy import deepcopy
 from datetime import date
 import re
 import secrets
-from flask import Blueprint, g, jsonify, request, render_template_string, make_response
+from flask import (
+    Blueprint,
+    g,
+    jsonify,
+    request,
+    render_template_string,
+    make_response,
+    current_app,
+)
 from sqlalchemy import select, or_, func, update
 from werkzeug.security import generate_password_hash, check_password_hash
 from .app import (
@@ -541,7 +549,13 @@ def command(key, identity=None, action=None):
             },
         )
     )
-    lock()
+    resource_path = False
+    if key == "manpower" and current_app.config["HR_RESOURCE_LOCKING"]:
+        from .db_contention import acquire_resource
+
+        resource_path = acquire_resource(store.Manpower, identity, request_key)
+    else:
+        lock()
     from .workflow_keys import revalidate_actor
 
     revalidate_actor()
@@ -557,6 +571,8 @@ def command(key, identity=None, action=None):
     original = context.original
     state = context.state
     row = find(state, key, identity) if identity is not None else None
+    if identity is not None and row is None:
+        problem("HR record not found", 404)
     if row is not None:
         scoped(key, identity)
     receipt = db.session.get(Command, (g.user.id, request_key))
@@ -682,15 +698,25 @@ def command(key, identity=None, action=None):
     validate_state(state)
     context.validate()
     context.persist()
+    revision_update = update(Document).where(Document.name == "hr")
+    if resource_path:
+        # A brief metadata-row update preserves legacy revision semantics without
+        # holding the global exclusive lock throughout independent record work.
+        revision_update = revision_update.values(revision=Document.revision + 1)
+    else:
+        revision_update = revision_update.where(
+            Document.revision == doc.revision
+        ).values(revision=doc.revision + 1)
     result = db.session.execute(
-        update(Document)
-        .where(Document.name == "hr", Document.revision == doc.revision)
-        .values(revision=doc.revision + 1)
-        .execution_options(synchronize_session=False)
+        revision_update.execution_options(synchronize_session=False)
     )
     if result.rowcount != 1:
         problem("Another user saved newer records", 409)
-    sync_business(original, state, "hr")
+    if not resource_path:
+        sync_business(original, state, "hr")
+    # Manpower-only commands have no ledger, stock, employee or account effects.
+    # Calling the legacy economic adapter here would upgrade the shared gate and
+    # reintroduce global serialization (or a lock-upgrade deadlock).
     db.session.add(
         Command(
             actor_id=g.user.id,

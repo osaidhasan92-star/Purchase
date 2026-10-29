@@ -399,6 +399,7 @@ def create_app(config=None):
     app.config.setdefault('ERP_LOCK_TIMEOUT_MS', int(os.environ.get('ERP_LOCK_TIMEOUT_MS', '5000')))
     if not isinstance(app.config['ERP_LOCK_TIMEOUT_MS'], int) or not 1 <= app.config['ERP_LOCK_TIMEOUT_MS'] <= 60000:
         raise ValueError('ERP_LOCK_TIMEOUT_MS must be between 1 and 60000')
+    app.config.setdefault('HR_RESOURCE_LOCKING', os.environ.get('HR_RESOURCE_LOCKING', 'true').lower() == 'true')
     db.init_app(app)
 
     @app.before_request

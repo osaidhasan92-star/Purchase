@@ -355,3 +355,11 @@ python -m backend.capacity_probe --rows 1000 --workers 1 4 8 --iterations 5 --ou
 
 This is a service baseline, not evidence of enterprise readiness. The shared write
 lock remains until replacement strategies pass concurrent economic invariants.
+
+### Resource concurrency
+
+[Phase-12 resource concurrency](docs/RESOURCE_CONCURRENCY.md) enables PostgreSQL
+manpower-request commands to work on independent records in parallel, with a shared
+compatibility gate, per-record locking and same-key retry protection. Economic writes
+and SQLite retain the global path. `HR_RESOURCE_LOCKING=false` restores global
+manpower locking. This is incremental work toward concurrency, not enterprise certification.
