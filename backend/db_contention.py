@@ -60,7 +60,7 @@ def acquire_resource(model, identity, request_key, references=None):
 
     Shared ERPControl row locks conflict with every existing global UPDATE writer.
     They are held until commit/rollback, so this path cannot race bulk adapters or
-    economic writers. Only explicitly reviewed non-economic commands use this path.
+    economic writers. Only explicitly reviewed commands use this path; payroll also locks its posting tail.
     """
     import hashlib
     from flask import g
@@ -130,6 +130,38 @@ def acquire_resource(model, identity, request_key, references=None):
         )
         db.session.execute(select(func.set_config("lock_timeout", prior, True)))
         return True
+    except OperationalError as error:
+        if getattr(error.orig, "sqlstate", None) in ("55P03", "40P01"):
+            db.session.rollback()
+            raise DatabaseBusy() from None
+        raise
+
+
+def acquire_payroll_posting():
+    """Serialize shared journal numbering/creator metadata and reconciliation tails.
+
+    Acquire after the shared ERP gate and employee lock, before HR revision updates.
+    The transaction-scoped mutex is held through commit/rollback, never a local mutex.
+    """
+    from .app import db, Document
+
+    try:
+        prior = db.session.scalar(select(func.current_setting("lock_timeout")))
+        db.session.execute(
+            select(
+                func.set_config(
+                    "lock_timeout",
+                    str(current_app.config["ERP_LOCK_TIMEOUT_MS"]) + "ms",
+                    True,
+                )
+            )
+        )
+        # Two-int advisory keys have a separate namespace from actor/key bigint hashes.
+        db.session.execute(select(func.pg_advisory_xact_lock(1346459986, 1)))
+        scopes = db.session.get(Document, "record_scopes")
+        if scopes is not None:
+            db.session.refresh(scopes)
+        db.session.execute(select(func.set_config("lock_timeout", prior, True)))
     except OperationalError as error:
         if getattr(error.orig, "sqlstate", None) in ("55P03", "40P01"):
             db.session.rollback()

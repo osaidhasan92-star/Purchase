@@ -1,4 +1,8 @@
-# Resource concurrency — phases 12–15
+# Resource concurrency — phases 12–16
+
+Payroll is now also covered by [phase-16 financial resource locking](PAYROLL_CONCURRENCY.md).
+Its employee-level preparation can overlap, while a short journal/reconciliation tail
+is serialized. The sections below describe the non-economic HR resource paths.
 
 ## Converted non-economic HR workflows
 
@@ -6,7 +10,7 @@ Native **HR manpower requests, recruitment candidates, attendance and leave** us
 resource-level locking on PostgreSQL: create, edit, supported status actions and
 command replay. These workflows create no stock, journals, payroll, employees or
 login accounts. Candidate onboarding is still an explicit employee-create command
-using the global economic lock. Employee changes, payroll, offboarding and
+using the global economic lock. Employee changes, offboarding and
 Sales/Purchase/Inventory/Finance/Manufacturing mutations retain the global economic
 write lock. SQLite retains the previous global path for all commands.
 
@@ -67,7 +71,7 @@ do so; their state has no posting or offboarding effects. Candidate stage action
 not fabricate employees. The employee-create/onboarding path remains globally locked,
 so it cannot read an offer while a candidate rejection changes it. If rejection wins,
 onboarding fails; if onboarding wins, the candidate is Hired and rejection is unavailable.
-Extending resource locking to payroll, employees or stock requires separate
+Extending resource locking to employees or stock requires separate
 invariant and lock-order analysis.
 
 ERP lock waiting, target/parent-row locks, account/session locks and advisory-mutex waits
@@ -157,7 +161,8 @@ sustained HTTP throughput or demonstrate that 25 production users are supported.
 
 Measure deployed multi-process HTTP traffic on a representative PostgreSQL host.
 Then convert the next workflow with its required database uniqueness and consistent
-resource lock order. Payroll/stock/period-close/reconciliation and source-line
+resource lock order. Stock/period-close/general reconciliation and source-line
 conservation must keep their existing exclusive lock until their replacements are
 explicitly tested. The phase-11 SQLite 25-client failure remains a valid recorded
-observation; these non-economic HR changes do not resolve the payroll bottleneck.
+observation. Payroll now uses resource preparation plus a serialized posting tail;
+representative HTTP/throughput measurements are still required.

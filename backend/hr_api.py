@@ -551,7 +551,7 @@ def command(key, identity=None, action=None):
     )
     resource_path = False
     if (
-        key in ("manpower", "candidates", "attendance", "leaves")
+        key in ("manpower", "candidates", "attendance", "leaves", "payroll")
         and current_app.config["HR_RESOURCE_LOCKING"]
     ):
         from .db_contention import acquire_resource
@@ -716,6 +716,16 @@ def command(key, identity=None, action=None):
     validate_state(state)
     context.validate()
     context.persist()
+    if resource_path and key == "payroll":
+        from .erp import sync_payroll
+
+        if row.get("status") in ("Approved", "Paid"):
+            from .db_contention import acquire_payroll_posting
+
+            acquire_payroll_posting()
+        # Post before the shared HR metadata update: all financial resource writes
+        # take the posting mutex first, then the brief HR revision-row lock.
+        sync_payroll(original, state)
     revision_update = update(Document).where(Document.name == "hr")
     if resource_path:
         # A brief metadata-row update preserves legacy revision semantics without

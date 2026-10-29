@@ -54,12 +54,30 @@ def edit_values(resource, value):
         return {"attendanceStatus": "Absent" if str(value).endswith("0") else "Late"}
     if resource == "leaves":
         return {"reason": value}
+    if resource == "payroll":
+        return {"basic": 10001 if str(value).endswith("0") else 10002}
     return {"reason" if resource == "manpower" else "contact": value}
 
 
 def make_record(c, h, key, resource, parent=None):
     if resource == "manpower":
         return manpower(c, h, key)
+    if resource == "payroll":
+        parent = parent or employee(c, h, key)
+        r = c.post(
+            "/api/hr/records/payroll",
+            headers=h,
+            json=dict(
+                requestKey=key,
+                employeeKey=parent["id"],
+                month="2026-10",
+                basic=10000,
+                allowances=500,
+                deductions=100,
+            ),
+        )
+        assert r.status_code == 200, r.json
+        return r.json["record"]
     if resource == "leaves":
         parent = parent or employee(c, h, key)
         r = c.post(
@@ -146,7 +164,9 @@ def _process_edit(url, identity, version, key, barrier, output, resource="manpow
             db.engine.dispose()
 
 
-@pytest.mark.parametrize("resource", ["manpower", "candidates", "attendance", "leaves"])
+@pytest.mark.parametrize(
+    "resource", ["manpower", "candidates", "attendance", "leaves", "payroll"]
+)
 def test_postgres_independent_records_overlap_across_processes(app, resource):
     require_postgres(app)
     c, h = session(app)
@@ -200,13 +220,15 @@ def test_postgres_independent_records_overlap_across_processes(app, resource):
         output.close()
 
 
-@pytest.mark.parametrize("resource", ["manpower", "candidates", "attendance", "leaves"])
+@pytest.mark.parametrize(
+    "resource", ["manpower", "candidates", "attendance", "leaves", "payroll"]
+)
 def test_postgres_same_key_replays_and_same_record_rejects_stale_edit(app, resource):
     require_postgres(app)
     clients = [session(app), session(app)]
     parent = (
         employee(*clients[0], "same-key-parent")
-        if resource in ("attendance", "leaves")
+        if resource in ("attendance", "leaves", "payroll")
         else None
     )
     barrier = Barrier(2)
@@ -294,13 +316,15 @@ def test_postgres_resource_gate_and_global_writer_exclude_each_other(app):
     manpower(c, h, "exclusive-gate-test")
 
 
-@pytest.mark.parametrize("resource", ["manpower", "candidates", "attendance", "leaves"])
+@pytest.mark.parametrize(
+    "resource", ["manpower", "candidates", "attendance", "leaves", "payroll"]
+)
 def test_resource_locking_rollback_switch_keeps_original_global_path(app, resource):
     app.config["HR_RESOURCE_LOCKING"] = False
     c, h = session(app)
     parent = (
         employee(c, h, "fallback-parent")
-        if resource in ("attendance", "leaves")
+        if resource in ("attendance", "leaves", "payroll")
         else None
     )
     with app.app_context():
@@ -313,13 +337,16 @@ def test_resource_locking_rollback_switch_keeps_original_global_path(app, resour
             "candidates": "Applied",
             "attendance": "Recorded",
             "leaves": "Pending",
+            "payroll": "Draft",
         }[resource]
     )
     with app.app_context():
         assert db.session.get(ERPControl, 1).revision > before
 
 
-@pytest.mark.parametrize("resource", ["manpower", "candidates", "attendance", "leaves"])
+@pytest.mark.parametrize(
+    "resource", ["manpower", "candidates", "attendance", "leaves", "payroll"]
+)
 def test_resource_write_failure_rolls_back_record_revision_and_receipt(
     app, monkeypatch, resource
 ):

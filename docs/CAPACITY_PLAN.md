@@ -149,3 +149,7 @@ writers. All four cases retained healthy ledger/stock/key checks, but an incompl
 workflow is still an acceptance failure. No busy retries were hidden in these results.
 Use PostgreSQL and deployed multi-process HTTP measurements for the next comparison;
 do not extrapolate this host's absolute timings to client hardware or large companies.
+
+Payroll now uses employee-level preparation plus a serialized financial posting tail;
+see [phase 16](PAYROLL_CONCURRENCY.md). Recorded earlier SQLite results remain
+historical observations. Rerun on the intended PostgreSQL host before capacity claims.

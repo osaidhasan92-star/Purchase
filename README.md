@@ -358,10 +358,19 @@ lock remains until replacement strategies pass concurrent economic invariants.
 
 ### Resource concurrency
 
-[Resource concurrency, phases 12–15](docs/RESOURCE_CONCURRENCY.md) enables PostgreSQL
+[Resource concurrency, phases 12–16](docs/RESOURCE_CONCURRENCY.md) enables PostgreSQL
 manpower, recruitment-candidate, attendance and leave commands to work on independent records in parallel,
 with a shared compatibility gate, per-record and parent-reference locking, and same-key
 retry protection. Attendance and leave serialize by employee to protect employee/date uniqueness and
-inclusive leave-range reservations. Employee onboarding, economic writes and SQLite retain the global
-path. `HR_RESOURCE_LOCKING=false` restores global non-economic HR locking. This is
+inclusive leave-range reservations. Employee onboarding, other economic writes and SQLite retain the global
+path. `HR_RESOURCE_LOCKING=false` restores global HR locking. This is
 incremental work toward concurrency, not enterprise certification.
+
+### Payroll concurrency
+
+[Phase-16 payroll financial safeguards](docs/PAYROLL_CONCURRENCY.md) uses PostgreSQL
+employee/record locks for payroll preparation, a short serialized posting tail for
+journal numbering and reconciliation, atomic counter allocation and atomic rollback.
+Periods, duplicate payments and source-creator attribution remain protected. Externally
+matched salary liabilities require Accounting review before another full payroll payment.
+SQLite and the global-lock rollback switch remain supported; no reseeding is required.

@@ -164,7 +164,7 @@ def resource_references(key, target, data, creating):
         parent = source.get("manpowerId")
         if not isinstance(parent, bool) and isinstance(parent, (str, int)):
             return [ReferenceLock(store.Manpower, parent)]
-    elif key in ("attendance", "leaves"):
+    elif key in ("attendance", "leaves", "payroll"):
         if creating or source.get("employeeKey"):
             parent = source.get("employeeKey")
             if not isinstance(parent, bool) and isinstance(parent, (str, int)):

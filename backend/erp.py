@@ -204,6 +204,13 @@ def lock():
 
 
 def next_number(prefix):
+    if db.session.get_bind().dialect.name == 'postgresql':
+        from sqlalchemy.dialects.postgresql import insert
+        statement = insert(ERPCounter).values(prefix=prefix, value=1)
+        value = db.session.scalar(statement.on_conflict_do_update(
+            index_elements=[ERPCounter.prefix], set_={'value': ERPCounter.value + 1}
+        ).returning(ERPCounter.value))
+        return f'{prefix}-{day()[:4]}-{value:06d}'
     counter = db.session.get(ERPCounter, prefix)
     if not counter:
         counter = ERPCounter(prefix=prefix, value=0)
@@ -472,28 +479,7 @@ def sync_business(previous, current, namespace):
             for other in leaves[index+1:]:
                 if leave.get('employee') == other.get('employee') and start <= day(other.get('to')) and end >= day(other.get('from')):
                     raise InvalidBusinessState('Employee leave periods cannot overlap')
-        old = {str(r['id']): r for r in previous.get('payroll', [])}
-        for row in current.get('payroll', []):
-            before = old.get(str(row['id']))
-            source = 'payroll:' + str(row['id'])
-            exists = db.session.scalar(select(JournalEntry).where(JournalEntry.source == source))
-            if exists and (not before or any(before.get(k) != row.get(k) for k in ('basic', 'allowances', 'deductions', 'netPay', 'employee', 'month')) or row.get('status') not in ('Approved', 'Paid')):
-                raise InvalidBusinessState('Approved payroll cannot be changed; reverse the journal first')
-            if before == row or row.get('status') not in ('Approved', 'Paid'): continue
-            gross = dec(row.get('basic', 0)) + dec(row.get('allowances', 0))
-            deductions, net = dec(row.get('deductions', 0)), dec(row.get('netPay', 0))
-            if gross <= 0 or net < 0 or gross - deductions != net:
-                raise InvalidBusinessState('Payroll net pay must equal basic plus allowances less deductions')
-            g.scope_creator = row.get('createdBy') or row.get('ownerId') or g.user.id
-            partner = 'employee:' + str(row.get('employee', ''))
-            post_entry(source, 'Payroll ' + str(row.get('month', '')), [dict(account='6100', debit=gross),
-                       dict(account='2300', credit=net, partner=partner), dict(account='2310', credit=deductions)], day())
-            if row.get('status') == 'Paid' and net:
-                payment = journal_pair(source + ':payment', 'Salary payment ' + str(row.get('employee', '')), '2300', '1010', net, partner=partner)
-                auto_reconcile(source, payment, '2300')
-        for rid, row in old.items():
-            if not any(str(r['id']) == rid for r in current.get('payroll', [])) and db.session.scalar(select(JournalEntry.id).where(JournalEntry.source == 'payroll:' + rid)):
-                raise InvalidBusinessState('Posted payroll cannot be deleted')
+        sync_payroll(previous, current)
         old_separations = {str(r['id']):r for r in previous.get('separations',[])}
         for separation in current.get('separations',[]):
             if separation.get('status') != 'Completed' or old_separations.get(str(separation['id']),{}).get('status') == 'Completed':
@@ -535,3 +521,38 @@ def finish_manufacturing(order):
     order.actual_cost=total
     order.state='Done'
     return order
+
+
+def sync_payroll(previous, current):
+    """Caller holds global lock, or shared ERP/employee locks plus posting-tail mutex.
+
+    Draft-only changes need no posting mutex; they still validate posted immutability.
+    """
+    old = {str(r['id']): r for r in previous.get('payroll', [])}
+    for row in current.get('payroll', []):
+        before = old.get(str(row['id']))
+        source = 'payroll:' + str(row['id'])
+        exists = db.session.scalar(select(JournalEntry).where(JournalEntry.source == source))
+        if exists and (not before or any(before.get(k) != row.get(k) for k in ('basic', 'allowances', 'deductions', 'netPay', 'employee', 'month')) or row.get('status') not in ('Approved', 'Paid')):
+            raise InvalidBusinessState('Approved payroll cannot be changed; reverse the journal first')
+        if before == row or row.get('status') not in ('Approved', 'Paid'): continue
+        gross = dec(row.get('basic', 0)) + dec(row.get('allowances', 0))
+        deductions, net = dec(row.get('deductions', 0)), dec(row.get('netPay', 0))
+        if gross <= 0 or net < 0 or gross - deductions != net:
+            raise InvalidBusinessState('Payroll net pay must equal basic plus allowances less deductions')
+        g.scope_creator = row.get('createdBy') or row.get('ownerId') or g.user.id
+        partner = 'employee:' + str(row.get('employee', ''))
+        invoice = post_entry(source, 'Payroll ' + str(row.get('month', '')), [dict(account='6100', debit=gross),
+                   dict(account='2300', credit=net, partner=partner), dict(account='2310', credit=deductions)], day())
+        if row.get('status') == 'Paid' and net:
+            existing_payment = db.session.scalar(select(JournalEntry.id).where(JournalEntry.source == source + ':payment'))
+            if not existing_payment:
+                credits = [line for line in invoice.lines if line.account == '2300' and line.credit > 0]
+                if len(credits) != 1 or credits[0].credit - matched_amount(credits[0]) != net:
+                    raise InvalidBusinessState('Payroll liability is already matched; review Accounting before paying')
+            payment = journal_pair(source + ':payment', 'Salary payment ' + str(row.get('employee', '')), '2300', '1010', net, partner=partner)
+            auto_reconcile(source, payment, '2300')
+    for rid, row in old.items():
+        if not any(str(r['id']) == rid for r in current.get('payroll', [])) and db.session.scalar(select(JournalEntry.id).where(JournalEntry.source == 'payroll:' + rid)):
+            raise InvalidBusinessState('Posted payroll cannot be deleted')
+    g.pop('scope_creator', None)
