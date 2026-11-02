@@ -206,10 +206,79 @@
   box-sizing: border-box;
 }
 #workspace-root .modal.is-open {
+  /* The legacy .modal panel has a viewport max-height. Here it is the backdrop. */
+  height: 100%;
+  height: 100dvh;
+  max-height: none;
+  max-width: none;
+  overflow: auto;
   background: rgba(15, 23, 42, 0.52);
   border-radius: 0;
   box-shadow: none;
   opacity: 1;
+}
+/* Migrated dialogs also appear outside module-app (Company Profile). */
+#workspace-root .modal-box {
+  min-height: 0;
+  max-height: calc(100dvh - 32px);
+}
+#workspace-root .modal-box > form:not(.trade-form) {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+#workspace-root .modal-box > form > .modal-body {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+#workspace-root .modal-foot button,
+#workspace-root .modal-head button,
+#workspace-root .modern-pagination button {
+  min-height: 40px;
+  font-family: inherit;
+}
+#workspace-root .modal-head button {
+  min-width: 40px;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+#workspace-root .modal-head h3 {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+#workspace-root .modal-foot .btn-secondary,
+#workspace-root .modern-pagination button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 15px;
+  border: 1px solid #dce4ef;
+  border-radius: 8px;
+  background: #fff;
+  color: #40516c;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.3;
+  cursor: pointer;
+}
+#workspace-root .modal button:disabled,
+#workspace-root .modern-pagination button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+#workspace-root .modal button:focus-visible,
+#workspace-root .modern-pagination button:focus-visible {
+  outline: 2px solid #6366f1;
+  outline-offset: 2px;
+}
+@media (max-width: 640px) {
+  #workspace-root .modal-box {
+    max-height: calc(100dvh - 16px);
+  }
+  #workspace-root .modal .grid2 {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 [data-native-hr] {
   min-width: 0;
@@ -252,7 +321,11 @@
 .trade-dialog .trade-form {
   overflow-y: auto;
   max-height: 72vh;
-  padding: 20px;
+  padding: 20px 20px 0;
+  scroll-padding-block: 12px 96px;
+}
+.trade-dialog .trade-form > .modal-foot {
+  margin: 20px -20px 0;
 }
 .trade-dialog .modern-detail {
   overflow-y: auto;

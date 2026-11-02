@@ -8,6 +8,7 @@ import type {
   CustomerDetails,
 } from "../../types";
 import { customerApi, errorMessage } from "../../lib/api";
+import { useModalScrollLock } from "../../components/useModalScrollLock";
 export interface CustomerCommands {
   open: () => void;
   save: () => Promise<void>;
@@ -42,6 +43,7 @@ export function CustomersPage({
     busy = useRef(false),
     key = useRef("");
   const api = customerApi(bridge);
+  useModalScrollLock(editing !== undefined);
   useEffect(() => {
     if (editing === undefined || !dialog.current) return;
     const previous =
@@ -51,8 +53,11 @@ export function CustomersPage({
     const focusable = () =>
       Array.from(
         dialog.current?.querySelectorAll<HTMLElement>(
-          'button:not(:disabled),input:not(:disabled),select:not(:disabled),textarea:not(:disabled),[tabindex="0"]',
+          'button:not(:disabled),input:not(:disabled),select:not(:disabled),textarea:not(:disabled),a[href],[tabindex="0"]',
         ) || [],
+      ).filter(
+        (target) =>
+          target.getClientRects().length && !target.matches(":disabled"),
       );
     focusable()[0]?.focus();
     const keyboard = (event: KeyboardEvent) => {

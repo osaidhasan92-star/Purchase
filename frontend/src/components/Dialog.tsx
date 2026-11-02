@@ -1,4 +1,5 @@
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useId, useRef, type ReactNode } from "react";
+import { useModalScrollLock } from "./useModalScrollLock";
 export function Dialog({
   title,
   busy,
@@ -10,6 +11,8 @@ export function Dialog({
   onClose: () => void;
   children: ReactNode;
 }) {
+  useModalScrollLock();
+  const titleId = useId();
   const ref = useRef<HTMLDivElement>(null),
     close = useRef(onClose),
     locked = useRef(busy);
@@ -27,6 +30,9 @@ export function Dialog({
         el.querySelectorAll<HTMLElement>(
           'button:not(:disabled),input:not(:disabled),select:not(:disabled),textarea:not(:disabled),a[href],[tabindex="0"]',
         ),
+      ).filter(
+        (target) =>
+          target.getClientRects().length && !target.matches(":disabled"),
       );
     targets()[0]?.focus();
     const handle = (e: KeyboardEvent) => {
@@ -60,10 +66,10 @@ export function Dialog({
         ref={ref}
         role="dialog"
         aria-modal="true"
-        aria-labelledby="trade-dialog-title"
+        aria-labelledby={titleId}
       >
         <div className="modal-head">
-          <h3 id="trade-dialog-title">{title}</h3>
+          <h3 id={titleId}>{title}</h3>
           <button
             type="button"
             aria-label="Close dialog"

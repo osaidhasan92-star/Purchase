@@ -357,7 +357,12 @@ export function ProductionForm({
           </p>
         )}
         <div className="modal-foot">
-          <button type="button" disabled={busy} onClick={onClose}>
+          <button
+            type="button"
+            className="btn-secondary"
+            disabled={busy}
+            onClick={onClose}
+          >
             Cancel
           </button>
           <button

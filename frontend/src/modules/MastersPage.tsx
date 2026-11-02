@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { flushSync } from "react-dom";
 import type { Bridge } from "../types";
 import { errorMessage } from "../lib/api";
+import { useModalScrollLock } from "../components/useModalScrollLock";
 export type MasterKind = "vendors" | "products" | "leads" | "reminders";
 export interface MasterRecord {
   id: string | number;
@@ -173,6 +174,7 @@ export function MastersPage({
     [readonly, setReadonly] = useState(false);
   const [saving, setSaving] = useState(false),
     [formError, setFormError] = useState("");
+  useModalScrollLock(editing !== undefined);
   const form = useRef<HTMLFormElement>(null),
     dialog = useRef<HTMLDivElement>(null),
     busy = useRef(false),
@@ -212,8 +214,11 @@ export function MastersPage({
     const focusable = () =>
       Array.from(
         dialog.current?.querySelectorAll<HTMLElement>(
-          'button:not(:disabled),input:not(:disabled),select:not(:disabled),textarea:not(:disabled),[tabindex="0"]',
+          'button:not(:disabled),input:not(:disabled),select:not(:disabled),textarea:not(:disabled),a[href],[tabindex="0"]',
         ) || [],
+      ).filter(
+        (target) =>
+          target.getClientRects().length && !target.matches(":disabled"),
       );
     focusable()[0]?.focus();
     const keyboard = (e: KeyboardEvent) => {

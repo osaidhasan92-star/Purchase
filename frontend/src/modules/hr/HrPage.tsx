@@ -541,7 +541,12 @@ function HrForm({
           </p>
         )}
         <div className="modal-foot">
-          <button type="button" disabled={busy} onClick={onClose}>
+          <button
+            type="button"
+            className="btn-secondary"
+            disabled={busy}
+            onClick={onClose}
+          >
             Cancel
           </button>
           <button className="btn-primary" disabled={busy}>
@@ -651,7 +656,12 @@ function LoginForm({
           </p>
         )}
         <div className="modal-foot">
-          <button type="button" onClick={onClose} disabled={busy}>
+          <button
+            type="button"
+            className="btn-secondary"
+            onClick={onClose}
+            disabled={busy}
+          >
             Cancel
           </button>
           <button className="btn-primary" disabled={busy}>

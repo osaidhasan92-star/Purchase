@@ -478,6 +478,14 @@ export function ExpensePage({
               {error && <p role="alert">{error}</p>}
             </div>
             <div className="modal-foot">
+              <button
+                type="button"
+                className="btn btn-secondary"
+                disabled={busy}
+                onClick={() => setForm(null)}
+              >
+                Cancel
+              </button>
               <button className="btn btn-primary" disabled={busy}>
                 Confirm Reimbursement
               </button>
@@ -647,7 +655,7 @@ function ExpenseForm({
         </div>
         <div className="modal-foot">
           <button
-            className="btn"
+            className="btn btn-secondary"
             type="button"
             disabled={busy}
             onClick={onClose}
