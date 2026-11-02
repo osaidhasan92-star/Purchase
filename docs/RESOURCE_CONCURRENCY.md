@@ -166,3 +166,7 @@ conservation must keep their existing exclusive lock until their replacements ar
 explicitly tested. The phase-11 SQLite 25-client failure remains a valid recorded
 observation. Payroll now uses resource preparation plus a serialized posting tail;
 representative HTTP/throughput measurements are still required.
+
+The remaining native Inventory/Trade/Production/Expenses/Finance paths are covered by
+the [phase-17 checklist](CONCURRENCY_COMPLETION.md), including its required reservation
+table migration. Earlier exclusive-writer descriptions above refer to those baselines.

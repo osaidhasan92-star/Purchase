@@ -282,7 +282,11 @@ def command(command):
             data={k: v for k, v in data.items() if k not in ("version", "requestKey")},
         )
     )
-    lock()
+    from .concurrency import inventory
+
+    inventory(data, command)
+    permit()
+    permit("approve")
     receipt = db.session.get(Command, (g.user.id, key))
     if receipt:
         if receipt.fingerprint != fingerprint:

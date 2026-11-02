@@ -87,3 +87,7 @@ ledger rewrite, frontend build or reseeding is required. Normal init-db/migrate-
 remain necessary if skipping earlier storage phases. Setting `HR_RESOURCE_LOCKING=false`
 and restarting restores global HR locking; it retains the new shared posting algorithm,
 atomic PostgreSQL counter allocation and external-matching payment safeguard.
+
+Other native operational writers now share the reviewed compatibility and posting
+protocol; see the [phase-17 checklist](CONCURRENCY_COMPLETION.md). The statement above
+about other writers taking the exclusive gate describes the phase-16 baseline.

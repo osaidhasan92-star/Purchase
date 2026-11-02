@@ -103,6 +103,9 @@ def registry():
 
 
 def remember(value, creator=None):
+    if getattr(g, 'resource_mode', False):
+        from .concurrency import tail
+        tail()
     from .app import db, Document
     identity = str(getattr(value, 'id', None) or getattr(value, 'code', ''))
     key = value.__tablename__ + ':' + identity

@@ -199,11 +199,18 @@ def day(value=None):
 
 
 def lock():
+    if getattr(g, 'resource_mode', False):
+        from .concurrency import tail
+        tail()
+        return
     from .db_contention import acquire
     acquire()
 
 
 def next_number(prefix):
+    if getattr(g, 'resource_mode', False):
+        from .concurrency import tail
+        tail()
     if db.session.get_bind().dialect.name == 'postgresql':
         from sqlalchemy.dialects.postgresql import insert
         statement = insert(ERPCounter).values(prefix=prefix, value=1)
@@ -253,6 +260,9 @@ def check_period(value):
 
 
 def post_entry(source, memo, lines, value_date=None, draft=False):
+    if getattr(g, 'resource_mode', False):
+        from .concurrency import tail
+        tail()
     existing = db.session.scalar(select(JournalEntry).where(JournalEntry.source == source))
     if existing:
         return existing
@@ -350,6 +360,9 @@ def matched_amount(line):
 
 
 def reconcile(debit, credit, amount):
+    if getattr(g, 'resource_mode', False):
+        from .concurrency import tail
+        tail()
     amount = dec(amount, positive=True)
     if debit.entry.status != 'Posted' or credit.entry.status != 'Posted' or debit.account != credit.account or debit.partner != credit.partner:
         raise InvalidBusinessState('Match posted lines from the same account and partner')

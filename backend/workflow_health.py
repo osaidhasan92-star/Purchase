@@ -25,7 +25,11 @@ def report():
         .having(func.count() > 1)
     )
     marker = db.session.get(Document, "workflow_indexes")
+    reservations = db.session.get(Document, "workflow_reservations")
     result = dict(
+        uniqueReservationsReady=bool(
+            reservations and reservations.stored_data.get("version") == 1
+        ),
         workflowIndexesReady=bool(marker and marker.stored_data.get("version") == 2),
         unbalancedOrIncompletePostedJournals=db.session.scalar(
             select(func.count()).select_from(bad.subquery())
@@ -42,12 +46,16 @@ def report():
             select(func.count()).select_from(LegacyLink)
         ),
     )
-    result["healthy"] = result["workflowIndexesReady"] and not any(
-        result[k]
-        for k in (
-            "unbalancedOrIncompletePostedJournals",
-            "negativeStockBalances",
-            "duplicateWorkflowKeys",
+    result["healthy"] = (
+        result["workflowIndexesReady"]
+        and result["uniqueReservationsReady"]
+        and not any(
+            result[k]
+            for k in (
+                "unbalancedOrIncompletePostedJournals",
+                "negativeStockBalances",
+                "duplicateWorkflowKeys",
+            )
         )
     )
     return result

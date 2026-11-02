@@ -3,6 +3,7 @@
 from sqlalchemy import select, delete, Index
 from .app import db, Document, problem
 from .trade_store import version
+from .unique_reservations import Reservation
 
 
 class ConflictKey(db.Model):
@@ -101,6 +102,7 @@ def replace(key, value):
             )
         )
     }
+    affected = {(r.kind, r.token) for r in rows.values()} | set(expected.items())
     for kind, token in expected.items():
         row = rows.pop(kind, None)
         if row is None:
@@ -111,9 +113,19 @@ def replace(key, value):
             row.token = token
     for row in rows.values():
         db.session.delete(row)
+    from .unique_reservations import synchronize
+
+    synchronize(key, affected)
 
 
 def remove(key, identity):
+    affected = set(
+        db.session.execute(
+            select(ConflictKey.kind, ConflictKey.token).where(
+                ConflictKey.domain == key, ConflictKey.record_id == str(identity)
+            )
+        ).all()
+    )
     db.session.execute(
         delete(LegacyLink).where(
             LegacyLink.domain == key, LegacyLink.record_id == str(identity)
@@ -124,6 +136,10 @@ def remove(key, identity):
             ConflictKey.domain == key, ConflictKey.record_id == str(identity)
         )
     )
+
+    from .unique_reservations import synchronize
+
+    synchronize(key, affected)
 
 
 def number_taken(key, value):
@@ -172,6 +188,10 @@ def check(key, value):
                 409,
             )
 
+    from .unique_reservations import reserve
+
+    reserve(key, str(value["id"]), tokens(key, value))
+
 
 def initialize():
     """One-time backfill uses narrow headers, never whole business projections."""
@@ -179,6 +199,9 @@ def initialize():
 
     marker = db.session.get(Document, "workflow_indexes")
     if marker and marker.stored_data.get("version") == 2:
+        from .unique_reservations import initialize as initialize_reservations
+
+        initialize_reservations()
         return
     db.session.execute(delete(ConflictKey))
     db.session.execute(delete(LegacyLink))
@@ -237,6 +260,10 @@ def initialize():
     else:
         marker.stored_data = {"version": 2}
 
+    from .unique_reservations import initialize as initialize_reservations
+
+    initialize_reservations(rebuild=True)
+
 
 def revalidate_actor():
     """A command waiting for the ERP lock must not use a revoked session/old role."""
@@ -257,5 +284,11 @@ def revalidate_actor():
 
 def ready():
     marker = db.session.get(Document, "workflow_indexes")
-    if not marker or marker.stored_data.get("version") != 2:
+    reservations = db.session.get(Document, "workflow_reservations")
+    if (
+        not marker
+        or marker.stored_data.get("version") != 2
+        or not reservations
+        or reservations.stored_data.get("version") != 1
+    ):
         problem("Run init-db and migrate-storage to initialize workflow indexes", 503)

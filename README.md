@@ -270,8 +270,7 @@ concepts documented in Odoo 18; this application does not embed or depend on Odo
 - Accounts, journals/lines, reconciliations, stock balances/movements, BoMs,
   manufacturing orders/components, expenses and statement lines use relational
   tables. Customers/vendors/products, CRM leads/reminders and Sales/Purchasing
-  headers/lines and HR/payroll records also use canonical SQL tables. Older CRM company/quote
-  registers remain JSON. Native trade actions post into the relational ledgers atomically. A row lock serializes ledger/stock writes, and unique source
+  headers/lines and HR/payroll records also use canonical SQL tables. CRM companies/quote registers also use canonical SQL tables. Native trade actions post into the relational ledgers atomically. A row lock serializes ledger/stock writes, and unique source
   keys prevent duplicate posting. This remains a small single-company demo design.
 - Posted economic documents cannot be changed/deleted. Correct posted manual
   journals with reversing entries. Stock returns reverse quantities/valuation;
@@ -296,8 +295,8 @@ concepts documented in Odoo 18; this application does not embed or depend on Odo
   item; automated bank feeds and split/combined statement matching are not included.
 - RFQ/quotation “Send” records status; SMTP and payment gateways are not configured.
 - Some historical operational lines/HR references retain product IDs, array positions
-  or employee labels in compatibility projections. Query-local write validation and advanced migrations
-  remain follow-up work. Future column changes require versioned schema migrations;
+  or employee labels in compatibility projections. Native query-local validation is implemented; future advanced schema migrations
+  remain separate work. Future column changes require versioned schema migrations;
   `init-db` is not a general upgrade engine.
 - Automated checks include DOM navigation/HR/production simulations and Chromium
   native Finance/master/CRM/Sales/Purchasing/HR forms, printing and mobile behavior. Production
@@ -374,3 +373,14 @@ journal numbering and reconciliation, atomic counter allocation and atomic rollb
 Periods, duplicate payments and source-creator attribution remain protected. Externally
 matched salary liabilities require Accounting review before another full payroll payment.
 SQLite and the global-lock rollback switch remain supported; no reseeding is required.
+
+### Remaining operational module concurrency
+
+[Phase-17 completion checklist and required database upgrade](docs/CONCURRENCY_COMPLETION.md)
+covers Inventory, Sales/Purchase, Manufacturing, Expenses and Finance. PostgreSQL uses
+ordered workflow/product/claim locks plus the shared financial posting mutex; SQLite
+retains its exclusive path. Normalized database-unique reservations preserve and block
+historical duplicates. Existing installations must run `init-db` and `migrate-storage`
+before using this version. `RESOURCE_CONCURRENCY=false` restores the old exclusive
+paths for these modules; HR/payroll have their separate switch. Sustained production
+HTTP capacity, security/operations and client acceptance remain separate readiness work.

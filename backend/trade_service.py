@@ -1460,7 +1460,9 @@ def execute(key, identity=None, action=None):
             },
         }
     )
-    lock()
+    from .concurrency import trade as lock_trade
+
+    locked_context = lock_trade(key, identity, data)
     workflow_keys.revalidate_actor()
     permit(key, "view")
     if identity is None:
@@ -1472,7 +1474,7 @@ def execute(key, identity=None, action=None):
     from .trade_context import Context
 
     receipt = db.session.get(TradeCommand, (g.user.id, request_key))
-    context = Context(
+    context = locked_context or Context(
         receipt.resource if receipt else key,
         receipt.identity if receipt else identity,
         data,
@@ -1512,15 +1514,29 @@ def execute(key, identity=None, action=None):
             validate_numbers(value)
     # Existing immutable stock/accounting services participate in this same transaction.
     context.persist()
-    result = db.session.execute(
-        update(Document)
-        .where(Document.name == "app", Document.revision == doc.revision)
-        .values(revision=doc.revision + 1)
-        .execution_options(synchronize_session=False)
-    )
-    if result.rowcount != 1:
-        problem("Another user saved newer records. Reload.", 409)
     sync_business(original, state, "app")
+    statement = update(Document).where(Document.name == "app")
+    if locked_context:
+        statement = statement.values(revision=Document.revision + 1)
+    else:
+        statement = statement.where(Document.revision == doc.revision).values(
+            revision=doc.revision + 1
+        )
+    if locked_context:
+        revision = db.session.scalar(
+            statement.returning(Document.revision).execution_options(
+                synchronize_session=False
+            )
+        )
+        if revision is None:
+            problem("Another user saved newer records. Reload.", 409)
+    else:
+        result = db.session.execute(
+            statement.execution_options(synchronize_session=False)
+        )
+        if result.rowcount != 1:
+            problem("Another user saved newer records. Reload.", 409)
+        revision = doc.revision + 1
     db.session.add(
         TradeCommand(
             actor_id=g.user.id,
@@ -1534,6 +1550,5 @@ def execute(key, identity=None, action=None):
         "Trade " + (action or "edit" if identity is not None else "create"),
         {"resource": key, "recordId": row["id"]},
     )
-    revision = doc.revision + 1
     db.session.commit()
     return row, revision

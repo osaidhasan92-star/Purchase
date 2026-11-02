@@ -812,7 +812,14 @@ def command(command):
             },
         )
     )
-    lock()
+    from .concurrency import finance
+
+    finance(data, command)
+    permit(action)
+    if command == "period-lock" and g.user.role != "Admin":
+        problem("Only administrators change accounting locks", 403)
+    if command == "transfer":
+        permit("approve")
     receipt = db.session.get(Command, (g.user.id, key))
     if receipt:
         if receipt.fingerprint != fingerprint:

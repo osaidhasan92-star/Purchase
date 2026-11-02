@@ -436,7 +436,15 @@ def command(command):
             },
         )
     )
-    lock()
+    from .concurrency import production
+
+    production(data, command)
+    permit()
+    permit(
+        "create"
+        if command in ("bom", "order")
+        else "edit" if command == "edit-bom" else "approve"
+    )
     receipt = db.session.get(Command, (g.user.id, key))
     if receipt:
         if receipt.fingerprint != fingerprint:

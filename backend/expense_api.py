@@ -243,7 +243,15 @@ def command(action):
             data={k: v for k, v in d.items() if k not in ("requestKey", "version")},
         )
     )
-    lock()
+    from .concurrency import expense
+
+    expense(d)
+    permit()
+    permit("create" if action == "create" else "edit")
+    if action in ("approve", "reject", "pay"):
+        permit("approve")
+    if action == "pay" and not finance_access(g.user, app_document().stored_data):
+        problem("Finance access required to reimburse expenses", 403)
     receipt = db.session.get(Command, (g.user.id, key))
     if receipt:
         if receipt.fingerprint != fingerprint:
