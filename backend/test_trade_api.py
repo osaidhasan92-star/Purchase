@@ -936,6 +936,10 @@ def test_dashboard_metrics_use_workflow_status_dates_and_visibility(app):
     assert orders["statuses"] == {"Confirmed": 1, "Draft": 1}
     assert data["trend"][-1] == {"month": month, "value": 120}
     assert data["balances"] == {}  # Salespeople cannot read Accounting registers.
+    assert not {"customerInvoices", "customerPayments"} & {r["key"] for r in data["registers"]}
+    assert "customerInvoices" not in data["recent"]
+    assert seller.get("/api/trade/customerInvoices").status_code == 403
+    assert seller.get("/api/trade/customerPayments").status_code == 403
     assert {r["id"] for r in data["recent"]["salesOrders"]} == {"visible-order", "draft-order"}
     administrative = admin.get("/api/trade/summary/sales").json
     assert administrative["trend"][-1]["value"] == 10020

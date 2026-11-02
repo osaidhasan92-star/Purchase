@@ -79,6 +79,7 @@ module.exports = async (page, base) => {
       }
     }
   }
+  await require("./financial-permissions-browser.cjs")(page, base);
   await page.setViewportSize({ width: 1366, height: 900 });
   console.log(
     "Reference CRM/Sales/Purchase dashboards: desktop/mobile grids, charts, filters and navigation passed",

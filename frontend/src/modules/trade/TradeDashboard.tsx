@@ -72,6 +72,32 @@ export function TradeDashboard({
       : 0;
   };
   const has = (key: Resource) => !!reg(key);
+  const financial = (key: Resource, value: number | undefined) =>
+    has(key) && typeof value === "number" && Number.isFinite(value)
+      ? value
+      : null;
+  const outstanding = financial(invoiceKey, data?.balances?.outstanding);
+  const collected = financial(paymentKey, data?.balances?.collected);
+  const financialValue = (value: number | null) =>
+    value === null ? (
+      <span className="ref-unavailable">Unavailable</span>
+    ) : (
+      money(value)
+    );
+  const invoiceHint = !has(invoiceKey)
+    ? "Requires invoice access"
+    : outstanding === null
+      ? "Balance data is unavailable"
+      : sales
+        ? "Outstanding posted invoices"
+        : "Outstanding approved bills";
+  const paymentHint = !has(paymentKey)
+    ? "Requires payment access"
+    : collected === null
+      ? "Payment data is unavailable"
+      : sales
+        ? "Customer payments received"
+        : "Supplier payments processed";
   const pending = count(sales ? "salesQuotations" : "requests", [
     "Pending Approval",
   ]);
@@ -93,7 +119,9 @@ export function TradeDashboard({
   );
   const recentKey = sales ? orderKey : "requests";
   const recent = (key: Resource, empty: string) =>
-    !data?.recent[key]?.length ? (
+    !has(key) ? (
+      <p className="ref-empty">You do not have access to this register.</p>
+    ) : !data?.recent[key]?.length ? (
       <p className="ref-empty">{empty}</p>
     ) : (
       <div className="ref-recent">
@@ -178,30 +206,16 @@ export function TradeDashboard({
             <Kpi
               label={sales ? "Collected" : "Open Orders"}
               value={
-                sales
-                  ? has(paymentKey)
-                    ? money(data.balances.collected || 0)
-                    : "—"
-                  : has(orderKey)
-                    ? open
-                    : "—"
+                sales ? financialValue(collected) : has(orderKey) ? open : "—"
               }
-              hint={
-                sales ? "Customer payments received" : "Orders still active"
-              }
+              hint={sales ? paymentHint : "Orders still active"}
               tone="green"
               icon={sales ? "cash" : "order"}
             />
             <Kpi
               label={sales ? "Receivables" : "Payables"}
-              value={
-                has(invoiceKey) ? money(data.balances.outstanding || 0) : "—"
-              }
-              hint={
-                sales
-                  ? "Outstanding posted invoices"
-                  : "Outstanding approved bills"
-              }
+              value={financialValue(outstanding)}
+              hint={invoiceHint}
               tone="amber"
               icon="file"
             />
@@ -447,19 +461,13 @@ export function TradeDashboard({
               <div className="ref-finance-strip">
                 <div>
                   <small>Outstanding supplier balance</small>
-                  <b>
-                    {has(invoiceKey)
-                      ? money(data.balances.outstanding || 0)
-                      : "—"}
-                  </b>
+                  <b>{financialValue(outstanding)}</b>
+                  {outstanding === null && <small>{invoiceHint}</small>}
                 </div>
                 <div>
                   <small>Supplier payments processed</small>
-                  <b>
-                    {has(paymentKey)
-                      ? money(data.balances.collected || 0)
-                      : "—"}
-                  </b>
+                  <b>{financialValue(collected)}</b>
+                  {collected === null && <small>{paymentHint}</small>}
                 </div>
               </div>
             )}
