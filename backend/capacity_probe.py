@@ -126,6 +126,12 @@ def seed(app, rows, workers, password):
             )
             db.session.execute(ConflictKey.__table__.insert(), keys)
             db.session.commit()
+        # Fixture preparation bypasses APIs, so backfill the same derived unique
+        # reservations that a real migrated installation has before timed traffic.
+        from .unique_reservations import initialize
+
+        initialize(rebuild=True)
+        db.session.commit()
 
 
 def run_case(app, workers, iterations, password, label):

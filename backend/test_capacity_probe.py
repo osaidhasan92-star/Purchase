@@ -26,3 +26,27 @@ def test_capacity_probe_concurrent_payroll_and_replays(tmp_path):
     assert result["cases"][-1]["totalPaidPayroll"] == 3
     assert all(c["lockStatementMs"]["count"] > 0 for c in result["cases"])
     assert distribution([1, 2, 3, 4, 5])["p95"] == 5
+
+    from sqlalchemy import create_engine, text
+
+    engine = create_engine("sqlite:///" + str(tmp_path / "capacity-probe.sqlite"))
+    try:
+        with engine.connect() as connection:
+            assert (
+                connection.scalar(
+                    text(
+                        "SELECT count(*) FROM workflow_reservation WHERE record_id LIKE 'capacity-history-%'"
+                    )
+                )
+                == 10
+            )
+            assert (
+                connection.scalar(
+                    text(
+                        "SELECT count(*) FROM workflow_reservation WHERE record_id LIKE 'capacity-request-%'"
+                    )
+                )
+                == 10
+            )
+    finally:
+        engine.dispose()
