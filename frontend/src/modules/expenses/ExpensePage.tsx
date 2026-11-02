@@ -1,3 +1,4 @@
+import { ModuleDashboard } from "../../components/dashboard/ModuleDashboard";
 import { useEffect, useRef, useState } from "react";
 import type { Bridge } from "../../types";
 import { Dialog } from "../../components/Dialog";
@@ -192,40 +193,11 @@ export function ExpensePage({
         </div>
       )}
       {view === "expenses" ? (
-        <>
-          <div className="stats">
-            {["Draft", "Submitted", "Approved", "Paid", "Rejected"].map((s) => (
-              <div className="stat-card finance-stat" key={s}>
-                <span>{s}</span>
-                <strong>{summary?.states[s] || 0}</strong>
-                <p>PKR {money(summary?.amounts[s])}</p>
-              </div>
-            ))}
-          </div>
-          <div className="erp-grid">
-            <a className="erp-module" href="erp.html?view=expense-claims">
-              <h3>Expense Claims</h3>
-              <p>
-                Open claims, inspect receipts, and complete authorized approvals
-                and reimbursements.
-              </p>
-            </a>
-            <div className="erp-module">
-              <h3>Automatic accounting</h3>
-              <p>
-                Approval records the expense and employee payable. Reimbursement
-                clears the payable against bank or cash.
-              </p>
-            </div>
-            <div className="erp-module">
-              <h3>Your claim totals</h3>
-              <p>
-                Totals reflect only claims you can access. Tax is entered
-                manually. Drafts do not post to the ledger.
-              </p>
-            </div>
-          </div>
-        </>
+        summary ? (
+          <ModuleDashboard kind="expenses" summary={summary} bridge={bridge} />
+        ) : (
+          <p role="status">Loading expense summary…</p>
+        )
       ) : (
         <>
           <div className="finance-filters">

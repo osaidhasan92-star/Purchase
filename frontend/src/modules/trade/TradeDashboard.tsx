@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { Bridge } from "../../types";
 import { errorMessage } from "../../lib/api";
 import {
+  DashboardFrame,
   Kpi,
   Panel,
   Trend,
@@ -157,7 +158,7 @@ export function TradeDashboard({
       );
   return (
     <section
-      className="reference-dashboard trade-reference-dashboard"
+      className="trade-reference-dashboard"
       data-screen={"trade-" + area + "-dashboard-react"}
       aria-busy={!data && !error}
     >
@@ -173,334 +174,340 @@ export function TradeDashboard({
         <p aria-busy={!error}>Loading dashboard…</p>
       ) : (
         <div aria-busy="false">
-          <div className="ref-kpis">
-            <Kpi
-              label={sales ? "Sales Order Value" : "Purchase Spend"}
-              value={has(orderKey) ? money(reg(orderKey)?.total || 0) : "—"}
-              hint={
-                sales
-                  ? "Total recorded order value"
-                  : "Total purchase order value"
-              }
-              icon="cash"
-            />
-            <Kpi
-              label={sales ? "Open Orders" : "Pending Approval"}
-              value={
-                sales
-                  ? has(orderKey)
-                    ? open
-                    : "—"
-                  : has("requests")
-                    ? pending
-                    : "—"
-              }
-              hint={
-                sales
-                  ? "Orders still in fulfillment"
-                  : "Requests awaiting action"
-              }
-              tone="violet"
-              icon={sales ? "order" : "clock"}
-            />
-            <Kpi
-              label={sales ? "Collected" : "Open Orders"}
-              value={
-                sales ? financialValue(collected) : has(orderKey) ? open : "—"
-              }
-              hint={sales ? paymentHint : "Orders still active"}
-              tone="green"
-              icon={sales ? "cash" : "order"}
-            />
-            <Kpi
-              label={sales ? "Receivables" : "Payables"}
-              value={financialValue(outstanding)}
-              hint={invoiceHint}
-              tone="amber"
-              icon="file"
-            />
-          </div>
-          <div className="ref-main-grid">
-            <Panel
-              title={sales ? "Sales Order Trend" : "Purchase Order Trend"}
-              kicker={sales ? "Performance" : "Procurement spend"}
-              subtitle="Confirmed order value over the last six months"
-              action={
-                <span className="ref-badge">
-                  {money(data.trend.reduce((n, r) => n + r.value, 0))} total
-                </span>
-              }
-            >
-              {has(orderKey) ? (
-                <Trend
-                  rows={data.trend}
-                  color={sales ? "#232e78" : "#95a5bf"}
-                  title={
-                    (sales ? "Sales" : "Purchase") +
-                    " confirmed order value by month"
+          <DashboardFrame module={area}>
+            <div className="ref-kpis">
+              <Kpi
+                label={sales ? "Sales Order Value" : "Purchase Spend"}
+                value={has(orderKey) ? money(reg(orderKey)?.total || 0) : "—"}
+                hint={
+                  sales
+                    ? "Total recorded order value"
+                    : "Total purchase order value"
+                }
+                icon="cash"
+              />
+              <Kpi
+                label={sales ? "Open Orders" : "Pending Approval"}
+                value={
+                  sales
+                    ? has(orderKey)
+                      ? open
+                      : "—"
+                    : has("requests")
+                      ? pending
+                      : "—"
+                }
+                hint={
+                  sales
+                    ? "Orders still in fulfillment"
+                    : "Requests awaiting action"
+                }
+                tone="violet"
+                icon={sales ? "order" : "clock"}
+              />
+              <Kpi
+                label={sales ? "Collected" : "Open Orders"}
+                value={
+                  sales ? financialValue(collected) : has(orderKey) ? open : "—"
+                }
+                hint={sales ? paymentHint : "Orders still active"}
+                tone="amber"
+                icon={sales ? "cash" : "order"}
+              />
+              <Kpi
+                label={sales ? "Receivables" : "Payables"}
+                value={financialValue(outstanding)}
+                hint={invoiceHint}
+                tone="blue"
+                icon="file"
+              />
+            </div>
+            <div className="ref-main-grid">
+              <Panel
+                title={sales ? "Sales Order Trend" : "Purchase Order Trend"}
+                kicker={sales ? "Performance" : "Procurement spend"}
+                subtitle="Confirmed order value over the last six months"
+                action={
+                  <span className="ref-badge">
+                    {money(data.trend.reduce((n, r) => n + r.value, 0))} total
+                  </span>
+                }
+              >
+                {has(orderKey) ? (
+                  <Trend
+                    rows={data.trend}
+                    color="#12a4ac"
+                    title={
+                      (sales ? "Sales" : "Purchase") +
+                      " confirmed order value by month"
+                    }
+                  />
+                ) : (
+                  <p className="ref-empty">
+                    Order reporting is not available for your role.
+                  </p>
+                )}
+              </Panel>
+              <Panel
+                title={sales ? "Quote Progress" : "Procurement Funnel"}
+                kicker={sales ? "Quotation funnel" : "Sourcing pipeline"}
+                subtitle={
+                  sales
+                    ? "From draft to customer acceptance"
+                    : "Volumes by purchasing stage"
+                }
+                action={
+                  <span className="ref-badge">
+                    {count(sales ? "salesQuotations" : "requests")}
+                  </span>
+                }
+              >
+                {funnel.length ? (
+                  <Funnel rows={funnel} />
+                ) : (
+                  <p className="ref-empty">No permitted pipeline registers.</p>
+                )}
+                <div className="ref-panel-foot">
+                  {sales
+                    ? `${count("salesQuotations", ["Accepted"])} accepted · ${count("salesQuotations", ["Rejected"])} rejected`
+                    : `${count("quotations")} vendor quotations · ${count("orders")} purchase orders`}
+                </div>
+              </Panel>
+            </div>
+            <div className="ref-three-grid">
+              <Panel
+                title={sales ? "Sales Health" : "Procurement Health"}
+                kicker="Operations"
+                subtitle="Live work in progress"
+              >
+                <Health
+                  rows={[
+                    ...(has(orderKey)
+                      ? [{ label: "Open Orders", value: open, icon: "order" }]
+                      : []),
+                    ...(has(sales ? "deliveries" : "requests")
+                      ? [
+                          {
+                            label: sales
+                              ? "Pending Deliveries"
+                              : "Pending Approvals",
+                            value: sales
+                              ? count("deliveries", ["Pending"])
+                              : pending,
+                            icon: "clock",
+                          },
+                        ]
+                      : []),
+                    ...(has(invoiceKey)
+                      ? [
+                          {
+                            label:
+                              unpaid + "" === "1"
+                                ? "Unpaid Invoice"
+                                : "Unpaid Invoices",
+                            value: unpaid,
+                            icon: "file",
+                          },
+                        ]
+                      : []),
+                    ...(has(paymentKey)
+                      ? [
+                          {
+                            label: sales
+                              ? "Payments Received"
+                              : "Goods Receipts",
+                            value: count(
+                              sales ? "customerPayments" : "receipts",
+                            ),
+                            icon: "cash",
+                          },
+                        ]
+                      : []),
+                  ]}
+                />
+              </Panel>
+              <Panel
+                title={sales ? "Recent Orders" : "Recent Purchase Requests"}
+                kicker={sales ? "Orders" : "Requests"}
+                subtitle={
+                  sales ? "Most recent order values" : "Latest internal demand"
+                }
+                action={
+                  has(recentKey) ? (
+                    <DashboardLink href={route(recentKey)}>
+                      {sales ? "View orders" : "View requests"}
+                    </DashboardLink>
+                  ) : undefined
+                }
+              >
+                {recent(
+                  recentKey,
+                  sales ? "No sales orders yet." : "No purchase requests yet.",
+                )}
+              </Panel>
+              <Panel
+                title={sales ? "Delivery Status" : "Supplier Overview"}
+                kicker={sales ? "Fulfillment" : "Suppliers"}
+                subtitle={
+                  sales
+                    ? "Customer orders in dispatch"
+                    : "Vendor and invoice position"
+                }
+                action={
+                  !sales && bridge.can("vendors") ? (
+                    <DashboardLink href="erp.html?view=vendors&module=purchase">
+                      View vendors
+                    </DashboardLink>
+                  ) : sales && has("deliveries") ? (
+                    <DashboardLink href={route("deliveries")}>
+                      Deliveries
+                    </DashboardLink>
+                  ) : undefined
+                }
+              >
+                <Health
+                  rows={
+                    sales
+                      ? [
+                          ...(has("deliveries")
+                            ? [
+                                {
+                                  label: "Total deliveries",
+                                  value: count("deliveries"),
+                                  icon: "order",
+                                },
+                                {
+                                  label: "Dispatched",
+                                  value: count("deliveries", [
+                                    "Dispatched",
+                                    "Delivered",
+                                  ]),
+                                  icon: "chart",
+                                },
+                                {
+                                  label: "Pending",
+                                  value: count("deliveries", ["Pending"]),
+                                  icon: "clock",
+                                },
+                              ]
+                            : []),
+                          ...(has(invoiceKey)
+                            ? [
+                                {
+                                  label: "Invoices unpaid",
+                                  value: unpaid,
+                                  icon: "file",
+                                },
+                              ]
+                            : []),
+                        ]
+                      : [
+                          ...(data.partners !== null
+                            ? [
+                                {
+                                  label: "Vendors",
+                                  value: data.partners,
+                                  icon: "people",
+                                },
+                              ]
+                            : []),
+                          ...(has("quotations")
+                            ? [
+                                {
+                                  label: "Vendor quotes",
+                                  value: count("quotations"),
+                                  icon: "file",
+                                },
+                              ]
+                            : []),
+                          ...(has(invoiceKey)
+                            ? [
+                                {
+                                  label: "Unpaid invoices",
+                                  value: unpaid,
+                                  icon: "file",
+                                },
+                              ]
+                            : []),
+                          ...(has("receipts")
+                            ? [
+                                {
+                                  label: "Goods receipts",
+                                  value: count("receipts"),
+                                  icon: "order",
+                                },
+                              ]
+                            : []),
+                        ]
                   }
                 />
-              ) : (
-                <p className="ref-empty">
-                  Order reporting is not available for your role.
-                </p>
-              )}
-            </Panel>
-            <Panel
-              title={sales ? "Quote Progress" : "Procurement Funnel"}
-              kicker={sales ? "Quotation funnel" : "Sourcing pipeline"}
-              subtitle={
-                sales
-                  ? "From draft to customer acceptance"
-                  : "Volumes by purchasing stage"
-              }
-              action={
-                <span className="ref-badge">
-                  {count(sales ? "salesQuotations" : "requests")}
-                </span>
-              }
-            >
-              {funnel.length ? (
-                <Funnel rows={funnel} color={sales ? "#39bca2" : "#7876cf"} />
-              ) : (
-                <p className="ref-empty">No permitted pipeline registers.</p>
-              )}
-              <div className="ref-panel-foot">
-                {sales
-                  ? `${count("salesQuotations", ["Accepted"])} accepted · ${count("salesQuotations", ["Rejected"])} rejected`
-                  : `${count("quotations")} vendor quotations · ${count("orders")} purchase orders`}
-              </div>
-            </Panel>
-          </div>
-          <div className="ref-three-grid">
-            <Panel
-              title={sales ? "Sales Health" : "Procurement Health"}
-              kicker="Operations"
-              subtitle="Live work in progress"
-            >
-              <Health
-                rows={[
-                  ...(has(orderKey)
-                    ? [{ label: "Open Orders", value: open, icon: "order" }]
-                    : []),
-                  ...(has(sales ? "deliveries" : "requests")
-                    ? [
-                        {
-                          label: sales
-                            ? "Pending Deliveries"
-                            : "Pending Approvals",
-                          value: sales
-                            ? count("deliveries", ["Pending"])
-                            : pending,
-                          icon: "clock",
-                        },
-                      ]
-                    : []),
-                  ...(has(invoiceKey)
-                    ? [
-                        {
-                          label:
-                            unpaid + "" === "1"
-                              ? "Unpaid Invoice"
-                              : "Unpaid Invoices",
-                          value: unpaid,
-                          icon: "file",
-                        },
-                      ]
-                    : []),
-                  ...(has(paymentKey)
-                    ? [
-                        {
-                          label: sales ? "Payments Received" : "Goods Receipts",
-                          value: count(sales ? "customerPayments" : "receipts"),
-                          icon: "cash",
-                        },
-                      ]
-                    : []),
-                ]}
-              />
-            </Panel>
-            <Panel
-              title={sales ? "Recent Orders" : "Recent Purchase Requests"}
-              kicker={sales ? "Orders" : "Requests"}
-              subtitle={
-                sales ? "Most recent order values" : "Latest internal demand"
-              }
-              action={
-                has(recentKey) ? (
-                  <DashboardLink href={route(recentKey)}>
-                    {sales ? "View orders" : "View requests"}
-                  </DashboardLink>
-                ) : undefined
-              }
-            >
-              {recent(
-                recentKey,
-                sales ? "No sales orders yet." : "No purchase requests yet.",
-              )}
-            </Panel>
-            <Panel
-              title={sales ? "Delivery Status" : "Supplier Overview"}
-              kicker={sales ? "Fulfillment" : "Suppliers"}
-              subtitle={
-                sales
-                  ? "Customer orders in dispatch"
-                  : "Vendor and invoice position"
-              }
-              action={
-                !sales && bridge.can("vendors") ? (
-                  <DashboardLink href="erp.html?view=vendors&module=purchase">
-                    View vendors
-                  </DashboardLink>
-                ) : sales && has("deliveries") ? (
-                  <DashboardLink href={route("deliveries")}>
-                    Deliveries
-                  </DashboardLink>
-                ) : undefined
-              }
-            >
-              <Health
-                rows={
-                  sales
-                    ? [
-                        ...(has("deliveries")
-                          ? [
-                              {
-                                label: "Total deliveries",
-                                value: count("deliveries"),
-                                icon: "order",
-                              },
-                              {
-                                label: "Dispatched",
-                                value: count("deliveries", [
-                                  "Dispatched",
-                                  "Delivered",
-                                ]),
-                                icon: "chart",
-                              },
-                              {
-                                label: "Pending",
-                                value: count("deliveries", ["Pending"]),
-                                icon: "clock",
-                              },
-                            ]
-                          : []),
-                        ...(has(invoiceKey)
-                          ? [
-                              {
-                                label: "Invoices unpaid",
-                                value: unpaid,
-                                icon: "file",
-                              },
-                            ]
-                          : []),
-                      ]
-                    : [
-                        ...(data.partners !== null
-                          ? [
-                              {
-                                label: "Vendors",
-                                value: data.partners,
-                                icon: "people",
-                              },
-                            ]
-                          : []),
-                        ...(has("quotations")
-                          ? [
-                              {
-                                label: "Vendor quotes",
-                                value: count("quotations"),
-                                icon: "file",
-                              },
-                            ]
-                          : []),
-                        ...(has(invoiceKey)
-                          ? [
-                              {
-                                label: "Unpaid invoices",
-                                value: unpaid,
-                                icon: "file",
-                              },
-                            ]
-                          : []),
-                        ...(has("receipts")
-                          ? [
-                              {
-                                label: "Goods receipts",
-                                value: count("receipts"),
-                                icon: "order",
-                              },
-                            ]
-                          : []),
-                      ]
-                }
-              />
-            </Panel>
-          </div>
-          <Panel
-            title={
-              sales ? "Recent Customer Invoices" : "Open Supplier Balances"
-            }
-            kicker={sales ? "Collections" : "Payables"}
-            subtitle={
-              sales
-                ? "Track customer billing and collections"
-                : "Approved bills awaiting supplier payment"
-            }
-            action={
-              has(invoiceKey) ? (
-                <DashboardLink href={route(invoiceKey)}>
-                  View invoices
-                </DashboardLink>
-              ) : undefined
-            }
-          >
-            {sales ? (
-              recent(invoiceKey, "No customer invoices yet.")
-            ) : (
-              <div className="ref-finance-strip">
-                <div>
-                  <small>Outstanding supplier balance</small>
-                  <b>{financialValue(outstanding)}</b>
-                  {outstanding === null && <small>{invoiceHint}</small>}
-                </div>
-                <div>
-                  <small>Supplier payments processed</small>
-                  <b>{financialValue(collected)}</b>
-                  {collected === null && <small>{paymentHint}</small>}
-                </div>
-              </div>
-            )}
-          </Panel>
-          <details className="ref-registers">
-            <summary>Document registers and recorded values</summary>
-            <div className="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Register</th>
-                    <th>Documents</th>
-                    <th>Recorded Value (PKR)</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.registers.map((r) => (
-                    <tr key={r.key}>
-                      <td>
-                        <a href={route(r.key)}>{configs[r.key].label}</a>
-                      </td>
-                      <td>{r.count}</td>
-                      <td>{money(r.total)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              </Panel>
             </div>
-            <p className="hint">
-              Recorded values include all document statuses. Use Accounting for
-              posted financial statements.
-            </p>
-          </details>
+            <Panel
+              title={
+                sales ? "Recent Customer Invoices" : "Open Supplier Balances"
+              }
+              kicker={sales ? "Collections" : "Payables"}
+              subtitle={
+                sales
+                  ? "Track customer billing and collections"
+                  : "Approved bills awaiting supplier payment"
+              }
+              action={
+                has(invoiceKey) ? (
+                  <DashboardLink href={route(invoiceKey)}>
+                    View invoices
+                  </DashboardLink>
+                ) : undefined
+              }
+            >
+              {sales ? (
+                recent(invoiceKey, "No customer invoices yet.")
+              ) : (
+                <div className="ref-finance-strip">
+                  <div>
+                    <small>Outstanding supplier balance</small>
+                    <b>{financialValue(outstanding)}</b>
+                    {outstanding === null && <small>{invoiceHint}</small>}
+                  </div>
+                  <div>
+                    <small>Supplier payments processed</small>
+                    <b>{financialValue(collected)}</b>
+                    {collected === null && <small>{paymentHint}</small>}
+                  </div>
+                </div>
+              )}
+            </Panel>
+            <details className="ref-registers">
+              <summary>Document registers and recorded values</summary>
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Register</th>
+                      <th>Documents</th>
+                      <th>Recorded Value (PKR)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.registers.map((r) => (
+                      <tr key={r.key}>
+                        <td>
+                          <a href={route(r.key)}>{configs[r.key].label}</a>
+                        </td>
+                        <td>{r.count}</td>
+                        <td>{money(r.total)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <p className="hint">
+                Recorded values include all document statuses. Use Accounting
+                for posted financial statements.
+              </p>
+            </details>
+          </DashboardFrame>
         </div>
       )}
     </section>

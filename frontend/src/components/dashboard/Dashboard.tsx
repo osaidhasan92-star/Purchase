@@ -5,8 +5,32 @@ export const money = (value: number) =>
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
+export function DashboardFrame({
+  module,
+  children,
+}: {
+  module: string;
+  children: ReactNode;
+}) {
+  return (
+    <div
+      className="reference-dashboard unified-dashboard"
+      data-dashboard={module}
+    >
+      <div className="ref-dashboard-content" aria-busy="false">
+        {children}
+      </div>
+    </div>
+  );
+}
 export function Icon({ kind = "chart" }: { kind?: string }) {
   const paths: Record<string, string> = {
+    home: "m3 11 9-8 9 8M5 10v11h5v-7h4v7h5V10",
+    cart: "M3 4h2l3 12h10l3-8H6M9 20h1m7 0h1",
+    box: "m3 7 9-4 9 4v10l-9 4-9-4V7zm0 0 9 4 9-4m-9 4v10",
+    factory: "M3 21V9l6 3V7l6 3V3h5v18H3zM7 16h1m4 0h1m4 0h1",
+    settings:
+      "m9 3-1 3-3 1-2 4 2 2 1 4 3 1 2 3 4-1 1-3 3-2-1-4 1-3-4-2-2-2H9zM15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0",
     chart: "M4 19h16M7 15V9m5 6V5m5 10v-4",
     order: "M7 4h10v16l-5-3-5 3z",
     cash: "M3 6h18v12H3zM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6",
@@ -184,7 +208,7 @@ export function Trend({
 }
 export function Funnel({
   rows,
-  color = "#39bca2",
+  color,
 }: {
   rows: { label: string; count: number }[];
   color?: string;
@@ -192,7 +216,7 @@ export function Funnel({
   const max = Math.max(1, ...rows.map((r) => r.count));
   return (
     <div className="ref-funnel">
-      {rows.map((r) => (
+      {rows.map((r, i) => (
         <div key={r.label}>
           <div className="ref-funnel-label">
             <span>{r.label}</span>
@@ -200,7 +224,14 @@ export function Funnel({
           </div>
           <div className="ref-track">
             <span
-              style={{ width: (r.count / max) * 100 + "%", background: color }}
+              style={{
+                width: (r.count / max) * 100 + "%",
+                background:
+                  color ||
+                  ["#253b93", "#8060d9", "#12a4ac", "#e3a12d", "#347de4"][
+                    i % 5
+                  ],
+              }}
             />
           </div>
         </div>
@@ -215,7 +246,7 @@ export function Health({
 }) {
   return (
     <div className="ref-health">
-      {rows.map((r) => (
+      {rows.map((r, i) => (
         <div key={r.label}>
           <Icon kind={r.icon} />
           <strong>{r.value}</strong>

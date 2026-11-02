@@ -1,3 +1,4 @@
+import { ModuleDashboard } from "../../components/dashboard/ModuleDashboard";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import type { Bridge } from "../../types";
 import { Dialog } from "../../components/Dialog";
@@ -153,7 +154,15 @@ export function InventoryPage({
           </div>
         )}
       </div>
-      {summary && (
+      {summary && !moves && (
+        <ModuleDashboard
+          kind="inventory"
+          summary={summary}
+          bridge={bridge}
+          items={data.items}
+        />
+      )}
+      {summary && moves && (
         <div className="stats">
           {[
             ["Stock products", String(summary.stockProducts)],

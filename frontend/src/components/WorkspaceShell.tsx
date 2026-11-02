@@ -1,6 +1,19 @@
+import { Icon } from "./dashboard/Dashboard";
 import { useEffect, useState, type ReactNode, type MouseEvent } from "react";
 import { CompanyProfile } from "../modules/admin/CompanyProfile";
 import type { Bridge, ShellPage } from "../types";
+const moduleIcons: Record<string, string> = {
+  overview: "home",
+  crm: "people",
+  sales: "chart",
+  purchase: "cart",
+  hr: "people",
+  accounting: "cash",
+  inventory: "box",
+  manufacturing: "factory",
+  expenses: "file",
+  admin: "settings",
+};
 export function WorkspaceShell({
   page,
   bridge,
@@ -83,7 +96,7 @@ export function WorkspaceShell({
                 data-workspace={workspace.id}
                 onClick={(event) => navigate(event, workspace.href)}
               >
-                <i className={"ti " + workspace.icon} />
+                <Icon kind={moduleIcons[workspace.id] || "order"} />
                 <span>{workspace.label}</span>
               </a>
             ))}

@@ -1,3 +1,4 @@
+import { ModuleDashboard } from "../components/dashboard/ModuleDashboard";
 import { useEffect, useRef, useState } from "react";
 import type { Bridge, Workspace } from "../types";
 import { Dialog } from "../components/Dialog";
@@ -13,17 +14,6 @@ import {
 } from "./finance/types";
 import { errorMessage } from "../lib/api";
 type View = "overview" | "companies" | "crmQuotes";
-const descriptions: Record<string, string> = {
-  crm: "Leads, customers and follow-ups.",
-  sales: "Quotations, deliveries, invoices and collections.",
-  purchase: "Requests, supplier quotes, receipts, bills and payments.",
-  hr: "Employees, attendance, leave and payroll.",
-  accounting: "Journals, reconciliation and financial reports.",
-  inventory: "Stock balances, movements, adjustments and returns.",
-  manufacturing: "Bills of materials, production and finished goods.",
-  expenses: "Claims, receipts, approvals and reimbursements.",
-  admin: "Accounts, roles, activity and record migration.",
-};
 export function RemainingPage({
   view,
   bridge,
@@ -133,38 +123,13 @@ export function RemainingPage({
       {view === "overview" ? (
         <>
           {summary && (
-            <div className="stats">
-              {[
-                ["cashBank", "Cash & Bank"],
-                ["inventoryValue", "Inventory Value"],
-                ["openProduction", "Open Production"],
-                ["profit", "Net Profit"],
-                ["pendingExpenses", "Pending Expenses"],
-              ]
-                .filter(([k]) => summary[k] !== undefined)
-                .map(([k, t]) => (
-                  <div className="stat-card finance-stat" key={k}>
-                    <span>{t}</span>
-                    <strong>
-                      {["openProduction", "pendingExpenses"].includes(k)
-                        ? str(summary[k])
-                        : "PKR " + money(summary[k])}
-                    </strong>
-                  </div>
-                ))}
-            </div>
+            <ModuleDashboard
+              kind="overview"
+              summary={summary}
+              bridge={bridge}
+              workspaces={workspaces}
+            />
           )}
-          <div className="erp-grid">
-            {workspaces
-              .filter((w) => w.id !== "overview")
-              .map((w) => (
-                <a className="erp-module" key={w.id} href={w.href}>
-                  <i className={"ti " + w.icon} />
-                  <h3>{w.label}</h3>
-                  <p>{descriptions[w.id] || "Open workspace."}</p>
-                </a>
-              ))}
-          </div>
           {!!summary?.canSeed && (
             <div className="section-card">
               <h3>General-products demonstration</h3>

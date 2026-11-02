@@ -75,6 +75,28 @@ module.exports = async (page, base) => {
         width,
       );
     }
+    const overview = await (
+      await restricted.request.get(base + "/api/overview/summary")
+    ).json();
+    await screen.goto(base + "/erp.html?view=overview");
+    const frame = screen.locator('[data-dashboard="overview"]');
+    await frame.waitFor();
+    for (const [key, label] of [
+      ["cashBank", "Cash & Bank"],
+      ["inventoryValue", "Inventory Value"],
+      ["openProduction", "Open Production"],
+      ["profit", "Net Profit"],
+    ]) {
+      if (overview[key] === undefined) {
+        const card = frame
+          .locator(".ref-kpi")
+          .filter({
+            has: screen.locator(".ref-kpi-label", { hasText: label }),
+          });
+        await card.getByText("Unavailable", { exact: true }).waitFor();
+        assert.ok(!(await card.textContent()).includes("Rs 0.00"));
+      }
+    }
     await screen.close();
     screen = undefined;
     await restricted.clearCookies();

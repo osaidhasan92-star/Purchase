@@ -1,3 +1,4 @@
+import { ModuleDashboard } from "../../components/dashboard/ModuleDashboard";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import type { Bridge } from "../../types";
 import { Dialog } from "../../components/Dialog";
@@ -715,37 +716,18 @@ export function HrDashboard({
       {!data && !error && <p role="status">Loading HR summary…</p>}
       {data && (
         <>
-          <div className="stats">
-            {data.registers.map((r) => (
-              <a
-                className="stat-card"
-                key={r.key}
-                href={"erp.html?view=" + configs[r.key].view}
-              >
-                <h3>{configs[r.key].title}</h3>
-                <strong>{r.count}</strong>
-                <p>
-                  {Object.entries(r.statuses)
-                    .map(([s, n]) => s + ": " + n)
-                    .join(" · ")}
-                </p>
-              </a>
-            ))}
-          </div>
-          {bridge.can("hr_payroll") && (
-            <p>
-              Paid payroll total: PKR{" "}
-              {data.paidPayroll.toLocaleString("en-PK", {
-                minimumFractionDigits: 2,
-              })}
-            </p>
-          )}
-          <p>
-            Recruitment → employees → attendance and leave → payroll approval →
-            recorded payment.
-          </p>
+          <ModuleDashboard kind="hr" summary={data} bridge={bridge} />
           {reports && (
             <p>
+              {bridge.can("hr_payroll") && (
+                <>
+                  Paid payroll total: PKR{" "}
+                  {data.paidPayroll.toLocaleString("en-PK", {
+                    minimumFractionDigits: 2,
+                  })}
+                  .{" "}
+                </>
+              )}
               Open Attendance or Payroll to search, filter and export each page.
               Report figures follow your record permissions.
             </p>

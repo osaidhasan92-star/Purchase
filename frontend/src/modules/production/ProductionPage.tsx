@@ -1,3 +1,4 @@
+import { ModuleDashboard } from "../../components/dashboard/ModuleDashboard";
 import { useEffect, useRef, useState } from "react";
 import type { Bridge } from "../../types";
 import { Dialog } from "../../components/Dialog";
@@ -214,42 +215,11 @@ export function ProductionPage({
       {loading ? (
         <p role="status">Loading manufacturing…</p>
       ) : view === "manufacturing" && summary ? (
-        <>
-          <div className="stats">
-            {[
-              ["Bills of materials", summary.boms],
-              [
-                "Open orders",
-                (summary.states.Draft || 0) +
-                  (summary.states.Confirmed || 0) +
-                  (summary.states["In Progress"] || 0),
-              ],
-              ["Completed orders", summary.states.Done || 0],
-              ["Completed output cost", "PKR " + money(summary.completedCost)],
-            ].map(([t, v]) => (
-              <div key={t} className="stat-card finance-stat">
-                <span>{t}</span>
-                <strong>{v}</strong>
-              </div>
-            ))}
-          </div>
-          <div className="erp-grid">
-            <a className="erp-module" href="erp.html?view=boms">
-              <h3>Bills of Materials</h3>
-              <p>
-                Define output batches, component requirements and conversion
-                costs.
-              </p>
-            </a>
-            <a className="erp-module" href="erp.html?view=production-orders">
-              <h3>Manufacturing Orders</h3>
-              <p>
-                Confirm, start and complete production; inspect material
-                shortages and posted costs.
-              </p>
-            </a>
-          </div>
-        </>
+        <ModuleDashboard
+          kind="manufacturing"
+          summary={summary}
+          bridge={bridge}
+        />
       ) : (
         <>
           <div className="finance-filters">

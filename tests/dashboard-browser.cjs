@@ -10,6 +10,12 @@ module.exports = async (page, base) => {
       ["crm-dashboard", "Revenue & Pipeline"],
       ["sales", "Sales Order Trend"],
       ["purchase-dashboard", "Purchase Order Trend"],
+      ["overview", "Operational Snapshot"],
+      ["accounting", "Financial Position"],
+      ["inventory", "Product Stock Values"],
+      ["manufacturing", "Production Status"],
+      ["expenses", "Expense Amounts by Status"],
+      ["hr-dashboard", "People Operations"],
     ]) {
       await page.goto(base + "/erp.html?view=" + view);
       const dashboard = page.locator(".reference-dashboard");
@@ -18,6 +24,21 @@ module.exports = async (page, base) => {
         .getByRole("heading", { name: heading, exact: true })
         .waitFor();
       assert.equal(await dashboard.locator(".ref-kpi").count(), 4);
+      assert.equal(
+        await dashboard.locator(".ref-main-grid > .ref-panel").count(),
+        2,
+        view + ": shared main panels",
+      );
+      assert.equal(
+        await dashboard.locator(".ref-three-grid > .ref-panel").count(),
+        3,
+        view + ": shared lower panels",
+      );
+      assert.equal(
+        (await dashboard.getAttribute("data-dashboard")) !== null,
+        true,
+        view + ": shared template",
+      );
       assert.equal(await dashboard.getByRole("img").count(), 1);
       assert.equal(
         await page.evaluate(() => document.documentElement.scrollWidth),
@@ -41,11 +62,11 @@ module.exports = async (page, base) => {
         );
       assert.equal(
         cols,
-        view === "crm-dashboard" || viewport.width === 390 ? 2 : 4,
+        viewport.width === 390 ? 2 : 4,
         view + ": reference KPI grid",
       );
       if (view === "crm-dashboard") {
-        const year = dashboard.getByLabel("Lead closing year");
+        const year = page.getByLabel("Lead closing year");
         await year.selectOption(String(new Date().getFullYear() - 1));
         await dashboard.locator('[aria-busy="false"]').first().waitFor();
         await year.selectOption("");
@@ -82,6 +103,6 @@ module.exports = async (page, base) => {
   await require("./financial-permissions-browser.cjs")(page, base);
   await page.setViewportSize({ width: 1366, height: 900 });
   console.log(
-    "Reference CRM/Sales/Purchase dashboards: desktop/mobile grids, charts, filters and navigation passed",
+    "All nine dashboards: shared KPI/panel pattern, desktop/mobile bounds, charts, filters and navigation passed",
   );
 };

@@ -1,14 +1,10 @@
+import { ModuleDashboard } from "../../components/dashboard/ModuleDashboard";
 import { useEffect, useRef, useState } from "react";
 import type { Bridge, User } from "../../types";
 import { Dialog } from "../../components/Dialog";
 import { errorMessage } from "../../lib/api";
 import { FinanceForm, type FormState } from "./FinanceForms";
-import {
-  FinanceReports,
-  Pager,
-  DataTable,
-  SummaryCards,
-} from "./FinanceReports";
+import { FinanceReports, Pager, DataTable } from "./FinanceReports";
 import {
   money,
   str,
@@ -313,47 +309,7 @@ export function FinancePage({
       ) : loading ? (
         <p role="status">Loading accounting records…</p>
       ) : view === "accounting" && summary ? (
-        <>
-          <SummaryCards summary={summary} />
-          <div className="erp-grid">
-            {[
-              [
-                "journals",
-                "Journal Entries",
-                "Review automatic postings or prepare balanced manual journals.",
-              ],
-              [
-                "accounts",
-                "Chart of Accounts",
-                "Review and add company accounts.",
-              ],
-              [
-                "reports",
-                "Financial Reports",
-                "Trial balance, general ledger, statements and cash movements.",
-              ],
-              [
-                "aged",
-                "Receivables & Payables",
-                "Current open invoices and payments; partial matching.",
-              ],
-              [
-                "bank",
-                "Bank Reconciliation",
-                "Match statement lines to posted bank or cash items.",
-              ],
-            ].map(([v, t, d]) => (
-              <a className="erp-module" key={v} href={"erp.html?view=" + v}>
-                <h3>{t}</h3>
-                <p>{d}</p>
-              </a>
-            ))}
-          </div>
-          <p>
-            Accounting locked through: {str(summary.periodLock.date)}. Balance
-            check: PKR {money(summary.balanceCheck)}.
-          </p>
-        </>
+        <ModuleDashboard kind="accounting" summary={summary} bridge={bridge} />
       ) : (
         <>
           {(view === "accounts" || view === "aged") && (
