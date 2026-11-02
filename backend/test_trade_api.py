@@ -907,3 +907,36 @@ def test_discounted_partial_receipts_and_bills_clear_grni_to_exact_line_cents(ap
         invoice = db.session.get(store.MODELS["invoices"], str(bill["id"]))
         order_row = db.session.get(store.MODELS["orders"], str(order["id"]))
         assert invoice.lines[0].source_line_id == order_row.lines[0].id
+
+
+def test_dashboard_metrics_use_workflow_status_dates_and_visibility(app):
+    from backend.erp import day
+    admin, _ = session(app)
+    seller, _ = session(app, "seller")
+    month = day()[:7]
+    with app.app_context():
+        for key, rows in {
+            "salesOrders": [
+                ("visible-order", "seller", "Confirmed", 120, None),
+                ("draft-order", "seller", "Draft", 700, None),
+                ("private-order", "buyer", "Confirmed", 9900, None),
+            ],
+            "customerInvoices": [("visible-invoice", "seller", "Partially Paid", 120, 70)],
+            "customerPayments": [("visible-payment", "seller", "Received", 50, None)],
+        }.items():
+            for i, (identity, actor, status, value, balance) in enumerate(rows):
+                db.session.add(store.MODELS[key](id=identity, original_id=identity, position=i,
+                    number=identity, document_date=month+"-02", created_by=actor,
+                    status=status, total=value, amount=value, balance=balance,
+                    record_version="dashboard-fixture-"+identity, extras={}))
+        db.session.commit()
+    data = seller.get("/api/trade/summary/sales").json
+    orders = next(r for r in data["registers"] if r["key"] == "salesOrders")
+    assert orders["count"] == 2 and orders["total"] == 820
+    assert orders["statuses"] == {"Confirmed": 1, "Draft": 1}
+    assert data["trend"][-1] == {"month": month, "value": 120}
+    assert data["balances"] == {}  # Salespeople cannot read Accounting registers.
+    assert {r["id"] for r in data["recent"]["salesOrders"]} == {"visible-order", "draft-order"}
+    administrative = admin.get("/api/trade/summary/sales").json
+    assert administrative["trend"][-1]["value"] == 10020
+    assert administrative["balances"] == {"outstanding": 70, "collected": 50}

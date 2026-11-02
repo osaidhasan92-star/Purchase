@@ -87,7 +87,9 @@ export function TradePage({
       pageSize: 25,
     }),
     [page, setPage] = useState(1),
-    [search, setSearch] = useState(""),
+    [search, setSearch] = useState(
+      () => new URLSearchParams(location.search).get("search") || "",
+    ),
     [status, setStatus] = useState(""),
     [reload, setReload] = useState(0),
     [loading, setLoading] = useState(true),
@@ -278,6 +280,7 @@ export function TradePage({
         >
           <input
             name="search"
+            defaultValue={search}
             aria-label={"Search " + config.label.toLowerCase()}
             placeholder="Search number, partner or reference"
             maxLength={160}
@@ -709,88 +712,4 @@ function Comparison({
     </section>
   );
 }
-export function TradeDashboard({
-  bridge,
-  area,
-}: {
-  bridge: Bridge;
-  area: "sales" | "purchase";
-}) {
-  const [data, setData] = useState<{
-      registers: { key: Resource; count: number; total: number }[];
-    } | null>(null),
-    [error, setError] = useState(""),
-    [reload, setReload] = useState(0);
-  useEffect(() => {
-    let active = true;
-    bridge
-      .request<{
-        registers: { key: Resource; count: number; total: number }[];
-      }>("/trade/summary/" + area)
-      .then((result) => {
-        if (active) {
-          setData(result);
-          setError("");
-        }
-      })
-      .catch((e) => {
-        if (active) setError(errorMessage(e));
-      });
-    return () => {
-      active = false;
-    };
-  }, [area, bridge, reload]);
-  return (
-    <section
-      className="section-card"
-      data-screen={"trade-" + area + "-dashboard-react"}
-    >
-      <div className="section-head">
-        <div>
-          <h3>{area === "sales" ? "Sales" : "Purchasing"} Dashboard</h3>
-          <p className="hint">
-            Current authorized document counts and values · PKR
-          </p>
-        </div>
-      </div>
-      {error && (
-        <p className="modern-error" role="alert">
-          {error}
-          <button type="button" onClick={() => setReload((v) => v + 1)}>
-            Try again
-          </button>
-        </p>
-      )}
-      {!data ? (
-        <p aria-busy="true">Loading dashboard…</p>
-      ) : (
-        <div className="table-wrap" aria-busy="false">
-          <table>
-            <thead>
-              <tr>
-                <th>Register</th>
-                <th>Documents</th>
-                <th>Recorded Value (PKR)</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.registers.map((item) => (
-                <tr key={item.key}>
-                  <td>
-                    <a href={route(item.key)}>{configs[item.key].label}</a>
-                  </td>
-                  <td>{item.count}</td>
-                  <td>{money(item.total)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          <p className="hint">
-            Register values show all statuses. Use Accounting reports for posted
-            balances and financial statements.
-          </p>
-        </div>
-      )}
-    </section>
-  );
-}
+export { TradeDashboard } from "./TradeDashboard";

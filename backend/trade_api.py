@@ -350,10 +350,65 @@ def summary(area):
         value = db.session.scalar(
             select(func.coalesce(func.sum(value_column), 0)).where(visibility(key))
         )
-        registers.append(dict(key=key, count=count, total=float(value or 0)))
+        statuses = db.session.execute(
+            select(model.status, func.count()).where(visibility(key)).group_by(model.status)
+        ).all()
+        registers.append(dict(key=key, count=count, total=float(value or 0),
+                              statuses={status or "Unknown": n for status, n in statuses}))
     if not registers:
         problem("No transaction dashboard permissions", 403)
-    return jsonify(registers=registers, currency="PKR")
+    from datetime import date
+    from .erp import day
+    today = date.fromisoformat(day())
+    months = []
+    for offset in range(5, -1, -1):
+        number = today.year * 12 + today.month - 1 - offset
+        months.append(f"{number // 12:04d}-{number % 12 + 1:02d}")
+    next_number = today.year * 12 + today.month
+    next_month = f"{next_number // 12:04d}-{next_number % 12 + 1:02d}-01"
+    available = {item["key"] for item in registers}
+    order_key = "salesOrders" if area == "sales" else "orders"
+    invoice_key = "customerInvoices" if area == "sales" else "invoices"
+    payment_key = "customerPayments" if area == "sales" else "payments"
+    trend, recent, balances = [], {}, {}
+    if order_key in available:
+        model = store.MODELS[order_key]
+        month = func.substr(model.document_date, 1, 7)
+        grouped = dict(db.session.execute(
+            select(month, func.coalesce(func.sum(model.total), 0))
+            .where(visibility(order_key), model.status.in_(("Confirmed", "Partially Delivered", "Delivered", "Approved", "Sent to Vendor", "Partially Received", "Received", "Closed")),
+                   model.document_date >= months[0] + "-01", model.document_date < next_month)
+            .group_by(month)
+        ).all())
+        trend = [dict(month=m, value=float(grouped.get(m, 0))) for m in months]
+    for key in (order_key, "requests" if area == "purchase" else invoice_key):
+        if key not in available:
+            continue
+        model = store.MODELS[key]
+        rows = db.session.scalars(select(model).where(visibility(key))
+                                  .order_by(model.document_date.desc(), model.position.desc()).limit(5))
+        recent[key] = [dict(id=row.original_id, number=row.number, date=row.document_date,
+                            partner=row.partner_name or row.requester, status=row.status,
+                            total=float((row.amount if key == invoice_key else row.total) or 0)) for row in rows]
+    if invoice_key in available:
+        model = store.MODELS[invoice_key]
+        balances["outstanding"] = float(db.session.scalar(
+            select(func.coalesce(func.sum(model.balance), 0))
+            .where(visibility(invoice_key), model.status.in_(("Approved", "Posted", "Partially Paid")))
+        ) or 0)
+    if payment_key in available:
+        model = store.MODELS[payment_key]
+        balances["collected"] = float(db.session.scalar(
+            select(func.coalesce(func.sum(model.amount), 0))
+            .where(visibility(payment_key), model.status == ("Received" if area == "sales" else "Processed"))
+        ) or 0)
+    partners = None
+    permission = "sales_customers" if area == "sales" else "vendors"
+    if allowed(g.user, state, permission):
+        from .master_store import Customer, Vendor
+        partners = db.session.scalar(select(func.count()).select_from(Customer if area == "sales" else Vendor))
+    return jsonify(registers=registers, currency="PKR", trend=trend, recent=recent,
+                   balances=balances, partners=partners)
 
 
 PRINT_TEMPLATE = """<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{{title}} — {{number}}</title><style>body{font:14px Arial,sans-serif;color:#172338;margin:32px}header{border-bottom:2px solid #253374;margin-bottom:20px;display:flex;justify-content:space-between;gap:24px}h1{font-size:24px}h2{font-size:18px}table{border-collapse:collapse;width:100%;margin:20px 0}th,td{border:1px solid #d7dde8;text-align:left;padding:9px}th{background:#f2f5fa}.fields{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}.total{text-align:right;font-size:18px}.notes{white-space:pre-wrap}.print{padding:10px 16px}@media print{.print{display:none}body{margin:12mm}tr{break-inside:avoid}}</style></head><body><header><div><h2>{{company.get('name','Company')}}</h2><p>{{company.get('address','')}}</p><p>{{company.get('email','')}} {{company.get('phone','')}}</p><p>NTN / Tax number: {{company.get('taxNumber','')}}</p></div><div><h1>{{title}}</h1><p>{{number}}</p><p>{{record.get('status','')}}</p></div></header><div class="fields">{% for label,value in fields %}<div><b>{{label}}</b><br>{{value if value is not none else ''}}</div>{% endfor %}</div>{% if lines %}<table><thead><tr><th>Item</th><th>Description</th><th>Qty</th><th>Unit</th><th>Rate</th><th>Tax %</th><th>Discount %</th><th>Total (PKR)</th></tr></thead><tbody>{% for item in lines %}<tr><td>{{item.get('productName','')}}</td><td>{{item.get('description','')}}</td><td>{{item.get('quantity',item.get('deliveredQty',item.get('acceptedQty','')))}}</td><td>{{item.get('unit','')}}</td><td>{{item.get('rate',item.get('quotedRate',''))}}</td><td>{{item.get('taxPercent','')}}</td><td>{{item.get('discountPercent','')}}</td><td>{{item.get('total','')}}</td></tr>{% endfor %}</tbody></table>{% endif %}{% if receipt %}<h2>Inspection / Receipt</h2><table><thead><tr><th>Item</th><th>Ordered</th><th>Received</th><th>Accepted</th><th>Rejected</th><th>Inspection / Remark</th></tr></thead><tbody>{% for item in receipt %}<tr><td>{{item.get('productName','')}}</td><td>{{item.get('orderedQty','')}}</td><td>{{item.get('receivedQty','')}}</td><td>{{item.get('acceptedQty','')}}</td><td>{{item.get('rejectedQty','')}}</td><td>{{item.get('inspection','')}} {{item.get('remark','')}}</td></tr>{% endfor %}</tbody></table>{% endif %}{% if source_lines %}<h2>Complete source quotation / order — {{source_number}}</h2><table><thead><tr><th>Item</th><th>Ordered Qty</th><th>Rate</th><th>Total (PKR)</th></tr></thead><tbody>{% for item in source_lines %}<tr><td>{{item.get('productName','')}}</td><td>{{item.get('quantity','')}}</td><td>{{item.get('rate',item.get('quotedRate',''))}}</td><td>{{item.get('total','')}}</td></tr>{% endfor %}</tbody></table>{% endif %}{% if invoices %}<h2>Related Customer Invoices (up to 25)</h2><table><thead><tr><th>Invoice</th><th>Amount (PKR)</th><th>Status</th></tr></thead><tbody>{% for invoice in invoices %}<tr><td>{{invoice.invoiceNo}}</td><td>{{invoice.amount}}</td><td>{{invoice.status}}</td></tr>{% endfor %}</tbody></table>{% endif %}{% if record.get('vendors') %}<h2>Invited Vendors</h2><table><thead><tr><th>Supplier</th><th>Email</th><th>Contact</th></tr></thead><tbody>{% for vendor in record.vendors %}<tr><td>{{vendor.get('name','')}}</td><td>{{vendor.get('email','')}}</td><td>{{vendor.get('contact','')}}</td></tr>{% endfor %}</tbody></table>{% endif %}{% if 'subtotal' in record %}<p class="total">Subtotal: PKR {{record.subtotal}}</p>{% endif %}{% if 'taxAmount' in record %}<p class="total">Tax: PKR {{record.taxAmount}}</p>{% endif %}<p class="total">Total: PKR {{record.get('amount',record.get('total',record.get('estimatedTotal','—')))}}</p>{% if 'balance' in record %}<p class="total">Paid: PKR {{record.get('paidAmount',0)}} · Balance: PKR {{record.get('balance',0)}}</p>{% endif %}<p class="notes">{{record.get('terms','')}}</p><p class="notes">{{record.get('notes','')}}</p><p>Pakistan · PKR · WH / Stock</p><button type="button" class="print" onclick="window.print()">Print / Save as PDF</button></body></html>"""

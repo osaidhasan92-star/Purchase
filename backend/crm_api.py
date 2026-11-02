@@ -248,6 +248,12 @@ def crm_summary():
     permit("leads")
     from .erp import day
 
+    year = request.args.get("year", "")
+    if year and (not year.isdigit() or not 1900 <= int(year) <= 9999):
+        problem("Invalid closing year")
+    scope = [visible_leads(), Lead.status != "Inactive"]
+    if year:
+        scope.append(Lead.expected_close.like(year + "-%"))
     grouped = db.session.execute(
         select(
             Lead.stage,
@@ -256,7 +262,7 @@ def crm_summary():
                 func.sum(case((Lead.currency == "PKR", Lead.value), else_=0)), 0
             ),
         )
-        .where(visible_leads(), Lead.status != "Inactive")
+        .where(*scope)
         .group_by(Lead.stage)
     ).all()
     stages = [
@@ -273,11 +279,34 @@ def crm_summary():
             .order_by(Reminder.due_date, Reminder.id)
             .limit(25)
         )
+    from .erp import day
+    current_year = year or day()[:4]
+    month = func.substr(Lead.expected_close, 6, 2)
+    monthly = db.session.execute(
+        select(month, Lead.stage, func.coalesce(func.sum(Lead.value), 0))
+        .where(*scope, Lead.currency == "PKR", Lead.expected_close.like(current_year + "-%"))
+        .group_by(month, Lead.stage)
+    ).all()
+    trend = [dict(month=f"{current_year}-{i:02d}", won=0, pipeline=0) for i in range(1, 13)]
+    for m, stage, value in monthly:
+        if m.isdigit() and 1 <= int(m) <= 12 and stage != "Closed Lost":
+            trend[int(m) - 1]["won" if stage == "Closed Won" else "pipeline"] += float(value)
+    leaders = db.session.scalars(select(Lead).where(*scope, Lead.currency == "PKR",
+        Lead.stage.notin_(("Closed Won", "Closed Lost")))
+        .order_by(Lead.value.desc(), Lead.id).limit(5))
+    calendar = []
+    if allowed(g.user, app_document().stored_data, "reminders"):
+        calendar = [dict(date=d, count=n) for d, n in db.session.execute(
+            select(Reminder.due_date, func.count()).where(visible_reminders(), Reminder.done == False,
+                Reminder.due_date.like(day()[:7] + "-%")).group_by(Reminder.due_date)).all()]
     return jsonify(
+        trend=trend,
+        leaders=[dict(id=r.original_id, name=r.name, value=float(r.value)) for r in leaders],
+        calendar=calendar,
         foreignCurrencyLeads=db.session.scalar(
             select(func.count())
             .select_from(Lead)
-            .where(visible_leads(), Lead.status != "Inactive", Lead.currency != "PKR")
+            .where(*scope, Lead.currency != "PKR")
         ),
         stages=stages,
         active=sum(r["count"] for r in stages),

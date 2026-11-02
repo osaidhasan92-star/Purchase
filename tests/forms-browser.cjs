@@ -127,6 +127,25 @@ module.exports = async (page, base) => {
             .map((field) => field.name || field.id);
         });
         assert.deepEqual(clipped, [], view + ": fields fit dialog width");
+        const misaligned = await dialog.evaluate((el) =>
+          Array.from(
+            el.querySelectorAll(
+              "input:not([type=hidden]):not([type=checkbox]):not([type=radio]), select, textarea",
+            ),
+          )
+            .filter((field) => field.getClientRects().length)
+            .filter(
+              (field) =>
+                field.getBoundingClientRect().height < 40 ||
+                getComputedStyle(field).fontWeight !== "400",
+            )
+            .map((field) => field.name || field.id),
+        );
+        assert.deepEqual(
+          misaligned,
+          [],
+          view + ": consistent control height and text weight",
+        );
         await cancel.scrollIntoViewIfNeeded();
         const footerGap = await cancel.evaluate((el) => {
           const footer = el.closest(".modal-foot"),

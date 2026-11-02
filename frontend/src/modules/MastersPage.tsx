@@ -164,7 +164,9 @@ export function MastersPage({
     pageSize: 25,
   });
   const [page, setPage] = useState(1),
-    [search, setSearch] = useState(""),
+    [search, setSearch] = useState(
+      () => new URLSearchParams(location.search).get("search") || "",
+    ),
     [reload, setReload] = useState(0);
   const [loading, setLoading] = useState(true),
     [error, setError] = useState("");
@@ -384,6 +386,7 @@ export function MastersPage({
           <input
             id={kind === "vendors" ? "vendor-search" : "product-search"}
             name="search"
+            defaultValue={search}
             aria-label={"Search " + kind}
             placeholder={"Search " + kind}
             maxLength={160}

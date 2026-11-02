@@ -250,3 +250,26 @@ def test_legacy_foreign_currency_is_not_silently_relabelled_or_summed_as_pkr(app
         ).status_code
         == 400
     )
+
+
+def test_dashboard_leaderboard_months_calendar_and_year_are_scoped(app):
+    from backend.erp import day
+    admin, h = session(app)
+    customer = seed(admin, h)
+    closing = day()[:7] + "-15"
+    row = lead(admin, h, customer, ownerId="seller", value=250, expectedClose=closing)
+    response = admin.post("/api/crm/reminders", headers=h, json={
+        "leadId": row["id"], "dueDate": closing, "requestKey": "dashboard-calendar"})
+    assert response.status_code == 200
+    seller, _ = session(app, "seller")
+    viewer, _ = session(app, "viewer")
+    data = seller.get("/api/crm/summary?year="+closing[:4]).json
+    assert data["pipeline"] == 250
+    assert data["leaders"][0]["value"] == 250
+    assert next(r for r in data["trend"] if r["month"] == closing[:7])["pipeline"] == 250
+    assert data["calendar"] == [{"date": closing, "count": 1}]
+    private = viewer.get("/api/crm/summary").json
+    assert private["leaders"] == [] and private["calendar"] == []
+    assert all(r["pipeline"] == 0 for r in private["trend"])
+    assert seller.get("/api/crm/summary?year=not-a-year").status_code == 400
+    assert seller.get("/api/crm/summary?year=1900").json["leaders"] == []

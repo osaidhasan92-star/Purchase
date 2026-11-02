@@ -1,6 +1,14 @@
 import { useEffect, useState } from "react";
 import type { Bridge } from "../types";
 import { errorMessage } from "../lib/api";
+import {
+  Kpi,
+  Panel,
+  Trend,
+  Funnel,
+  DashboardLink,
+  money,
+} from "../components/dashboard/Dashboard";
 interface Summary {
   active: number;
   foreignCurrencyLeads: number;
@@ -13,18 +21,39 @@ interface Summary {
     type: string;
     dueDate: string;
   }[];
+  trend: { month: string; won: number; pipeline: number }[];
+  leaders: { id: string | number; name: string; value: number }[];
+  calendar: { date: string; count: number }[];
+}
+interface Activity {
+  id: number;
+  action: string;
+  actor: string;
+  at: string;
+}
+interface Quotes {
+  registers: { key: string; count: number; statuses: Record<string, number> }[];
 }
 export function CrmDashboard({ bridge }: { bridge: Bridge }) {
   const [data, setData] = useState<Summary | null>(null),
     [error, setError] = useState(""),
-    [reload, setReload] = useState(0);
+    [reload, setReload] = useState(0),
+    [year, setYear] = useState("");
+  const [quotes, setQuotes] = useState<Quotes | null>(null),
+    [activities, setActivities] = useState<Activity[]>([]),
+    [auxError, setAuxError] = useState("");
+  const today = new Date(
+      new Date().toLocaleString("en-US", { timeZone: "Asia/Karachi" }),
+    ),
+    currentYear = today.getFullYear();
   useEffect(() => {
     let active = true;
     setError("");
+    setData(null);
     bridge
-      .request<Summary>("/crm/summary")
-      .then((result) => {
-        if (active) setData(result);
+      .request<Summary>("/crm/summary" + (year ? "?year=" + year : ""))
+      .then((r) => {
+        if (active) setData(r);
       })
       .catch((e) => {
         if (active) setError(errorMessage(e));
@@ -32,15 +61,66 @@ export function CrmDashboard({ bridge }: { bridge: Bridge }) {
     return () => {
       active = false;
     };
+  }, [bridge, reload, year]);
+  useEffect(() => {
+    let active = true;
+    setQuotes(null);
+    setActivities([]);
+    setAuxError("");
+    const fetch = async () => {
+      try {
+        const q = bridge.can("sales_quotations")
+          ? await bridge.request<Quotes>("/trade/summary/sales")
+          : null;
+        const a = bridge.can("activities")
+          ? await bridge.request<{ items: Activity[] }>(
+              "/administration/activities?pageSize=5",
+            )
+          : null;
+        if (active) {
+          setQuotes(q);
+          setActivities(a?.items || []);
+        }
+      } catch (e) {
+        if (active) setAuxError(errorMessage(e));
+      }
+    };
+    void fetch();
+    return () => {
+      active = false;
+    };
   }, [bridge, reload]);
-  const money = (value: number) =>
-    "Rs " +
-    value.toLocaleString("en-PK", {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    });
+  const won = data?.stages.find((r) => r.stage === "Closed Won")?.count || 0,
+    lost = data?.stages.find((r) => r.stage === "Closed Lost")?.count || 0;
+  const quote = quotes?.registers.find((r) => r.key === "salesQuotations");
+  const month = today.getMonth(),
+    first = new Date(currentYear, month, 1),
+    days = new Date(currentYear, month + 1, 0).getDate();
+  const iso = (d: number) =>
+    `${currentYear}-${String(month + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
   return (
-    <div data-screen="crm-dashboard-react">
+    <section
+      className="reference-dashboard crm-reference-dashboard"
+      data-screen="crm-dashboard-react"
+      aria-busy={!data && !error}
+    >
+      <div className="ref-toolbar">
+        <label>
+          <span className="sr-only">Lead closing year</span>
+          <select
+            aria-label="Lead closing year"
+            value={year}
+            onChange={(e) => setYear(e.target.value)}
+          >
+            <option value="">All Time</option>
+            {[currentYear, currentYear - 1, currentYear - 2].map((y) => (
+              <option key={y} value={y}>
+                {y}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
       {error && (
         <p className="modern-error" role="alert">
           {error}{" "}
@@ -50,20 +130,40 @@ export function CrmDashboard({ bridge }: { bridge: Bridge }) {
         </p>
       )}
       {!data ? (
-        <p aria-busy="true">Loading CRM…</p>
+        <p aria-busy={!error}>Loading CRM…</p>
       ) : (
-        <>
-          <div className="stats">
-            {[
-              ["Active Leads", data.active],
-              ["Open Pipeline", money(data.pipeline)],
-              ["Won Value", money(data.won)],
-            ].map(([label, value]) => (
-              <div className="stat-card" key={label}>
-                <span>{label}</span>
-                <h2>{value}</h2>
-              </div>
-            ))}
+        <div aria-busy="false">
+          <div className="ref-kpis crm-ref-kpis">
+            <Kpi
+              label="Total Sales"
+              value={money(data.won)}
+              hint="Closed won lead value"
+              icon="cash"
+            />
+            <Kpi
+              label="Forecast Revenue"
+              value={money(data.pipeline)}
+              hint="Open pipeline"
+              tone="green"
+              icon="chart"
+            />
+            <Kpi
+              label="Open Leads"
+              value={Math.max(0, data.active - won - lost)}
+              hint="Active opportunities"
+              tone="violet"
+              icon="people"
+            />
+            <Kpi
+              label="Conversion Rate"
+              value={
+                (data.active ? ((won / data.active) * 100).toFixed(1) : "0") +
+                "%"
+              }
+              hint="Won / active lead records"
+              tone="amber"
+              icon="chart"
+            />
           </div>
           {data.foreignCurrencyLeads > 0 && (
             <p className="hint">
@@ -71,87 +171,237 @@ export function CrmDashboard({ bridge }: { bridge: Bridge }) {
               excluded from PKR totals.
             </p>
           )}
-          <div className="grid2">
-            <section className="section-card">
-              <div className="section-head">
-                <h3>Pipeline by Stage</h3>
-                <a
-                  className="btn-secondary"
-                  href="erp.html?view=leads&module=crm"
-                >
-                  View leads
-                </a>
-              </div>
-              <div className="table-wrap">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Stage</th>
-                      <th>Leads</th>
-                      <th>Value (PKR)</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {data.stages.map((row) => (
-                      <tr key={row.stage}>
-                        <td>{row.stage}</td>
-                        <td>{row.count}</td>
-                        <td>{money(row.value)}</td>
-                      </tr>
-                    ))}
-                    {!data.stages.length && (
-                      <tr>
-                        <td colSpan={3}>No leads yet</td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </section>
-            <section className="section-card">
-              <div className="section-head">
-                <h3>Due Follow-ups</h3>
-                {bridge.can("reminders") && (
-                  <a
-                    className="btn-secondary"
-                    href="erp.html?view=reminders&module=crm"
-                  >
-                    View reminders
-                  </a>
+          <Panel
+            title="Revenue & Pipeline"
+            subtitle={
+              "Monthly opportunity value · expected close dates in " +
+              (year || currentYear)
+            }
+            action={
+              <span className="ref-chart-legend">
+                <span>
+                  <i />
+                  Open pipeline
+                </span>
+                <span>
+                  <i />
+                  Closed won
+                </span>
+              </span>
+            }
+          >
+            <Trend
+              rows={data.trend.map((r) => ({
+                month: r.month,
+                value: r.pipeline,
+                second: r.won,
+              }))}
+              secondary
+              color="#08b78c"
+              title="Monthly open pipeline and closed won lead value"
+            />
+          </Panel>
+          <div className="ref-crm-grid">
+            <Panel
+              title="Leads Leaderboard"
+              subtitle="By open opportunity value"
+            >
+              <div className="ref-leaders">
+                {data.leaders.length ? (
+                  data.leaders.map((r, i) => (
+                    <a
+                      href={
+                        "erp.html?view=leads&module=crm&search=" +
+                        encodeURIComponent(r.name)
+                      }
+                      key={r.id}
+                    >
+                      <span className="ref-rank">{i + 1}</span>
+                      <span className="ref-avatar">
+                        {r.name
+                          .split(/\s+/)
+                          .map((w) => w[0])
+                          .slice(0, 2)
+                          .join("")}
+                      </span>
+                      <div>
+                        <div className="ref-leader-label">
+                          <b>{r.name}</b>
+                          <span>{money(r.value)}</span>
+                        </div>
+                        <div className="ref-track">
+                          <span
+                            style={{
+                              width:
+                                (r.value / Math.max(1, data.leaders[0].value)) *
+                                  100 +
+                                "%",
+                            }}
+                          />
+                        </div>
+                      </div>
+                    </a>
+                  ))
+                ) : (
+                  <p className="ref-empty">No open leads yet.</p>
                 )}
               </div>
-              <p className="hint">
-                Up to 25 open reminders due today or earlier
-              </p>
-              <div className="table-wrap">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Lead</th>
-                      <th>Type</th>
-                      <th>Due</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {data.due.map((row) => (
-                      <tr key={row.id}>
-                        <td>{row.leadName}</td>
-                        <td>{row.type}</td>
-                        <td>{row.dueDate}</td>
-                      </tr>
-                    ))}
-                    {!data.due.length && (
-                      <tr>
-                        <td colSpan={3}>No follow-ups due</td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </section>
+            </Panel>
+            <Panel title="Pipeline by Stage" subtitle="Active opportunities">
+              <Funnel
+                rows={data.stages.map((r) => ({
+                  label: r.stage,
+                  count: r.count,
+                }))}
+              />
+              {!data.stages.length && (
+                <p className="ref-empty">No leads yet.</p>
+              )}
+            </Panel>
           </div>
-        </>
+          <Panel
+            title={today.toLocaleDateString("en-GB", {
+              month: "long",
+              year: "numeric",
+            })}
+            subtitle="Follow-up calendar"
+            action={
+              bridge.can("reminders") ? (
+                <DashboardLink href="erp.html?view=reminders&module=crm">
+                  View reminders
+                </DashboardLink>
+              ) : undefined
+            }
+          >
+            <div className="ref-calendar-row">
+              <div
+                className="ref-calendar"
+                aria-label="Current month follow-up calendar"
+              >
+                <div className="ref-weekdays">
+                  {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(
+                    (d) => (
+                      <span key={d}>{d}</span>
+                    ),
+                  )}
+                </div>
+                <div className="ref-calendar-days">
+                  {Array.from({ length: first.getDay() }, (_, i) => (
+                    <span key={"empty" + i} />
+                  ))}
+                  {Array.from({ length: days }, (_, i) => {
+                    const day = i + 1,
+                      n =
+                        data.calendar.find((r) => r.date === iso(day))?.count ||
+                        0;
+                    return (
+                      <div
+                        key={day}
+                        className={day === today.getDate() ? "is-today" : ""}
+                      >
+                        <span>{day}</span>
+                        {n > 0 && (
+                          <a
+                            href={"erp.html?view=reminders&module=crm"}
+                            aria-label={n + " follow-ups on " + iso(day)}
+                          >
+                            {n} due
+                          </a>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+              <aside className="ref-quote-summary">
+                <h4>Quote Summary</h4>
+                <p>Commercial progress</p>
+                {quote ? (
+                  [
+                    ["Total quotes", quote.count],
+                    ["Sent", quote.statuses.Sent || 0],
+                    ["Accepted", quote.statuses.Accepted || 0],
+                    [
+                      "Open / pending",
+                      Object.entries(quote.statuses)
+                        .filter(
+                          ([s]) =>
+                            !["Accepted", "Rejected", "Cancelled"].includes(s),
+                        )
+                        .reduce((n, [, v]) => n + v, 0),
+                    ],
+                  ].map(([label, n]) => (
+                    <div key={label}>
+                      <span>{label}</span>
+                      <b>{n}</b>
+                    </div>
+                  ))
+                ) : (
+                  <p>
+                    {bridge.can("sales_quotations")
+                      ? "Quotation summary unavailable."
+                      : "Quotation access is restricted."}
+                  </p>
+                )}
+              </aside>
+            </div>
+          </Panel>
+          <div className="ref-crm-grid">
+            <Panel
+              title="Due Follow-ups"
+              subtitle="Open reminders due today or earlier"
+            >
+              {data.due.length ? (
+                <div className="ref-recent">
+                  {data.due.map((r) => (
+                    <a key={r.id} href="erp.html?view=reminders&module=crm">
+                      <div>
+                        <b>{r.leadName}</b>
+                        <small>{r.type}</small>
+                      </div>
+                      <small>{r.dueDate}</small>
+                    </a>
+                  ))}
+                </div>
+              ) : (
+                <p className="ref-empty">No follow-ups due</p>
+              )}
+            </Panel>
+            <Panel
+              title="Activity Log"
+              subtitle="Latest authorized system activity"
+            >
+              {auxError && (
+                <p role="alert" className="modern-error">
+                  {auxError}
+                </p>
+              )}
+              {activities.length ? (
+                <div className="ref-activities">
+                  {activities.map((a) => (
+                    <div key={a.id}>
+                      <i />
+                      <div>
+                        <b>{a.action}</b>
+                        <small>
+                          {a.actor} ·{" "}
+                          {new Date(a.at).toLocaleDateString("en-GB")}
+                        </small>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="ref-empty">
+                  {bridge.can("activities")
+                    ? "No recent activity."
+                    : "Activity access is restricted."}
+                </p>
+              )}
+            </Panel>
+          </div>
+        </div>
       )}
-    </div>
+    </section>
   );
 }
