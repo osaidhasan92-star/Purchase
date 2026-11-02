@@ -8,10 +8,7 @@ else if(nativeInventoryView())scripts.push('inventory-workspace.js');
 else if(nativeFinanceView())scripts.push('finance-workspace.js');
 else if(NATIVE_HR_ROUTES[screen])scripts.push('hr-workspace.js');
 else if(NATIVE_TRADE_ROUTES[screen])scripts.push('trade-workspace.js');
-else if(screen==='erp.html')scripts.push('crm.js','erp.js');
-else if(['sales.html','customers.html','sales-quotations.html','sales-orders.html','sales-deliveries.html','sales-invoices.html','sales-payments.html'].includes(screen))scripts.push('crm.js','sales.js','sales_patch.js');
-else if(['crm-dashboard.html','leads.html','reminders.html','companies.html','crm-quotes.html'].includes(screen))scripts.push('crm.js');
-else if(screen==='admin-data.html')scripts.push('admin-data.js');
+else if(['customers.html','crm-dashboard.html','leads.html','reminders.html'].includes(screen))scripts.push('crm-workspace.js');
 (async()=>{
  try {
    for(const src of scripts)await new Promise((resolve,reject)=>{

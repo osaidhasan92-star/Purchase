@@ -125,3 +125,9 @@ import/export and migration operations.
 Full-page view navigation remains. Accessibility, document acceptance beyond the tested
 print layouts, organization scopes and multicurrency remain separate work. This stage
 alone does not establish large-scale production readiness.
+
+## Repository cleanup
+
+The workspace now has only two HTML entry files: `index.html` (login) and `erp.html` (all modules). Old module URLs redirect through the Flask frontend route, preserving query parameters, so bookmarks and menu links continue to work. Run the Flask backend rather than opening files directly.
+
+`crm-workspace.js` starts the native customer and CRM screens. The superseded CRM, Sales, HR, ERP and import/export renderer scripts and duplicate redirect HTML files have been removed. Keep `app.js`, the workspace adapters, shared CSS, frontend source and `frontend-dist`: the current application still uses them. Tests, operational documentation and migrations remain maintained repository files. Docker builds regenerate frontend assets and exclude test sources and reports from the runtime context.

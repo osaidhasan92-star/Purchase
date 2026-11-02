@@ -72,7 +72,8 @@ def test_csrf_origin_and_no_public_backend_files(app):
     client, headers = session(app)
     assert client.patch('/api/state', json={'revision': 1, 'changes': {}}).status_code == 403
     assert client.patch('/api/state', headers={**headers, 'Origin': 'https://evil.test'}, json={'revision': 1, 'changes': {}}).status_code == 403
-    for path in ['/backend/app.py', '/instance/purchase.sqlite', '/.env', '/app.js.bak']:
+    for path in ['/backend/app.py', '/instance/purchase.sqlite', '/.env', '/app.js.bak',
+                 '/crm.js', '/sales.js', '/sales_patch.js', '/hr.js', '/erp.js', '/admin-data.js']:
         assert client.get(path).status_code == 404
     assert client.get('/bootstrap.html').status_code == 410
     assert client.get('/seed.html').status_code == 410
