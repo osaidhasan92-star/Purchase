@@ -367,6 +367,21 @@ def commit_document(doc, revision, data):
         problem('An integer revision is required', 428)
     from .erp import lock, sync_business
     lock()
+    from .workflow_keys import revalidate_actor
+    revalidate_actor()
+    db.session.refresh(doc)
+    current = app_document().data
+    modules = COLLECTIONS if doc.name == 'app' else HR_COLLECTIONS
+    for collection in g.changed_keys:
+        if collection in modules:
+            existing = {str(row['id']): row for row in doc.data.get(collection, [])}
+            for row in data[collection]:
+                if not in_scope(g.user, row, collection, current) and existing.get(str(row['id'])) != row:
+                    problem('Record is outside your current permitted scope', 403)
+            visible = [row for row in data[collection] if in_scope(g.user, row, collection, current)]
+            data[collection] = merge_collection(collection, visible, list(existing.values()), current, modules[collection])
+        elif g.user.role != 'Admin':
+            problem('Administrator access required', 403)
     previous = deepcopy(doc.data)
     from .master_store import MARKER
     from .storage import persist
@@ -535,7 +550,12 @@ def create_app(config=None):
         if request.method == 'GET':
             return jsonify(users=[u.public() for u in db.session.scalars(select(User)).all()])
         data = body()
-        user = db.session.get(User, user_id) if user_id else None
+        from .erp import lock
+        from .workflow_keys import revalidate_actor
+        lock()
+        revalidate_actor()
+        require_admin()
+        user = db.session.get(User, user_id, populate_existing=True) if user_id else None
         if user_id and not user:
             problem('User not found', 404)
         if request.path.endswith('/password'):
@@ -666,7 +686,13 @@ def create_app(config=None):
     def import_demo():
         require_admin()
         data = body()
+        from .erp import lock
+        from .workflow_keys import revalidate_actor
+        lock()
+        revalidate_actor()
+        require_admin()
         app_doc, hr_doc = app_document(), db.session.get(Document, 'hr')
+        db.session.refresh(hr_doc)
         if any(app_doc.data.get(k) for k in COLLECTIONS) or any(hr_doc.data.values()):
             problem('Import is only available for an empty installation', 409)
         incoming, hr = data.get('app', {}), data.get('hr', {})

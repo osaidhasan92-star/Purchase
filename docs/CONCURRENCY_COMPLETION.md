@@ -55,6 +55,14 @@ ERPControl exclusively. This avoids shared-to-exclusive upgrade deadlocks while 
 unconverted paths safe. The common posting mutex is intentionally retained: journal
 number counters and the existing creator registry are shared mutable resources.
 
+Legacy import now takes the exclusive gate **before** rechecking whether the
+installation is empty. Legacy account updates also serialize manager-chain validation,
+preventing two concurrent assignments from creating a cycle. Native/legacy master,
+CRM, administration and compatibility writes revalidate actor permissions after
+waiting. Compatibility merges preserve hidden records while denying edits outside
+the actor's current scope. Authentication/session operations retain their account and
+session coordination rather than taking the company-wide business lock.
+
 ## Database migration and historical duplicates
 
 A new `workflow_reservation` table has primary key `(domain, kind, token)`. Tokens use

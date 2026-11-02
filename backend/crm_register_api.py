@@ -162,6 +162,10 @@ def save(key, identity=None):
         )
     )
     lock()
+    from .workflow_keys import revalidate_actor
+
+    revalidate_actor()
+    permit(key, "create" if identity is None else "edit")
     prior = db.session.get(Command, (g.user.id, request_key))
     if prior:
         if prior.fingerprint != fingerprint:

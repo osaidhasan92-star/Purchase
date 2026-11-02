@@ -147,6 +147,10 @@ def save_record(key, identity, normalize):
     permit(key, "create" if identity is None else "edit")
     data = body()
     lock()
+    from .workflow_keys import revalidate_actor
+
+    revalidate_actor()
+    permit(key, "create" if identity is None else "edit")
     doc = app_document()
     db.session.refresh(doc)
     model = MODELS[key]

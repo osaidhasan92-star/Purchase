@@ -29,6 +29,10 @@ def access(module, action='view'):
                 problem('Permission denied: ' + module + '.' + action, 403)
             if request.method not in ('GET', 'HEAD'):
                 lock()
+                from .workflow_keys import revalidate_actor
+                revalidate_actor()
+                if not allowed(g.user, db.session.get(Document, 'app').stored_data, module, action):
+                    problem('Permission denied: ' + module + '.' + action, 403)
             return fn(*args, **kwargs)
         return wrapped
     return decorate

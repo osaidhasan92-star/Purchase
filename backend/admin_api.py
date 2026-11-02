@@ -337,6 +337,11 @@ def command(kind):
         )
     )
     lock()
+    from .workflow_keys import revalidate_actor
+
+    revalidate_actor()
+    if g.user.role != "Admin":
+        problem("Administrator access required", 403)
     receipt = db.session.get(Command, (g.user.id, key))
     if receipt:
         if receipt.fingerprint != fingerprint:

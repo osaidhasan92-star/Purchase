@@ -580,3 +580,63 @@ def test_inventory_and_manufacturing_share_one_product_lock(app):
     assert float(product(c, p)["quantity"]) in (2, 3)
     with app.app_context():
         assert report()["healthy"]
+
+
+def test_postgres_legacy_import_is_excluded_by_active_resource_gate(app):
+    require_postgres(app)
+    c, h = session(app)
+    app.config["ERP_LOCK_TIMEOUT_MS"] = 50
+    payload = dict(
+        format=1,
+        app=dict(
+            vendors=[dict(id="import-vendor", name="Imported vendor", status="Active")]
+        ),
+        hr={},
+    )
+    with app.app_context():
+        db.session.execute(
+            select(ERPControl.id).where(ERPControl.id == 1).with_for_update(read=True)
+        )
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            r = pool.submit(
+                lambda: c.post("/api/admin/import", headers=h, json=payload)
+            ).result(timeout=10)
+        assert r.status_code == 503, r.json
+        db.session.rollback()
+    r = c.post("/api/admin/import", headers=h, json=payload)
+    assert r.status_code == 200, r.json
+    assert c.get("/api/vendors").json["items"][0]["id"] == "import-vendor"
+    with app.app_context():
+        assert db.session.scalar(select(func.count()).select_from(JournalEntry)) == 0
+
+
+def test_legacy_user_manager_assignments_cannot_create_a_concurrent_cycle(app):
+    clients = [session(app), session(app)]
+    barrier = Barrier(2)
+    identities = ["viewer", "hr"]
+
+    def update(i):
+        c, h = clients[i]
+        barrier.wait(timeout=10)
+        return c.put(
+            "/api/users/" + identities[i],
+            headers=h,
+            json=dict(
+                name=identities[i],
+                email=identities[i] + "@example.test",
+                role="Viewer" if i == 0 else "HR Manager",
+                active=True,
+                managerId=identities[1 - i],
+            ),
+        ).status_code
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        codes = list(pool.map(update, range(2)))
+    assert sorted(codes) == [200, 400], codes
+    from backend.app import User
+
+    with app.app_context():
+        assert not (
+            db.session.get(User, "viewer").manager_id == "hr"
+            and db.session.get(User, "hr").manager_id == "viewer"
+        )
