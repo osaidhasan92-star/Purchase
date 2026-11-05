@@ -178,6 +178,12 @@ def entry_record(entry):
 
 
 def source_link(source):
+    if source.startswith('credit:'):
+        from .credit_api import CreditNote
+        note=db.session.get(CreditNote,int(source.split(':')[1])) if source.split(':')[1].isdigit() else None
+        if note and allowed(g.user,app_document().stored_data,'sales_invoices' if note.kind=='customer' else 'invoices'):
+            return dict(label=note.number,href=f'erp.html?view=credits&kind={note.kind}&creditId={note.id}')
+        return None
     parts = source.split(":")
     if parts[0] == "stock":
         parts = parts[1:]

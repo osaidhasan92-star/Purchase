@@ -116,7 +116,7 @@ def movement_record(m, detail=False):
         )
         result.update(
             reason=receipt.reason if receipt else None,
-            sourceLink=source_link(m.source),
+            sourceLink=source_link(db.session.get(StockMove,m.return_of).source if m.return_of else m.source),
             journalHref=(
                 "erp.html?view=journals&source=stock:" + m.source
                 if m.journal_id
@@ -335,6 +335,8 @@ def command(command):
         check_version(data, movement_record(original)["version"])
         if original.kind not in ("Purchase Receipt", "Sales Delivery"):
             problem("Return a purchase receipt or delivered sale")
+        if date < original.date:
+            problem("Return date cannot precede the original movement")
         prior, prior_value = returned(original)
         if quantity <= 0 or quantity + prior > abs(original.quantity):
             problem("Return quantity exceeds the remaining original quantity")
@@ -371,6 +373,9 @@ def command(command):
             reason=reason,
         )
     )
+    if command == 'return':
+        from .credit_api import refresh_return_order
+        refresh_return_order(original)
     audit("Inventory " + command, dict(movementId=m.id, reason=reason))
     db.session.commit()
     return jsonify(record=movement_record(get_move(m.id), True))

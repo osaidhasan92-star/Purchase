@@ -864,6 +864,8 @@ def create_app(config=None):
     def init_db():
         """Create the initial schema and empty company (run once before workers start)."""
         db.create_all()
+        from .erp import ensure_return_index
+        ensure_return_index()
         if not db.session.get(Document, 'app'):
             state = {key: [] for key in COLLECTIONS}
             state.update(roles=default_roles(), company={}, users=[], activities=[])
@@ -884,6 +886,8 @@ def create_app(config=None):
     def migrate_storage():
         """Idempotently move existing masters to relational tables; retain IDs."""
         db.create_all()
+        from .erp import ensure_return_index
+        ensure_return_index()
         from .erp import lock
         from .master_store import MARKER, MODELS, read
         from .storage import migrate
@@ -931,6 +935,8 @@ def create_app(config=None):
     app.register_blueprint(hr_blueprint)
     from .finance_api import bp as finance_blueprint
     app.register_blueprint(finance_blueprint)
+    from .credit_api import bp as credit_blueprint
+    app.register_blueprint(credit_blueprint)
     from .inventory_api import bp as inventory_blueprint
     app.register_blueprint(inventory_blueprint)
     from .overview_api import bp as overview_blueprint

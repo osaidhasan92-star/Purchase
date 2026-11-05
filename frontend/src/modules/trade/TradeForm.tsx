@@ -195,7 +195,7 @@ function initial(resource: Resource, user: User, editing?: TradeRecord) {
       editing?.[field.name] ??
         (field.name === "dueDate" ||
         field.name === "validUntil" ||
-        field.name === "deliveryDate"
+        (field.name === "deliveryDate" && resource !== "deliveries")
           ? future()
           : field.type === "date"
             ? day()

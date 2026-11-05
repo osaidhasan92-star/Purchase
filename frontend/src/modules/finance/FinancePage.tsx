@@ -25,7 +25,7 @@ export function FinancePage({
   bridge,
   user,
 }: {
-  view: FinanceView;
+  view: Exclude<FinanceView, "credits">;
   bridge: Bridge;
   user: User;
 }) {

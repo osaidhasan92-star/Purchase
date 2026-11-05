@@ -178,3 +178,9 @@ New customer invoices and vendor bills save as Draft without creating ledger ent
 Posted documents remain immutable and cannot return to Draft through these actions. Existing Posted/Approved/Paid documents and journal entries are preserved. Existing unposted Matched vendor bills can still be posted by Finance. Request keys, version checks, period locks, atomic ledger projection and duplicate quantity controls continue to apply. Drafts reserve invoiceable quantities but are excluded from posted invoice/payment completion metrics; cancel an unwanted draft to release its quantity. Accounting dashboard counts distinguish Draft and Pending Review.
 
 No schema migration is required. Restart the backend and hard-refresh after updating the included compiled frontend assets. Historical legacy trade-write compatibility is intended only for the existing migration/test path; keep ENABLE_LEGACY_TRADE_WRITES disabled in production.
+
+### Return credits and refunds
+
+Accounting → Customers / Vendors now includes Credit Notes & Refunds. Posted invoice/bill actions open a source-linked draft credit; receipt/delivery actions open the corresponding Inventory stock movements for returns. The new React screen includes server-derived quantities, validated-return selection, review/post actions, same-partner credit application, bank/cash refunds and settlement/journal trace links. Actual delivery forms default to today's date, while planned purchase/sales delivery dates retain future defaults.
+
+This update **requires** `python -m flask --app backend.app migrate-storage` before starting the updated application against an existing database. See [RETURNS_CREDITS_REFUNDS.md](RETURNS_CREDITS_REFUNDS.md) for the complete workflow and limits.

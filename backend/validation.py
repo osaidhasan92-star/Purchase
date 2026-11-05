@@ -40,9 +40,10 @@ def validate_business(state):
         ordered = defaultdict(Decimal)
         for line in order.get('items', []):
             ordered[str(line.get('productId'))] += number(line.get('quantity'))
-        for line in delivery.get('items', []):
+        for position, line in enumerate(delivery.get('items', [])):
             product = str(line.get('productId'))
-            dispatched[(str(order['id']), product)] += number(line.get('deliveredQty'))
+            from .trade_service import returned_quantity
+            dispatched[(str(order['id']), product)] += number(line.get('deliveredQty')) - returned_quantity(f'deliveries:{delivery["id"]}:{position}')
             if dispatched[(str(order['id']), product)] > ordered[product]:
                 raise InvalidBusinessState('Deliveries exceed ordered quantity')
 
@@ -64,12 +65,21 @@ def validate_business(state):
             if paid[str(invoice['id'])] > number(invoice.get('amount')) + Decimal('0.01'):
                 raise InvalidBusinessState('Payments exceed invoice amount')
         for invoice_id, invoice in invoices.items():
+            from flask import has_app_context
+            credited = Decimal(0)
+            if has_app_context():
+                from .credit_api import CreditNote, CreditSettlement
+                from .app import db
+                from sqlalchemy import select, func
+                credited = db.session.scalar(select(func.coalesce(func.sum(CreditSettlement.amount),0)).join(CreditNote).where(CreditSettlement.kind=='apply',CreditSettlement.invoice_id==invoice_id,CreditNote.kind==('customer' if invoices_key=='customerInvoices' else 'vendor'))) or Decimal(0)
+            if abs(number(invoice.get('creditedAmount',0))-credited)>Decimal('0.01'):
+                raise InvalidBusinessState('Applied credit must equal recorded credit settlements')
             actual = paid[invoice_id]
             if 'paidAmount' in invoice and abs(number(invoice['paidAmount']) - actual) > Decimal('0.01'):
                 raise InvalidBusinessState('Invoice paid amount must equal recorded payments')
-            if 'balance' in invoice and abs(number(invoice['balance']) - max(Decimal(0), number(invoice.get('amount')) - actual)) > Decimal('0.01'):
+            if 'balance' in invoice and abs(number(invoice['balance']) - max(Decimal(0), number(invoice.get('amount')) - actual - number(invoice.get('creditedAmount',0)))) > Decimal('0.01'):
                 raise InvalidBusinessState('Invoice balance must equal amount less recorded payments')
-            if invoice.get('status') == 'Paid' and actual + Decimal('0.01') < number(invoice.get('amount')):
+            if invoice.get('status') == 'Paid' and actual + number(invoice.get('creditedAmount',0)) + Decimal('0.01') < number(invoice.get('amount')):
                 raise InvalidBusinessState('An unpaid invoice cannot be marked Paid')
 
     # Enforce receipt conservation and accepted quantity bounds for each PO line.
@@ -84,7 +94,8 @@ def validate_business(state):
                 raise InvalidBusinessState('Accepted plus rejected quantity must equal received quantity')
             if index >= len(order.get('items', [])):
                 raise InvalidBusinessState('Receipt contains an unknown purchase order line')
-            accepted[(str(order['id']), index)] += number(line.get('acceptedQty'))
+            from .trade_service import returned_quantity
+            accepted[(str(order['id']), index)] += number(line.get('acceptedQty')) - returned_quantity(f'receipts:{receipt["id"]}:{index}')
             if accepted[(str(order['id']), index)] > number(order['items'][index].get('quantity')):
                 raise InvalidBusinessState('Accepted receipts exceed ordered quantity')
     billed = defaultdict(Decimal)
@@ -98,6 +109,7 @@ def validate_business(state):
         for index, line in enumerate(order.get('items', [])):
             base = accepted[(str(order['id']),index)] * number(line.get('rate',line.get('quotedRate',0)))
             received += base * (1-number(line.get('discountPercent'))/100) * (1+number(line.get('taxPercent'))/100)
-        billed[str(order['id'])] += number(invoice.get('amount'))
+        from .trade_service import credit_amount
+        billed[str(order['id'])] += number(invoice.get('amount')) - credit_amount('vendor',invoice['id'])
         if billed[str(order['id'])] > min(number(order.get('total')), received) + Decimal('0.01'):
             raise InvalidBusinessState('Vendor bills exceed the ordered and accepted receipt value')

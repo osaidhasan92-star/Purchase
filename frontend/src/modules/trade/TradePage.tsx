@@ -230,6 +230,33 @@ export function TradePage({
     "/print";
   const buttons = (row: TradeRecord) => (
     <>
+      {["invoices", "customerInvoices"].includes(resource) &&
+        ["Posted", "Approved", "Partially Paid", "Paid"].includes(row.status) &&
+        bridge.can("accounting", "create") && (
+          <a
+            className="btn-sm trade-link"
+            href={
+              "erp.html?view=credits&module=accounting&kind=" +
+              (resource === "customerInvoices" ? "customer" : "vendor") +
+              "&invoiceId=" +
+              encodeURIComponent(String(row.id))
+            }
+          >
+            Create Credit Note
+          </a>
+        )}
+      {["receipts", "deliveries"].includes(resource) &&
+        bridge.can("inventory") && (
+          <a
+            className="btn-sm trade-link"
+            href={
+              "erp.html?view=stock-moves&search=" +
+              encodeURIComponent(resource + ":" + row.id + ":")
+            }
+          >
+            Returns / Stock
+          </a>
+        )}
       {row.actions?.map((action) => (
         <button
           key={action}
@@ -544,7 +571,8 @@ export function TradePage({
             </p>
             {detail.record.balance !== undefined && (
               <p>
-                Paid: {money(detail.record.paidAmount)} · Outstanding:{" "}
+                Paid: {money(detail.record.paidAmount)} · Credit Applied:{" "}
+                {money(detail.record.creditedAmount || 0)} · Outstanding:{" "}
                 <b>{money(detail.record.balance)}</b>
               </p>
             )}

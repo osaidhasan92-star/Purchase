@@ -7,8 +7,8 @@ import math
 import re
 import secrets
 import time
-from flask import g
-from sqlalchemy import select, update
+from flask import g, has_app_context
+from sqlalchemy import select, update, func
 from .app import (
     db,
     Document,
@@ -401,46 +401,22 @@ def attachment(data, module):
     return {"attachmentPath": value.id, "attachment": value.filename}
 
 
+def returned_quantity(source):
+    if not has_app_context(): return Decimal(0)
+    from .erp import StockMove
+    original = select(StockMove.id).where(StockMove.source == source)
+    return Decimal(str(db.session.scalar(select(func.coalesce(func.sum(func.abs(StockMove.quantity)),0)).where(StockMove.return_of.in_(original))) or 0))
+
+
 def received(state, order, index):
-    return sum(
-        (
-            Decimal(
-                str(
-                    (
-                        r.get("items", [])[index]
-                        if index < len(r.get("items", []))
-                        else {}
-                    ).get("acceptedQty", 0)
-                )
-            )
-            for r in state.get("receipts", [])
-            if str(r.get("poId")) == str(order["id"])
-        ),
-        Decimal(0),
-    )
+    return sum((max(Decimal(0), Decimal(str((r.get("items", [])[index] if index<len(r.get("items",[])) else {}).get("acceptedQty",0))) - returned_quantity(f'receipts:{r["id"]}:{index}')) for r in state.get("receipts",[]) if str(r.get("poId"))==str(order["id"])),Decimal(0))
 
 
 def dispatched(state, order, index, reserved=False):
     product = str(order["items"][index].get("productId"))
-    return sum(
-        (
-            Decimal(str(item.get("deliveredQty", 0)))
-            for d in state.get("deliveries", [])
-            if str(d.get("orderId")) == str(order["id"])
-            and (
-                d.get("status") != "Cancelled"
-                if reserved
-                else d.get("status") == "Delivered"
-            )
-            for item in d.get("items", [])
-            if (
-                item.get("lineIndex") == index
-                if "lineIndex" in item
-                else str(item.get("productId")) == product
-            )
-        ),
-        Decimal(0),
-    )
+    return sum((max(Decimal(0),Decimal(str(item.get("deliveredQty",0)))-returned_quantity(f'deliveries:{d["id"]}:{position}'))
+        for d in state.get("deliveries",[]) if str(d.get("orderId"))==str(order["id"]) and (d.get("status")!="Cancelled" if reserved else d.get("status")=="Delivered")
+        for position,item in enumerate(d.get("items",[])) if (item.get("lineIndex")==index if "lineIndex" in item else str(item.get("productId"))==product)),Decimal(0))
 
 
 def billed_quantity(state, order, index, customer=False, exclude=None):
@@ -457,6 +433,8 @@ def billed_quantity(state, order, index, customer=False, exclude=None):
         for position, item in enumerate(bill.get("items", [])):
             if int(item.get("lineIndex", position)) == index:
                 result += Decimal(str(item.get("quantity", 0)))
+        from .credit_api import CreditNote, CreditLine
+        result -= Decimal(str(db.session.scalar(select(func.coalesce(func.sum(CreditLine.quantity),0)).join(CreditNote).where(CreditNote.kind==("customer" if customer else "vendor"),CreditNote.invoice_id==str(bill["id"]),CreditNote.status=="Posted",CreditLine.line_index.in_([p for p,i in enumerate(bill.get("items",[])) if int(i.get("lineIndex",p))==index]))) or 0))
     return result
 
 
@@ -509,8 +487,10 @@ def invoice_lines(state, order, items, customer=False, exclude=None):
                 tax = Decimal(
                     str(previous_line.get("taxAmount", previous_line.get("tax", 0)))
                 )
-                prior_tax += tax
-                prior_net += Decimal(str(previous_line.get("total", 0))) - tax
+                from .credit_api import CreditNote, CreditLine
+                credit_amount, credit_tax = db.session.execute(select(func.coalesce(func.sum(CreditLine.amount),0),func.coalesce(func.sum(CreditLine.tax),0)).join(CreditNote).where(CreditNote.kind==("customer" if customer else "vendor"),CreditNote.invoice_id==str(bill["id"]),CreditNote.status=="Posted",CreditLine.line_index==position)).one()
+                prior_tax += tax - credit_tax
+                prior_net += Decimal(str(previous_line.get("total", 0))) - tax - credit_amount + credit_tax
         original = calculate_line(
             product,
             src["quantity"],
@@ -540,11 +520,17 @@ def invoice_lines(state, order, items, customer=False, exclude=None):
     return output
 
 
+def credit_amount(kind, identity):
+    if not has_app_context(): return Decimal(0)
+    from .credit_api import CreditNote
+    return db.session.scalar(select(func.coalesce(func.sum(CreditNote.amount),0)).where(CreditNote.kind==kind,CreditNote.invoice_id==str(identity),CreditNote.status=="Posted")) or Decimal(0)
+
+
 def match_bill(state, bill):
     order = find(state, "orders", bill.get("poId"))
     allocated = sum(
         (
-            Decimal(str(b.get("amount", 0)))
+            Decimal(str(b.get("amount", 0))) - credit_amount("vendor",b["id"])
             for b in state.get("invoices", [])
             if str(b.get("poId")) == str(order["id"])
             and str(b["id"]) != str(bill["id"])
@@ -638,7 +624,7 @@ def recompute(state, key, row):
                 ),
                 Decimal(0),
             )
-            balance = Decimal(str(bill["amount"])) - paid
+            balance = Decimal(str(bill["amount"])) - paid - Decimal(str(bill.get("creditedAmount",0)))
             if balance < 0:
                 problem("Payments exceed the invoice balance")
             bill.update(
@@ -666,10 +652,10 @@ def recompute(state, key, row):
                 if str(b.get("orderId" if customer else "poId")) == str(order["id"])
                 and b.get("status") in ("Posted", "Approved", "Partially Paid", "Paid")
             ]
-            billed = sum((Decimal(str(b.get("amount", 0))) for b in linked), Decimal(0))
-            paid = sum(
-                (Decimal(str(b.get("paidAmount", 0))) for b in linked), Decimal(0)
-            )
+            from .credit_api import CreditNote
+            credits = db.session.scalar(select(func.coalesce(func.sum(CreditNote.amount),0)).where(CreditNote.kind==("customer" if customer else "vendor"),CreditNote.invoice_id.in_([str(b["id"]) for b in linked]),CreditNote.status=="Posted")) or Decimal(0)
+            billed = sum((Decimal(str(b.get("amount", 0))) for b in linked), Decimal(0)) - credits
+            paid = billed - sum((Decimal(str(b.get("balance",0))) for b in linked),Decimal(0))
             total = Decimal(str(order.get("total", 0)))
             quantities_done = [
                 (
@@ -709,7 +695,7 @@ def recompute(state, key, row):
                         else (
                             "Partially Delivered"
                             if any_done
-                            else order.get("status", "Confirmed")
+                            else "Confirmed" if order.get("status") in ("Delivered","Partially Delivered","Completed") else order.get("status", "Confirmed")
                         )
                     )
                 )
@@ -719,6 +705,8 @@ def recompute(state, key, row):
                     if complete and total > 0 and billed >= total and paid >= total
                     else "Received" if complete else "Partially Received"
                 )
+            elif order.get("status") in ("Received","Partially Received","Completed"):
+                order["status"] = "Approved"
 
 
 def create(state, key, data):
@@ -1158,7 +1146,7 @@ def create(state, key, data):
         ):
             problem("Select an open posted/approved invoice")
         amount = number(data.get("amount"), "Payment amount", True)
-        balance = Decimal(str(source.get("amount", 0))) - sum(
+        balance = Decimal(str(source.get("amount", 0))) - Decimal(str(source.get("creditedAmount",0))) - sum(
             (
                 Decimal(str(p.get("amount", 0)))
                 for p in state.get(key, [])

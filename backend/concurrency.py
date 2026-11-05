@@ -88,7 +88,6 @@ def inventory(data, command):
     from .erp import StockMove
 
     if command == "return":
-        locks(["movement:" + str(data.get("moveId"))])
         value = data.get("moveId")
         valid = (
             not isinstance(value, bool)
@@ -96,6 +95,15 @@ def inventory(data, command):
             and re.fullmatch(r"[1-9][0-9]{0,9}", str(value))
         )
         move = db.session.get(StockMove, int(value)) if valid else None
+        keys=["movement:" + str(data.get("moveId"))]
+        if move and len(move.source.split(':'))==3:
+            from .trade_context import Context
+            from . import trade_store
+            target,identity,_=move.source.split(':')
+            if target in ('receipts','deliveries'):
+                graph=Context(target,identity,{})
+                keys += [f'trade:{k}:{rid}' for k,rid in graph.rows if k in trade_store.MODELS or k=='leads']
+        locks(keys)
         identities = [move.product_id] if move else []
     else:
         identities = [data.get("productId")]

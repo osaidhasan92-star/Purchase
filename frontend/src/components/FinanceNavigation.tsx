@@ -33,6 +33,11 @@ export function FinanceNavigation({
       items: [
         ["Customer Invoices", link("sales-invoices"), "sales_invoices"],
         ["Customer Payments", link("sales-payments"), "sales_payments"],
+        [
+          "Credit Notes & Refunds",
+          link("credits", { kind: "customer" }),
+          "accounting",
+        ],
         ["Customers", link("customers"), "sales_customers"],
       ],
     },
@@ -42,6 +47,11 @@ export function FinanceNavigation({
       items: [
         ["Vendor Bills", link("invoices"), "invoices"],
         ["Vendor Payments", link("payments"), "payments"],
+        [
+          "Credit Notes & Refunds",
+          link("credits", { kind: "vendor" }),
+          "accounting",
+        ],
         ["Vendors", link("vendors"), "vendors"],
       ],
     },
@@ -97,14 +107,28 @@ export function FinanceNavigation({
       ],
     },
   ]
-    .map((g) => ({ ...g, items: g.items.filter(([, , p]) => bridge.can(p)) }))
+    .map((g) => ({
+      ...g,
+      items: g.items.filter(
+        ([, href, p]) =>
+          bridge.can(p) &&
+          (!href.includes("view=credits") ||
+            bridge.can(
+              href.includes("kind=vendor") ? "invoices" : "sales_invoices",
+            )),
+      ),
+    }))
     .filter((g) => g.items.length);
   const active =
-    action === "transfer"
-      ? "Bank & Cash"
-      : action === "lock"
-        ? "Configuration"
-        : groups.find((g) => g.views.includes(view))?.label || "Dashboard";
+    view === "credits"
+      ? query.get("kind") === "vendor"
+        ? "Vendors"
+        : "Customers"
+      : action === "transfer"
+        ? "Bank & Cash"
+        : action === "lock"
+          ? "Configuration"
+          : groups.find((g) => g.views.includes(view))?.label || "Dashboard";
   useEffect(() => {
     const close = (e: Event) => {
       if (!root.current?.contains(e.target as Node)) setOpen("");

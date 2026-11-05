@@ -1,3 +1,4 @@
+import { CreditsPage } from "./modules/finance/CreditsPage";
 import { Component, type ErrorInfo, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { flushSync } from "react-dom";
@@ -92,7 +93,11 @@ window.ModernWorkspace = {
                 view={page.inventoryView}
                 bridge={bridge}
               />
-            ) : page.native === "finance" && page.financeView ? (
+            ) : page.native === "finance" && page.financeView === "credits" ? (
+              <CreditsPage key={location.search} bridge={bridge} />
+            ) : page.native === "finance" &&
+              page.financeView &&
+              page.financeView !== "credits" ? (
               <FinancePage
                 key={page.financeView}
                 view={page.financeView}

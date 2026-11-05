@@ -186,7 +186,10 @@ def context(key, row):
                 == ("Received" if key == "customerInvoices" else "Processed"),
             )
         )
-        result["balance"] = float(max(0, (row.amount or 0) - paid))
+        from .credit_api import CreditSettlement, CreditNote
+        credited=db.session.scalar(select(func.coalesce(func.sum(CreditSettlement.amount),0)).join(CreditNote).where(CreditSettlement.invoice_id==row.id,CreditSettlement.kind=='apply',CreditNote.kind==('customer' if key=='customerInvoices' else 'vendor'))) or 0
+        result["creditedAmount"] = float(credited)
+        result["balance"] = float(max(0, (row.amount or 0) - paid - credited))
     if key == "deliveries":
         if allowed(g.user, app_document().stored_data, "sales_invoices") and allowed(
             g.user, app_document().stored_data, "sales_invoices", "export"

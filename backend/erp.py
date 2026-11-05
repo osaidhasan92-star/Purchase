@@ -92,7 +92,7 @@ class StockMove(db.Model):
     date = db.Column(db.String(10), nullable=False)
     counterpart = db.Column(db.String(20), db.ForeignKey('account.code'), nullable=False)
     journal_id = db.Column(db.Integer, db.ForeignKey('journal_entry.id'))
-    return_of = db.Column(db.Integer, db.ForeignKey('stock_move.id'))
+    return_of = db.Column(db.Integer, db.ForeignKey('stock_move.id'), index=True)
 
 
 class BillOfMaterials(db.Model):
@@ -177,6 +177,13 @@ COMPANY = dict(name='Pakistan Demo Company', legalName='Pakistan Demo Company', 
                currency='PKR', currencySymbol='Rs', currencyLocale='en-PK', taxNumberLabel='NTN / STRN',
                purchaseTax={'enabled': True, 'label': 'Sales Tax', 'rate': 0},
                salesTax={'enabled': True, 'label': 'Sales Tax', 'rate': 0})
+
+
+def ensure_return_index():
+    # create_all skips indexes on pre-existing tables; explicitly upgrade this lookup.
+    for index in StockMove.__table__.indexes:
+        if index.name == 'ix_stock_move_return_of':
+            index.create(bind=db.engine, checkfirst=True)
 
 
 def dec(value, scale=CENT, positive=False):
@@ -360,6 +367,8 @@ def matched_amount(line):
 
 
 def reconcile(debit, credit, amount):
+    if any(line.entry.source.startswith('credit:') for line in (debit,credit)) and not getattr(g,'credit_settlement',False):
+        raise InvalidBusinessState('Use the credit note Apply Credit or Register Refund action to keep document balances synchronized')
     if getattr(g, 'resource_mode', False):
         from .concurrency import tail
         tail()

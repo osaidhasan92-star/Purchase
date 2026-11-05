@@ -1,5 +1,11 @@
 export type FinanceView =
-  "accounting" | "accounts" | "journals" | "reports" | "aged" | "bank";
+  | "credits"
+  | "accounting"
+  | "accounts"
+  | "journals"
+  | "reports"
+  | "aged"
+  | "bank";
 export interface Row {
   id: number | string;
   version?: string;
@@ -38,6 +44,7 @@ export interface Summary {
   periodLock: { date: string | null; version: string };
 }
 export const titles: Record<FinanceView, string> = {
+  credits: "Credit Notes & Refunds",
   accounting: "Accounting & Finance",
   accounts: "Chart of Accounts",
   journals: "Journal Entries",

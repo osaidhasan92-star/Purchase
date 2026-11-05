@@ -1929,3 +1929,65 @@
   color: #643cae !important;
   border-bottom-color: #7143c4 !important;
 }
+
+.credit-form {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+.credit-form label {
+  display: grid;
+  gap: 6px;
+  color: #455574;
+  font-size: 12px;
+  min-width: 0;
+}
+.credit-form input,
+.credit-form select,
+.credit-form textarea {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid #dce3f0;
+  border-radius: 7px;
+  padding: 9px 11px;
+  font: inherit;
+  background: white;
+}
+.credit-form textarea {
+  min-height: 76px;
+  resize: vertical;
+}
+.credit-form fieldset {
+  min-width: 0;
+  border: 1px solid #e0e7f3;
+  padding: 12px;
+  border-radius: 8px;
+  display: grid;
+  gap: 10px;
+}
+.credit-form legend {
+  font-size: 12px;
+  padding: 0 5px;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+.credit-form .form-actions,
+.credit-dialog-body .form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+}
+[data-screen="credits-react"] .section-head {
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.modal .modal-box.trade-dialog:has(.credit-form),
+.modal .modal-box.trade-dialog:has(.credit-dialog-body) {
+  max-width: min(820px, calc(100vw - 24px));
+}
+.credit-dialog-body > p {
+  overflow-wrap: anywhere;
+}
