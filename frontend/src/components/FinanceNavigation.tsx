@@ -143,14 +143,16 @@ export function FinanceNavigation({
       }}
     >
       <nav className="module-tabs" aria-label="Accounting & Finance submenu">
-        <a
-          href={link("accounting")}
-          className={"module-tab" + (active === "Dashboard" ? " active" : "")}
-          aria-current={active === "Dashboard" ? "page" : undefined}
-          onClick={(e) => onNavigate(e, link("accounting"))}
-        >
-          Dashboard
-        </a>
+        {bridge.can("accounting") && (
+          <a
+            href={link("accounting")}
+            className={"module-tab" + (active === "Dashboard" ? " active" : "")}
+            aria-current={active === "Dashboard" ? "page" : undefined}
+            onClick={(e) => onNavigate(e, link("accounting"))}
+          >
+            Dashboard
+          </a>
+        )}
         {groups.map((g) => (
           <button
             key={g.label}

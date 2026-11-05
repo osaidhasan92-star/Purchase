@@ -159,6 +159,18 @@ async function main() {
   assert.equal(contextPage.window.document.querySelector('.module-app').dataset.module,'crm');contextPage.window.close();
   contextPage=await page('products?module=purchase');
   assert.equal(contextPage.window.document.querySelector('.module-app').dataset.module,'purchase');contextPage.window.close();
+  // Operational registers belong to Inventory; financial registers belong to Accounting.
+  for (const [view, module] of [['sales-invoices','accounting'],['sales-payments','accounting'],['invoices','accounting'],['payments','accounting'],['receipts','inventory'],['sales-deliveries','inventory']]) {
+    const screen=await page(view);
+    assert.equal(screen.window.document.querySelector('.module-app').dataset.module,module);
+    screen.window.close();
+  }
+  for (const view of ['sales','purchase-dashboard']) {
+    const screen=await page(view);
+    const hrefs=[...screen.window.document.querySelectorAll('.module-tabs a')].map(a=>a.href);
+    assert.ok(!hrefs.some(h=>/view=(sales-invoices|sales-payments|invoices|payments|receipts|sales-deliveries)(&|$)/.test(h)));
+    screen.window.close();
+  }
   let dom = await page('vendors');
   dom.window.openVendor();
   dom.window.document.getElementById('vname').value = 'Persisted through the interface';
@@ -195,7 +207,7 @@ async function main() {
   const viewerLogin=await fetch(base+'/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:'nav-viewer@example.test',password})});
   assert.equal(viewerLogin.status,200);jar.setCookieSync(viewerLogin.headers.get('set-cookie'),base);
   dom=await page('sales-quotations');
-  assert.equal(dom.window.document.querySelectorAll('.sidebar [data-workspace="hr"],.sidebar [data-workspace="accounting"],.sidebar [data-workspace="manufacturing"]').length,0);
+  assert.equal(dom.window.document.querySelectorAll('.sidebar [data-workspace="hr"],.sidebar [data-workspace="manufacturing"]').length,0);
   assert.equal(dom.window.document.querySelector('.module-tabs [aria-current="page"]').textContent,'Quotations');
   assert.equal(dom.window.document.querySelectorAll('#user-dropdown button[data-action="company-profile"]').length,0);
   dom.window.close();

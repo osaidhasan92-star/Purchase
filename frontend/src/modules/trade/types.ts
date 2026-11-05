@@ -292,7 +292,18 @@ export const route = (resource: Resource, sourceId?: string | number) =>
   "erp.html?" +
   new URLSearchParams({
     view: configs[resource].view,
-    module: configs[resource].area === "purchase" ? "purchase" : "sales",
+    module: [
+      "invoices",
+      "payments",
+      "customerInvoices",
+      "customerPayments",
+    ].includes(resource)
+      ? "accounting"
+      : ["receipts", "deliveries"].includes(resource)
+        ? "inventory"
+        : configs[resource].area === "purchase"
+          ? "purchase"
+          : "sales",
     ...(sourceId ? { sourceId: String(sourceId) } : {}),
   });
 
