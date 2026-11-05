@@ -60,12 +60,14 @@ def action(client, h, key, row, command):
 
 
 def masters(client, h):
+    # Conservation fixtures use ordered invoicing; delivery-policy boundaries have dedicated tests.
     product = client.post(
         "/api/products",
         headers=h,
         json={
             "name": "Native stock",
             "sku": "NATIVE-STK",
+            "salesInvoicePolicy": "ordered",
             "rate": 10,
             "requestKey": "native-product-0001",
         },
@@ -455,25 +457,7 @@ def test_native_conservation_stale_sources_and_financial_idempotency(app):
         ),
         400,
     )
-    bill = create(
-        client,
-        h,
-        "invoices",
-        poId=order["id"],
-        parentVersion=order["version"],
-        invoiceNo="NATIVE-EXCEPTION",
-        dueDate="2027-12-31",
-        items=[dict(lineIndex=0, quantity=6)],
-    )
-    assert bill["status"] == "Draft" and bill["matchStatus"] == "Exception"
-    post(
-        client,
-        h,
-        f'invoices/{bill["id"]}/actions/approve',
-        {"version": bill["version"], "requestKey": "approve-exception-bill"},
-        409,
-    )
-    bill = action(client, h, "invoices", bill, "cancel")
+    post(client,h,"invoices",dict(poId=order["id"],parentVersion=order["version"],invoiceNo="NATIVE-EXCEPTION",dueDate="2027-12-31",items=[dict(lineIndex=0,quantity=6)],requestKey="received-policy-overbill"),400)
     # A smaller valid bill may be paid only within its true remaining balance.
     bill = create(
         client,
@@ -1002,16 +986,19 @@ def test_invoice_review_posting_is_finance_only_and_drafts_do_not_touch_ledger(a
 
 
 def test_vendor_draft_review_cannot_bypass_receipt_matching(app):
-    client, h = session(app)
-    product, vendor, _ = masters(client, h)
-    order = purchase(client, h, product, vendor)
-    bill = create(client, h, "invoices", poId=order["id"], parentVersion=order["version"],
-                  invoiceNo="UNRECEIVED-DRAFT", dueDate="2027-12-31", items=[dict(lineIndex=0, quantity=1)])
-    assert bill["status"] == "Draft" and bill["matchStatus"] == "Exception"
-    pending = action(client, h, "invoices", bill, "submit")
-    post(client, h, f'invoices/{bill["id"]}/actions/post', dict(version=pending["version"], requestKey="unreceived-post-denied"), 400)
+    client,h=session(app)
+    product,vendor,_=masters(client,h)
+    order=purchase(client,h,product,vendor)
+    post(client,h,"invoices",dict(poId=order["id"],parentVersion=order["version"],invoiceNo="UNRECEIVED-DRAFT",dueDate="2027-12-31",items=[dict(lineIndex=0,quantity=1)],requestKey="unreceived-draft-denied"),400)
+    receipt=create(client,h,"receipts",poId=order["id"],parentVersion=order["version"],items=[dict(lineIndex=0,receivedQty=2,acceptedQty=2,rejectedQty=0)])
+    order=details(client,"orders",order["id"])
+    bill=create(client,h,"invoices",poId=order["id"],parentVersion=order["version"],invoiceNo="REVIEW-RECEIPT-BILL",dueDate="2027-12-31",items=[dict(lineIndex=0,quantity=2)])
+    bill=action(client,h,"invoices",bill,"submit")
     with app.app_context():
-        assert db.session.scalar(select(JournalEntry.id).where(JournalEntry.source == "invoices:" + str(bill["id"]))) is None
-    draft = action(client, h, "invoices", pending, "reset")
-    cancelled = action(client, h, "invoices", draft, "cancel")
-    assert cancelled["status"] == "Cancelled"
+        movement=db.session.scalar(select(StockMove.id).where(StockMove.source==f'receipts:{receipt["id"]}:0'))
+    original=client.get('/api/inventory/movements/'+str(movement)).json['record']
+    returned=client.post('/api/inventory/commands/return',headers=h,json=dict(moveId=movement,version=original['version'],quantity=1,reason='Return before bill posting',requestKey='pending-bill-return'))
+    assert returned.status_code==200,returned.json
+    post(client,h,f'invoices/{bill["id"]}/actions/post',dict(version=bill['version'],requestKey='returned-bill-post-denied'),400)
+    with app.app_context():
+        assert db.session.scalar(select(JournalEntry.id).where(JournalEntry.source.like("invoices:%"))) is None

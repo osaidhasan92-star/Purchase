@@ -303,10 +303,7 @@ export function TradeForm({
         setLines(
           (detail.context.lines || []).map((line) => ({
             ...line,
-            quantity:
-              resource === "invoices"
-                ? Math.min(line.invoiceRemaining, line.acceptedUnbilled)
-                : line.invoiceRemaining,
+            quantity: line.billableRemaining,
             receivedQty: line.remaining,
             acceptedQty: line.remaining,
             rejectedQty: 0,
@@ -677,6 +674,18 @@ export function TradeForm({
                 </p>
               )}
             {sourceLoading && <p role="status">Loading source document…</p>}
+            {["invoices", "customerInvoices"].includes(resource) &&
+              lines.length > 0 &&
+              lines.every(
+                (line) =>
+                  Number(line.billableRemaining ?? line.quantity ?? 0) <= 0,
+              ) && (
+                <p className="hint">
+                  No quantities are currently eligible under this order's
+                  policy. Validate the delivery/receipt or cancel an unwanted
+                  draft that reserves the quantity.
+                </p>
+              )}
             {showLines && (
               <LineEditor
                 bridge={bridge}
@@ -755,7 +764,12 @@ export function TradeForm({
           <button
             type="submit"
             className="btn-primary"
-            disabled={saving || sourceLoading}
+            disabled={
+              saving ||
+              sourceLoading ||
+              (["invoices", "customerInvoices"].includes(resource) &&
+                !lines.some((line) => Number(line.quantity || 0) > 0))
+            }
           >
             {saving
               ? "Saving…"

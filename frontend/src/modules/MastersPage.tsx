@@ -130,6 +130,18 @@ const fields: Record<MasterKind, Field[]> = {
       id: "ptype",
       options: ["stock", "service"],
     },
+    {
+      name: "salesInvoicePolicy",
+      label: "Sales Invoicing Policy",
+      id: "psalespolicy",
+      options: ["delivered", "ordered"],
+    },
+    {
+      name: "purchaseBillPolicy",
+      label: "Purchase Billing Policy",
+      id: "ppurchasepolicy",
+      options: ["received", "ordered"],
+    },
     { name: "unit", label: "Unit", id: "punit", max: 40 },
     { name: "rate", label: "Default Rate (PKR)", id: "prate", type: "number" },
   ],
@@ -332,6 +344,8 @@ export function MastersPage({
     (f) =>
       ![
         "productType",
+        "salesInvoicePolicy",
+        "purchaseBillPolicy",
         "notes",
         "ownerId",
         "currency",
@@ -550,6 +564,14 @@ export function MastersPage({
                   className="modern-fieldset"
                   disabled={saving || readonly}
                 >
+                  {kind === "products" && (
+                    <p className="hint">
+                      Goods default to invoicing delivered quantities and
+                      billing received quantities. Services default to ordered
+                      quantities. Changes apply to new orders; existing orders
+                      retain their policies.
+                    </p>
+                  )}
                   <div className="grid2">
                     {fields[kind].map((f) => (
                       <label key={f.name}>
@@ -567,6 +589,28 @@ export function MastersPage({
                           <select
                             id={f.id}
                             name={f.name}
+                            onChange={(e) => {
+                              if (f.name === "productType" && !editing) {
+                                const sales =
+                                  form.current?.querySelector<HTMLSelectElement>(
+                                    '[name="salesInvoicePolicy"]',
+                                  );
+                                const purchase =
+                                  form.current?.querySelector<HTMLSelectElement>(
+                                    '[name="purchaseBillPolicy"]',
+                                  );
+                                if (sales)
+                                  sales.value =
+                                    e.target.value === "service"
+                                      ? "ordered"
+                                      : "delivered";
+                                if (purchase)
+                                  purchase.value =
+                                    e.target.value === "service"
+                                      ? "ordered"
+                                      : "received";
+                              }
+                            }}
                             disabled={
                               kind === "leads" &&
                               !!editing &&
@@ -581,7 +625,24 @@ export function MastersPage({
                                 ? editing?.done
                                   ? "Done"
                                   : "Open"
-                                : editing?.[f.name] || f.options[0],
+                                : editing?.[f.name] ||
+                                    (f.name === "productType" &&
+                                    String(
+                                      editing?.unit || "",
+                                    ).toLowerCase() === "service"
+                                      ? "service"
+                                      : undefined) ||
+                                    ([
+                                      "salesInvoicePolicy",
+                                      "purchaseBillPolicy",
+                                    ].includes(f.name) &&
+                                    (editing?.productType === "service" ||
+                                      (!editing?.productType &&
+                                        String(
+                                          editing?.unit || "",
+                                        ).toLowerCase() === "service"))
+                                      ? "ordered"
+                                      : f.options[0]),
                             )}
                           >
                             {(f.name === "stage" &&
@@ -599,7 +660,13 @@ export function MastersPage({
                                   ? "Goods — Track Inventory"
                                   : o === "service"
                                     ? "Service — No Stock"
-                                    : o}
+                                    : o === "ordered"
+                                      ? "Ordered Quantities"
+                                      : o === "delivered"
+                                        ? "Delivered Quantities"
+                                        : o === "received"
+                                          ? "Received Quantities"
+                                          : o}
                               </option>
                             ))}
                           </select>

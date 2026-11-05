@@ -170,7 +170,20 @@ export function TradePage({
         "/trade/" + resource + "/" + encodeURIComponent(String(row.id)),
       );
       if (active.current) {
-        if (edit) setForm({ editing: result.record });
+        if (edit)
+          setForm({
+            editing: result.context.invoiceLimits
+              ? {
+                  ...result.record,
+                  items: economicLines(result.record).map((line, index) => ({
+                    ...line,
+                    ...result.context.invoiceLimits?.find(
+                      (limit) => limit.lineIndex === (line.lineIndex ?? index),
+                    ),
+                  })),
+                }
+              : result.record,
+          });
         else setDetail(result);
       }
     } catch (e) {
@@ -541,7 +554,7 @@ export function TradePage({
                 ["deliveryStatus", "Delivery"],
                 ["invoiceStatus", "Invoicing"],
                 ["paymentStatus", "Payment"],
-                ["matchStatus", "Three-way Match"],
+                ["matchStatus", "Bill Control Check"],
               ]
                 .filter(([field]) => detail.record[field] !== undefined)
                 .map(([field, label]) => (
@@ -551,6 +564,26 @@ export function TradePage({
                   </div>
                 ))}
             </div>
+            {["orders", "salesOrders"].includes(resource) && (
+              <p className="hint">
+                {economicLines(detail.record)
+                  .map(
+                    (line) =>
+                      String(line.productName) +
+                      ": " +
+                      String(
+                        line[
+                          resource === "salesOrders"
+                            ? "salesInvoicePolicy"
+                            : "purchaseBillPolicy"
+                        ] ||
+                          (resource === "salesOrders" ? "ordered" : "received"),
+                      ) +
+                      " quantities",
+                  )
+                  .join(" · ")}
+              </p>
+            )}
             <DocumentLines lines={economicLines(detail.record)} />
             {detail.context.sourceLines && (
               <>

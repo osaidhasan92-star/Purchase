@@ -262,7 +262,42 @@ def parent(state, key, identity, data):
     return value
 
 
+def product_policies(product):
+    service=product.get("productType", "service" if str(product.get("unit","")).lower()=="service" else "stock")=="service"
+    result = dict(salesInvoicePolicy=product.get("salesInvoicePolicy","ordered" if service else "delivered"),
+                purchaseBillPolicy=product.get("purchaseBillPolicy","ordered" if service else "received"))
+    if result["salesInvoicePolicy"] not in ("ordered","delivered") or result["purchaseBillPolicy"] not in ("ordered","received"):
+        problem("Invalid product invoicing/billing policy")
+    return result
+
+
+def billing_basis(state,order,index,customer):
+    line=order["items"][index]
+    policy=line.get("salesInvoicePolicy" if customer else "purchaseBillPolicy", "ordered" if customer else "received")
+    if policy not in (("ordered","delivered") if customer else ("ordered","received")):
+        problem("Invalid order invoicing/billing policy")
+    quantity=Decimal(str(line["quantity"]))
+    actual=dispatched(state,order,index) if customer else received(state,order,index)
+    return policy, min(quantity,actual) if policy in ("delivered","received") else quantity
+
+
+def invoice_remaining(state,order,index,customer,exclude=None):
+    _,basis=billing_basis(state,order,index,customer)
+    return max(Decimal(0),basis-billed_quantity(state,order,index,customer,exclude))
+
+
+def recheck_invoice_policy(state,key,row):
+    customer=key=="customerInvoices"
+    order=find(state,"salesOrders" if customer else "orders",row["orderId" if customer else "poId"])
+    for position,line in enumerate(row.get("items",[])):
+        index=int(line.get("lineIndex",position))
+        if index<0 or index>=len(order["items"]) or Decimal(str(line.get("quantity",0)))>invoice_remaining(state,order,index,customer,row["id"]):
+            problem("Invoice/bill exceeds the quantity permitted by the order's invoicing/billing policy")
+
+
 def add(state, key, values):
+    if key in ("orders","salesOrders"):
+        values["items"]=[{**line,**product_policies(find(state,"products",line["productId"]))} for line in values["items"]]
     identity = int(time.time() * 1000) * 1000 + secrets.randbelow(1000)
     while db.session.get(store.MODELS[key], str(identity)) or any(
         str(r["id"]) == str(identity) for r in state.get(key, [])
@@ -456,11 +491,9 @@ def invoice_lines(state, order, items, customer=False, exclude=None):
         used.add(index)
         src = order["items"][index]
         quantity = number(item.get("quantity"), "Invoice quantity", True, QTY)
-        remaining = Decimal(str(src["quantity"])) - billed_quantity(
-            state, order, index, customer, exclude
-        )
+        remaining = invoice_remaining(state,order,index,customer,exclude)
         if quantity > remaining:
-            problem("Invoice quantity exceeds the remaining uninvoiced order quantity")
+            problem("Invoice quantity exceeds the remaining quantity permitted by the invoicing/billing policy")
         product = find(state, "products", src["productId"])
         line = calculate_line(
             product,
@@ -540,6 +573,7 @@ def match_bill(state, bill):
     )
     accepted_value = Decimal(0)
     for index, line in enumerate(order.get("items", [])):
+        _,basis=billing_basis(state,order,index,False)
         calc = (
             calculate_line(
                 {
@@ -547,12 +581,12 @@ def match_bill(state, bill):
                     "productName": line.get("productName"),
                     "unit": line.get("unit"),
                 },
-                float(received(state, order, index)),
+                float(basis),
                 line.get("rate", line.get("quotedRate", 0)),
                 line.get("discountPercent", 0),
                 line.get("taxPercent", 0),
             )
-            if received(state, order, index) > 0
+            if basis > 0
             else {"total": 0}
         )
         accepted_value += Decimal(str(calc["total"]))
@@ -565,15 +599,13 @@ def match_bill(state, bill):
         if index >= len(order.get("items", [])):
             matched = False
             continue
-        if Decimal(str(line.get("quantity", 0))) > received(
-            state, order, index
-        ) - billed_quantity(state, order, index, False, bill["id"]):
+        if Decimal(str(line.get("quantity", 0))) > invoice_remaining(state,order,index,False,bill["id"]):
             matched = False
     bill["matchStatus"] = "Matched" if matched else "Exception"
     bill["matchReason"] = (
-        "Within accepted, ordered and unbilled quantities/value"
+        "Within the configured billing policy and unbilled quantities/value"
         if matched
-        else "Bill exceeds accepted, ordered or unbilled quantities/value"
+        else "Bill exceeds the configured billing policy or unbilled quantities/value"
     )
     return matched
 
@@ -1314,6 +1346,8 @@ def act(state, key, row, action, data):
         problem("Action is not available in the current document status", 409)
     if key in ("invoices", "customerInvoices") and action in ("post", "approve", "reset"):
         finance_authority(state)
+    if key in ("invoices", "customerInvoices") and action in ("post","approve"):
+        recheck_invoice_policy(state,key,row)
     if key == "invoices" and action in ("post", "approve") and not match_bill(state, row):
         problem(row["matchReason"])
     if (
@@ -1417,6 +1451,10 @@ def edit(state, key, row, data):
             else None
         )
         items = price_lines(state, data["items"], source)
+        if key == "orders":
+            for line in items:
+                previous=next((old for old in row.get("items",[]) if str(old.get("productId"))==str(line["productId"])),None)
+                line.update({"salesInvoicePolicy":previous.get("salesInvoicePolicy","ordered"),"purchaseBillPolicy":previous.get("purchaseBillPolicy","received")} if previous else product_policies(find(state,"products",line["productId"])))
         if key == "requests":
             row.update(lineItems=items, items=len(items), total=totals(items)["total"])
         else:

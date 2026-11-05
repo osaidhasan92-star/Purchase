@@ -119,6 +119,12 @@ export function LineEditor({
                   {line.remaining !== undefined
                     ? " · Remaining: " + str(line.remaining)
                     : ""}
+                  {invoice && line.billingPolicy
+                    ? " · Policy: " + String(line.billingPolicy) + " quantities"
+                    : ""}
+                  {invoice && line.billableRemaining !== undefined
+                    ? " · Eligible now: " + str(line.billableRemaining)
+                    : ""}
                   {invoice && line.invoiceRemaining !== undefined
                     ? " · Uninvoiced: " + str(line.invoiceRemaining)
                     : ""}
@@ -153,7 +159,15 @@ export function LineEditor({
                   name={name + "-" + index}
                   type="number"
                   min="0"
-                  max={name.includes("Percent") ? 100 : 1e12}
+                  max={
+                    invoice &&
+                    name === "quantity" &&
+                    line.billableRemaining !== undefined
+                      ? Number(line.billableRemaining)
+                      : name.includes("Percent")
+                        ? 100
+                        : 1e12
+                  }
                   step={name.includes("Percent") ? "0.0001" : "0.0001"}
                   required
                   value={Number(line[name] || 0)}

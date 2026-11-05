@@ -107,7 +107,8 @@ def validate_business(state):
             raise InvalidBusinessState('A matched vendor bill must reference a purchase order')
         received = Decimal(0)
         for index, line in enumerate(order.get('items', [])):
-            base = accepted[(str(order['id']),index)] * number(line.get('rate',line.get('quotedRate',0)))
+            basis = number(line.get('quantity')) if line.get('purchaseBillPolicy')=='ordered' else accepted[(str(order['id']),index)]
+            base = basis * number(line.get('rate',line.get('quotedRate',0)))
             received += base * (1-number(line.get('discountPercent'))/100) * (1+number(line.get('taxPercent'))/100)
         from .trade_service import credit_amount
         billed[str(order['id'])] += number(invoice.get('amount')) - credit_amount('vendor',invoice['id'])

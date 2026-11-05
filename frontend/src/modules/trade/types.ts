@@ -53,12 +53,19 @@ export interface OrderLineContext {
   received: number;
   remaining: number;
   invoiceRemaining: number;
+  billableRemaining: number;
+  billingPolicy: string;
   acceptedUnbilled: number;
   rate: number;
   taxPercent: number;
   discountPercent: number;
 }
 export interface TradeContext {
+  invoiceLimits?: {
+    lineIndex: number;
+    billingPolicy: string;
+    billableRemaining: number;
+  }[];
   balance?: number;
   lines?: OrderLineContext[];
   sourceLines?: TradeLine[];

@@ -15,6 +15,8 @@ from .trade_service import (
     billed_quantity,
     totals,
     calculate_line,
+    billing_basis,
+    invoice_remaining,
 )
 from .crm_api import visible_leads
 from .master_store import Lead
@@ -114,7 +116,7 @@ def output(key, row, detail=False):
     return result
 
 
-def context(key, row):
+def context(key, row, excluded_invoice=None):
     """Return this document's operational quantities, never an entire register."""
     result = {}
     if key in ("orders", "salesOrders"):
@@ -149,7 +151,7 @@ def context(key, row):
                 if key == "salesOrders"
                 else received_qty
             )
-            billed = billed_quantity(state, value, index, key == "salesOrders")
+            billed = billed_quantity(state, value, index, key == "salesOrders", excluded_invoice)
             quantity = Decimal(str(item.get("quantity", 0)))
             lines.append(
                 dict(
@@ -161,6 +163,8 @@ def context(key, row):
                     received=float(received_qty),
                     remaining=float(max(Decimal(0), quantity - reserved)),
                     invoiceRemaining=float(max(Decimal(0), quantity - billed)),
+                    billableRemaining=float(invoice_remaining(state,value,index,key=="salesOrders",excluded_invoice)),
+                    billingPolicy=billing_basis(state,value,index,key=="salesOrders")[0],
                     acceptedUnbilled=float(max(Decimal(0), received_qty - billed)),
                     rate=item.get("rate", item.get("quotedRate", 0)),
                     taxPercent=item.get("taxPercent", 0),
@@ -177,6 +181,11 @@ def context(key, row):
             and bill.get("status") not in ("Cancelled", "Exception")
         )
     if key in ("invoices", "customerInvoices"):
+        parent_key="salesOrders" if key=="customerInvoices" else "orders"
+        parent_id=row.order_id if key=="customerInvoices" else row.po_id
+        parent=db.session.get(store.MODELS[parent_key],str(parent_id))
+        if parent:
+            result["invoiceLimits"]=[{k:line[k] for k in ("lineIndex","billingPolicy","billableRemaining")} for line in context(parent_key,parent,row.id)["lines"]]
         payment_key = "customerPayments" if key == "customerInvoices" else "payments"
         payment_model = store.MODELS[payment_key]
         paid = db.session.scalar(

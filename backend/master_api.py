@@ -70,7 +70,7 @@ def paging(key):
 
 
 def values(key, data, previous=None):
-    if set(data) - set(FIELDS[key]) - {"version", "requestKey"}:
+    if set(data) - set(FIELDS[key]) - ({"salesInvoicePolicy", "purchaseBillPolicy"} if key == "products" else set()) - {"version", "requestKey"}:
         problem("Unknown " + key + " fields")
     source = {**(previous or {}), **data}
     result = {}
@@ -84,7 +84,11 @@ def values(key, data, previous=None):
         sku=80,
         unit=40,
     )
-    for field in FIELDS[key]:
+    product_type=source.get("productType", "service" if str(source.get("unit", "")).lower()=="service" else "stock")
+    defaults=dict(status="Active",unit="Each",productType=product_type,
+                  salesInvoicePolicy="ordered" if product_type=="service" else "delivered",
+                  purchaseBillPolicy="ordered" if product_type=="service" else "received")
+    for field in list(FIELDS[key]) + (["salesInvoicePolicy", "purchaseBillPolicy"] if key == "products" else []):
         if field in ("rate",):
             value = source.get(field, 0)
             if (
@@ -96,18 +100,7 @@ def values(key, data, previous=None):
                 problem("Rate must be a finite non-negative number")
             result[field] = float(dec(value))
         else:
-            value = source.get(
-                field,
-                (
-                    "Active"
-                    if field == "status"
-                    else (
-                        "Each"
-                        if field == "unit"
-                        else "stock" if field == "productType" else ""
-                    )
-                ),
-            )
+            value = source.get(field, defaults.get(field, ""))
             if not isinstance(value, str) or len(value.strip()) > limits.get(field, 40):
                 problem("Invalid " + field)
             result[field] = value.strip()
@@ -123,6 +116,8 @@ def values(key, data, previous=None):
     else:
         if result["productType"] not in ("stock", "service"):
             problem("Product type must be stock or service")
+        if result["salesInvoicePolicy"] not in ("ordered","delivered") or result["purchaseBillPolicy"] not in ("ordered","received"):
+            problem("Invalid invoicing or billing policy")
         if not result["unit"]:
             problem("Unit is required")
     return result
