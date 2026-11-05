@@ -110,22 +110,23 @@ export function TradePage({
     [detail, setDetail] = useState<Detail | null>(null),
     [busy, setBusy] = useState(false),
     [opening, setOpening] = useState("");
+  const canCreate =
+    bridge.can(config.module, "create") &&
+    (!["payments", "customerPayments"].includes(resource) ||
+      (bridge.can("accounting", "approve") &&
+        bridge.can(config.module, "approve")));
   const actionKeys = useRef(new Map<string, string>()),
     active = useRef(true),
     actionBusy = useRef(false);
   useEffect(() => {
     active.current = true;
     const params = new URLSearchParams(location.search);
-    if (
-      bridge.can(config.module, "create") &&
-      (params.has("sourceId") || params.has("leadId"))
-    )
+    if (canCreate && (params.has("sourceId") || params.has("leadId")))
       setForm({
         sourceId: params.get("sourceId") || undefined,
         leadId: params.get("leadId") || undefined,
       });
-    if (params.get("new") === "1" && bridge.can(config.module, "create"))
-      setForm({});
+    if (params.get("new") === "1" && canCreate) setForm({});
     return () => {
       active.current = false;
     };
@@ -237,11 +238,20 @@ export function TradePage({
           disabled={busy || !!opening}
           onClick={() => void act(row, action)}
         >
-          {actionLabels[action] || "Edit"}
+          {action === "submit" &&
+          ["invoices", "customerInvoices"].includes(resource)
+            ? "Submit for Review"
+            : actionLabels[action] || "Edit"}
         </button>
       ))}
       {nextSteps(resource, row)
-        .filter((step) => bridge.can(configs[step.resource].module, "create"))
+        .filter(
+          (step) =>
+            bridge.can(configs[step.resource].module, "create") &&
+            (!["payments", "customerPayments"].includes(step.resource) ||
+              (bridge.can("accounting", "approve") &&
+                bridge.can(configs[step.resource].module, "approve"))),
+        )
         .map((step) => (
           <a
             key={step.resource}
@@ -263,12 +273,16 @@ export function TradePage({
           <div>
             <div className="section-title">{config.label}</div>
             <p className="hint">
-              Pakistan · PKR · Saved per document with server-managed workflow
-              actions
+              {["invoices", "customerInvoices"].includes(resource)
+                ? "Save Draft → Submit for Review → Finance posts → Register Payment"
+                : "Pakistan · PKR · Saved per document with server-managed workflow actions"}
             </p>
           </div>
           {resource !== "comparisons" &&
-            bridge.can(config.module, "create") && (
+            bridge.can(config.module, "create") &&
+            (!["payments", "customerPayments"].includes(resource) ||
+              (bridge.can("accounting", "approve") &&
+                bridge.can(config.module, "approve"))) && (
               <button
                 type="button"
                 className="btn-primary"

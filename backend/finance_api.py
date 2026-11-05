@@ -515,7 +515,7 @@ def dashboard():
             scope.append(model.document_date >= start)
         groups = db.session.execute(select(model.status, func.count()).where(*scope).group_by(model.status)).all()
         statuses = {status or "Unknown": n for status, n in groups}
-        result[field] = dict(draft=statuses.get("Draft", 0) + statuses.get("Matched", 0),
+        result[field] = dict(draft=statuses.get("Draft", 0) + statuses.get("Matched", 0), pending=statuses.get("Pending Approval", 0),
             unpaid=statuses.get("Posted", 0) + statuses.get("Approved", 0),
             partial=statuses.get("Partially Paid", 0), paid=statuses.get("Paid", 0),
             total=sum(statuses.values()))

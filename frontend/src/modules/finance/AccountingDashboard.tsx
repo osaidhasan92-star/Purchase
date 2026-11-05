@@ -34,6 +34,7 @@ export interface AccountingData extends Summary {
 }
 interface InvoiceCounts {
   draft: number;
+  pending: number;
   unpaid: number;
   partial: number;
   paid: number;
@@ -85,6 +86,7 @@ export function AccountingDashboard({
         {counts ? (
           [
             ["Draft", counts.draft, "draft"],
+            ["Pending Review", counts.pending || 0, "draft"],
             [
               title === "Customer Invoices"
                 ? "Posted / Unpaid"
@@ -101,17 +103,19 @@ export function AccountingDashboard({
                 from: String(data.fromDate || ""),
                 to: String(data.toDate),
                 status:
-                  label === "Draft"
-                    ? title === "Vendor Bills"
-                      ? "Draft|Matched"
-                      : "Draft"
-                    : label === "Partially Paid"
-                      ? "Partially Paid"
-                      : label === "Paid"
-                        ? "Paid"
-                        : title === "Customer Invoices"
-                          ? "Posted"
-                          : "Approved",
+                  label === "Pending Review"
+                    ? "Pending Approval"
+                    : label === "Draft"
+                      ? title === "Vendor Bills"
+                        ? "Draft|Matched"
+                        : "Draft"
+                      : label === "Partially Paid"
+                        ? "Partially Paid"
+                        : label === "Paid"
+                          ? "Paid"
+                          : title === "Customer Invoices"
+                            ? "Posted"
+                            : "Approved",
               })}
             >
               <span>{label}</span>

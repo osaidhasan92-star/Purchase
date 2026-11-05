@@ -149,8 +149,9 @@ def receive_bill_pay(client, h, order, quantity, invoice_number, pay_amount=None
         dueDate="2027-12-31",
         items=[dict(lineIndex=0, quantity=quantity)],
     )
-    assert bill["status"] == "Matched"
-    bill = action(client, h, "invoices", bill, "approve")
+    assert bill["status"] == "Draft"
+    bill = action(client, h, "invoices", bill, "submit")
+    bill = action(client, h, "invoices", bill, "post")
     create(
         client,
         h,
@@ -266,6 +267,8 @@ def test_native_sales_approval_partial_deliveries_invoices_and_collections(app):
         dueDate="2027-12-31",
         items=[dict(lineIndex=0, quantity=2)],
     )
+    invoice = action(client, h, "customerInvoices", invoice, "submit")
+    invoice = action(client, h, "customerInvoices", invoice, "post")
     assert invoice["amount"] == 56.7 and invoice["taxAmount"] == 2.7
     payment = create(
         client,
@@ -308,6 +311,8 @@ def test_native_sales_approval_partial_deliveries_invoices_and_collections(app):
         dueDate="2027-12-31",
         items=[dict(lineIndex=0, quantity=2)],
     )
+    invoice = action(client, h, "customerInvoices", invoice, "submit")
+    invoice = action(client, h, "customerInvoices", invoice, "post")
     create(
         client,
         h,
@@ -460,7 +465,7 @@ def test_native_conservation_stale_sources_and_financial_idempotency(app):
         dueDate="2027-12-31",
         items=[dict(lineIndex=0, quantity=6)],
     )
-    assert bill["status"] == "Exception"
+    assert bill["status"] == "Draft" and bill["matchStatus"] == "Exception"
     post(
         client,
         h,
@@ -468,6 +473,7 @@ def test_native_conservation_stale_sources_and_financial_idempotency(app):
         {"version": bill["version"], "requestKey": "approve-exception-bill"},
         409,
     )
+    bill = action(client, h, "invoices", bill, "cancel")
     # A smaller valid bill may be paid only within its true remaining balance.
     bill = create(
         client,
@@ -479,7 +485,8 @@ def test_native_conservation_stale_sources_and_financial_idempotency(app):
         dueDate="2027-12-31",
         items=[dict(lineIndex=0, quantity=5)],
     )
-    bill = action(client, h, "invoices", bill, "approve")
+    bill = action(client, h, "invoices", bill, "submit")
+    bill = action(client, h, "invoices", bill, "post")
     payment = dict(
         invoiceId=bill["id"],
         parentVersion=bill["version"],
@@ -570,7 +577,8 @@ def test_native_mixed_stock_and_service_bills_use_actual_partial_line_allocation
         dueDate="2027-12-31",
         items=[dict(lineIndex=0, quantity=5), dict(lineIndex=1, quantity=1)],
     )
-    bill = action(client, h, "invoices", bill, "approve")
+    bill = action(client, h, "invoices", bill, "submit")
+    bill = action(client, h, "invoices", bill, "post")
     with app.app_context():
         entry = db.session.scalar(
             select(JournalEntry).where(
@@ -894,7 +902,8 @@ def test_discounted_partial_receipts_and_bills_clear_grni_to_exact_line_cents(ap
             dueDate="2027-12-31",
             items=[dict(lineIndex=0, quantity=quantity)],
         )
-        bill = action(client, h, "invoices", bill, "approve")
+        bill = action(client, h, "invoices", bill, "submit")
+        bill = action(client, h, "invoices", bill, "post")
         order = details(client, "orders", order["id"])
     stock = client.get("/api/erp/inventory").json["products"][0]
     assert Decimal(stock["value"]) == Decimal("6.67")
@@ -944,3 +953,65 @@ def test_dashboard_metrics_use_workflow_status_dates_and_visibility(app):
     administrative = admin.get("/api/trade/summary/sales").json
     assert administrative["trend"][-1]["value"] == 10020
     assert administrative["balances"] == {"outstanding": 70, "collected": 50}
+
+
+def test_invoice_review_posting_is_finance_only_and_drafts_do_not_touch_ledger(app):
+    admin, ah = session(app)
+    manager, mh = session(app, "manager")
+    product, _, customer = masters(admin, ah)
+    quote = create(manager, mh, "salesQuotations", customerId=customer["id"],
+                   items=[dict(productId=product["id"], quantity=2, rate=30)])
+    for step in ("submit", "approve", "send", "accept"):
+        quote = action(manager, mh, "salesQuotations", quote, step)
+    order = create(manager, mh, "salesOrders", quotationId=quote["id"], parentVersion=quote["version"])
+    invoice = create(manager, mh, "customerInvoices", orderId=order["id"], parentVersion=order["version"],
+                     dueDate="2027-12-31", items=[dict(lineIndex=0, quantity=2)])
+    assert invoice["status"] == "Draft" and "edit" in invoice["actions"]
+    source = "customerInvoices:" + str(invoice["id"])
+    with app.app_context():
+        assert db.session.scalar(select(JournalEntry.id).where(JournalEntry.source == source)) is None
+    # Neither posting a draft nor paying it is allowed, even for an administrator.
+    post(admin, ah, f'customerInvoices/{invoice["id"]}/actions/post',
+         dict(version=invoice["version"], requestKey="draft-post-denied"), 409)
+    post(admin, ah, "customerPayments", dict(invoiceId=invoice["id"], parentVersion=invoice["version"],
+         amount=60, requestKey="draft-payment-denied"), 400)
+    edited = manager.patch(f'/api/trade/customerInvoices/{invoice["id"]}', headers=mh,
+                   json=dict(version=invoice["version"], requestKey="edit-draft-invoice", items=[dict(lineIndex=0, quantity=1)]))
+    assert edited.status_code == 200, edited.json
+    invoice = edited.json["record"]
+    assert invoice["amount"] == 30
+    pending = action(manager, mh, "customerInvoices", invoice, "submit")
+    assert pending["status"] == "Pending Approval" and "post" not in pending["actions"]
+    post(manager, mh, f'customerInvoices/{invoice["id"]}/actions/post',
+         dict(version=pending["version"], requestKey="manager-post-denied"), 403)
+    invoice = action(admin, ah, "customerInvoices", pending, "reset")
+    invoice = action(manager, mh, "customerInvoices", invoice, "submit")
+    payload = dict(version=invoice["version"], requestKey="finance-post-once")
+    posted = post(admin, ah, f'customerInvoices/{invoice["id"]}/actions/post', payload)
+    retry = post(admin, ah, f'customerInvoices/{invoice["id"]}/actions/post', payload)
+    assert posted["status"] == retry["status"] == "Posted"
+    with app.app_context():
+        assert len(list(db.session.scalars(select(JournalEntry.id).where(JournalEntry.source == source)))) == 1
+    post(manager, mh, "customerPayments", dict(invoiceId=posted["id"], parentVersion=posted["version"],
+         amount=30, requestKey="manager-payment-denied"), 403)
+    assert admin.patch(f'/api/trade/customerInvoices/{invoice["id"]}', headers=ah, json=dict(version=posted["version"],
+         requestKey="posted-edit-denied", notes="Cannot edit posted")).status_code == 400
+    payment = create(admin, ah, "customerPayments", invoiceId=posted["id"], parentVersion=posted["version"], amount=30)
+    assert payment["status"] == "Received"
+    assert details(admin, "customerInvoices", posted["id"])["status"] == "Paid"
+
+
+def test_vendor_draft_review_cannot_bypass_receipt_matching(app):
+    client, h = session(app)
+    product, vendor, _ = masters(client, h)
+    order = purchase(client, h, product, vendor)
+    bill = create(client, h, "invoices", poId=order["id"], parentVersion=order["version"],
+                  invoiceNo="UNRECEIVED-DRAFT", dueDate="2027-12-31", items=[dict(lineIndex=0, quantity=1)])
+    assert bill["status"] == "Draft" and bill["matchStatus"] == "Exception"
+    pending = action(client, h, "invoices", bill, "submit")
+    post(client, h, f'invoices/{bill["id"]}/actions/post', dict(version=pending["version"], requestKey="unreceived-post-denied"), 400)
+    with app.app_context():
+        assert db.session.scalar(select(JournalEntry.id).where(JournalEntry.source == "invoices:" + str(bill["id"]))) is None
+    draft = action(client, h, "invoices", pending, "reset")
+    cancelled = action(client, h, "invoices", draft, "cancel")
+    assert cancelled["status"] == "Cancelled"

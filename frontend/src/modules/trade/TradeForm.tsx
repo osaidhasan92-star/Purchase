@@ -173,6 +173,9 @@ const fields: Partial<Record<Resource, Field[]>> = {
   ],
 };
 const editNames = new Set([
+  "invoiceDate",
+  "dueDate",
+  "referenceNo",
   "department",
   "requester",
   "requiredDate",
@@ -761,7 +764,7 @@ export function TradeForm({
                 : resource === "payments" || resource === "customerPayments"
                   ? "Record Payment"
                   : resource === "customerInvoices"
-                    ? "Post Invoice"
+                    ? "Save Draft Invoice"
                     : "Save " + config.singular}
           </button>
         </div>

@@ -119,10 +119,11 @@ export function LineEditor({
                   {line.remaining !== undefined
                     ? " · Remaining: " + str(line.remaining)
                     : ""}
-                  {invoice
+                  {invoice && line.invoiceRemaining !== undefined
                     ? " · Uninvoiced: " + str(line.invoiceRemaining)
                     : ""}
-                  {resource === "invoices"
+                  {resource === "invoices" &&
+                  line.acceptedUnbilled !== undefined
                     ? " · Accepted/unbilled: " + str(line.acceptedUnbilled)
                     : ""}
                 </small>

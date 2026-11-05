@@ -622,8 +622,8 @@ def test_accounting_dashboard_posts_period_totals_documents_and_bank_matching(ap
     assert len(data['trend']) == 6
     assert next(r for r in data['trend'] if r['month']=='2026-10')['income']=='1000.00'
     assert next(r for r in data['trend'] if r['month']=='2026-11')['expenses']=='200.00'
-    assert data['customerInvoices'] == dict(draft=11,unpaid=1,partial=1,paid=1,total=14)
-    assert data['vendorBills'] == dict(draft=1,unpaid=1,partial=0,paid=1,total=3)
+    assert data['customerInvoices'] == dict(draft=11,pending=0,unpaid=1,partial=1,paid=1,total=14)
+    assert data['vendorBills'] == dict(draft=1,pending=0,unpaid=1,partial=0,paid=1,total=3)
     assert len(data['recent']) == 8
     partial=next(r for r in data['recent'] if r['id']=='b')
     assert partial['documentStatus']=='Posted' and partial['paymentStatus']=='Partially Paid'

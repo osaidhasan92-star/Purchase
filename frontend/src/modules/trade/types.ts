@@ -268,6 +268,8 @@ export const configs: Record<Resource, ResourceConfig> = {
 export const actionLabels: Record<string, string> = {
   submit: "Submit for Approval",
   approve: "Approve",
+  post: "Post Document",
+  reset: "Return to Draft",
   reject: "Reject",
   send: "Mark Sent",
   accept: "Record Acceptance",

@@ -153,7 +153,7 @@ CREATE_FIELDS = {
         "notes",
     },
 }
-EDITABLE = {"requests", "salesQuotations", "orders", "quotations"}
+EDITABLE = {"requests", "salesQuotations", "orders", "quotations", "invoices", "customerInvoices"}
 
 
 class TradeCommand(db.Model):
@@ -172,6 +172,11 @@ def permit(key, action="view", state=None):
         g.user, state or app_document().stored_data, COLLECTIONS[key], action
     ):
         problem("Permission required: " + COLLECTIONS[key] + "." + action, 403)
+
+
+def finance_authority(state):
+    if not allowed(g.user, state, "accounting", "approve"):
+        problem("Finance posting permission required: accounting.approve", 403)
 
 
 def text(data, key, default="", limit=1000, required=False):
@@ -659,7 +664,7 @@ def recompute(state, key, row):
                 b
                 for b in bills
                 if str(b.get("orderId" if customer else "poId")) == str(order["id"])
-                and b.get("status") not in ("Cancelled", "Exception")
+                and b.get("status") in ("Posted", "Approved", "Partially Paid", "Paid")
             ]
             billed = sum((Decimal(str(b.get("amount", 0))) for b in linked), Decimal(0))
             paid = sum(
@@ -1117,13 +1122,12 @@ def create(state, key, data):
             notes=text(data, "notes", limit=10000),
         )
         if customer:
-            permit(key, "approve", state)
             values.update(
                 orderId=source["id"],
                 orderNo=source["orderNo"],
                 customerId=source["customerId"],
                 customerName=source["customerName"],
-                status="Posted",
+                status="Draft",
             )
         else:
             values.update(
@@ -1133,13 +1137,14 @@ def create(state, key, data):
                 vendorName=source["vendorName"],
                 invoiceNo=text(data, "invoiceNo", limit=160, required=True),
                 referenceNo=text(data, "referenceNo", limit=160),
-                status="Exception",
+                status="Draft",
             )
         result = add(state, key, values)
         if not customer:
-            result["status"] = "Matched" if match_bill(state, result) else "Exception"
+            match_bill(state, result)
         return result
     if key in ("payments", "customerPayments"):
+        finance_authority(state)
         permit(key, "approve", state)
         customer = key == "customerPayments"
         source = parent(
@@ -1223,8 +1228,17 @@ TRANSITIONS = {
         "cancel": ({"Pending"}, "Cancelled", "edit"),
     },
     "invoices": {
-        "match": ({"Exception", "Matched"}, "Matched", "edit"),
+        "submit": ({"Draft"}, "Pending Approval", "edit"),
+        "post": ({"Pending Approval", "Matched"}, "Approved", "approve"),
         "approve": ({"Matched"}, "Approved", "approve"),
+        "reset": ({"Pending Approval", "Exception", "Matched"}, "Draft", "approve"),
+        "cancel": ({"Draft", "Pending Approval", "Exception", "Matched"}, "Cancelled", "edit"),
+    },
+    "customerInvoices": {
+        "submit": ({"Draft"}, "Pending Approval", "edit"),
+        "post": ({"Pending Approval"}, "Posted", "approve"),
+        "reset": ({"Pending Approval"}, "Draft", "approve"),
+        "cancel": ({"Draft", "Pending Approval"}, "Cancelled", "edit"),
     },
 }
 
@@ -1310,7 +1324,9 @@ def act(state, key, row, action, data):
     origins, target, _ = TRANSITIONS[key][action]
     if row.get("status") not in origins:
         problem("Action is not available in the current document status", 409)
-    if key == "invoices" and not match_bill(state, row):
+    if key in ("invoices", "customerInvoices") and action in ("post", "approve", "reset"):
+        finance_authority(state)
+    if key == "invoices" and action in ("post", "approve") and not match_bill(state, row):
         problem(row["matchReason"])
     if (
         key == "orders"
@@ -1327,7 +1343,7 @@ def act(state, key, row, action, data):
         problem("This sales quotation has expired")
     row["status"] = target
     row[action + "At"] = utcnow()
-    if action == "approve":
+    if action in ("approve", "post"):
         row.update(approvedBy=g.user.id, approvedByName=g.user.name)
 
 
@@ -1366,18 +1382,32 @@ def edit(state, key, row, data):
             "deliveryLocation",
         },
         "quotations": {"notes", "items", "paymentTerms", "deliveryTime", "validUntil"},
+        "invoices": {"notes", "items", "invoiceDate", "dueDate", "referenceNo"},
+        "customerInvoices": {"notes", "items", "invoiceDate", "dueDate"},
     }[key]
     if set(data) - editable - {"requestKey", "version"}:
         problem("Unknown or immutable edit fields")
     for field in editable - {"items"}:
         if field in data:
             row[field] = (
-                on_date(data, field, required=field == "deliveryDate")
-                if field in ("validUntil", "deliveryDate", "requiredDate")
+                on_date(data, field, required=field in ("deliveryDate", "invoiceDate", "dueDate"))
+                if field in ("validUntil", "deliveryDate", "requiredDate", "invoiceDate", "dueDate")
                 else text(
                     data, field, limit=10000 if field in ("notes", "terms") else 1000
                 )
             )
+    if key in ("invoices", "customerInvoices"):
+        if "items" in data:
+            customer = key == "customerInvoices"
+            order = find(state, "salesOrders" if customer else "orders", row["orderId" if customer else "poId"])
+            items = invoice_lines(state, order, data["items"], customer, row["id"])
+            total = totals(items)
+            if total["total"] <= 0:
+                problem("Invoice total must be positive")
+            row.update(items=items, subtotal=total["subtotal"], taxAmount=total["taxAmount"], amount=total["total"], balance=total["total"])
+        if key == "invoices":
+            match_bill(state, row)
+        return
     if "items" in data:
         if key == "orders" and any(
             str(v.get("poId")) == str(row["id"])
@@ -1408,9 +1438,13 @@ def edit(state, key, row, data):
 def available_actions(key, row, state):
     output = []
     for action, (origins, _, _) in TRANSITIONS.get(key, {}).items():
+        if key == "invoices" and action == "approve":
+            continue  # Historical API alias; the UI uses the explicit posting action.
         if row.get("status") in origins and allowed(
             g.user, state, COLLECTIONS[key], action_permission(key, action, row)
         ):
+            if key in ("invoices", "customerInvoices") and action in ("post", "approve", "reset") and not allowed(g.user, state, "accounting", "approve"):
+                continue
             output.append(action)
     if (
         key == "quotations"
