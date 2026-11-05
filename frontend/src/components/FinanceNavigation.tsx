@@ -1,4 +1,10 @@
-import { useEffect, useRef, useState, type MouseEvent } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type MouseEvent,
+} from "react";
 import type { Bridge, User } from "../types";
 export function FinanceNavigation({
   bridge,
@@ -10,6 +16,7 @@ export function FinanceNavigation({
   onNavigate: (event: MouseEvent<HTMLAnchorElement>, href: string) => void;
 }) {
   const [open, setOpen] = useState("");
+  const [position, setPosition] = useState({ left: 0, top: 0 });
   const root = useRef<HTMLDivElement>(null),
     trigger = useRef<HTMLButtonElement | null>(null),
     menu = useRef<HTMLDivElement>(null);
@@ -105,6 +112,21 @@ export function FinanceNavigation({
     document.addEventListener("click", close);
     return () => document.removeEventListener("click", close);
   }, []);
+  useLayoutEffect(() => {
+    if (!open || !root.current || !trigger.current || !menu.current) return;
+    const box = root.current.getBoundingClientRect();
+    const button = trigger.current.getBoundingClientRect();
+    setPosition({
+      left: Math.max(
+        0,
+        Math.min(button.left - box.left, box.width - menu.current.offsetWidth),
+      ),
+      top: button.bottom - box.top + 4,
+    });
+    const close = () => setOpen("");
+    window.addEventListener("resize", close);
+    return () => window.removeEventListener("resize", close);
+  }, [open]);
   useEffect(() => {
     if (open) menu.current?.querySelector<HTMLElement>("a")?.focus();
   }, [open]);
@@ -156,6 +178,7 @@ export function FinanceNavigation({
       {group && (
         <div
           className="finance-submenu"
+          style={position}
           role="menu"
           aria-label={group.label}
           ref={menu}

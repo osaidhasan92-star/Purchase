@@ -19,6 +19,27 @@ module.exports = async (page, base) => {
         innerWidth > 900 ||
         document.querySelector(".sidebar").getBoundingClientRect().right <= 1,
     );
+    const customerMenu = await menu("Customers");
+    const buttonBox = await page
+      .getByRole("button", { name: "Customers", exact: true })
+      .boundingBox();
+    const menuBox = await customerMenu.boundingBox();
+    assert.ok(
+      menuBox.y >= buttonBox.y + buttonBox.height &&
+        menuBox.y <= buttonBox.y + buttonBox.height + 6,
+    );
+    assert.ok(menuBox.x >= 0 && menuBox.x + menuBox.width <= width);
+    assert.equal(
+      await customerMenu.evaluate((el) => getComputedStyle(el).position),
+      "absolute",
+    );
+    assert.equal(
+      await page
+        .locator(".module-tabs")
+        .evaluate((el) => getComputedStyle(el).overflowY === "visible"),
+      true,
+    );
+    await page.keyboard.press("Escape");
     const frame = page.locator('[data-dashboard="accounting"]');
     assert.equal(await frame.locator(".ref-kpi").count(), 4);
     assert.equal(await frame.locator(".ref-main-grid > .ref-panel").count(), 2);
