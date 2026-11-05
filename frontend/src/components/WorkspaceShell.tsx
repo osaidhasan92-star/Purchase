@@ -1,4 +1,5 @@
 import { Icon } from "./dashboard/Dashboard";
+import { FinanceNavigation } from "./FinanceNavigation";
 import { useEffect, useState, type ReactNode, type MouseEvent } from "react";
 import { CompanyProfile } from "../modules/admin/CompanyProfile";
 import type { Bridge, ShellPage } from "../types";
@@ -185,22 +186,30 @@ export function WorkspaceShell({
           <section className="content module-content">
             {page.module !== "overview" && (
               <div className="module-navigation">
-                <nav
-                  className="module-tabs"
-                  aria-label={page.label + " submenu"}
-                >
-                  {page.tabs.map((tab) => (
-                    <a
-                      key={tab.href}
-                      href={tab.href}
-                      className={"module-tab" + (tab.active ? " active" : "")}
-                      aria-current={tab.active ? "page" : undefined}
-                      onClick={(event) => navigate(event, tab.href)}
-                    >
-                      {tab.label}
-                    </a>
-                  ))}
-                </nav>
+                {page.module === "accounting" ? (
+                  <FinanceNavigation
+                    bridge={bridge}
+                    user={page.user}
+                    onNavigate={navigate}
+                  />
+                ) : (
+                  <nav
+                    className="module-tabs"
+                    aria-label={page.label + " submenu"}
+                  >
+                    {page.tabs.map((tab) => (
+                      <a
+                        key={tab.href}
+                        href={tab.href}
+                        className={"module-tab" + (tab.active ? " active" : "")}
+                        aria-current={tab.active ? "page" : undefined}
+                        onClick={(event) => navigate(event, tab.href)}
+                      >
+                        {tab.label}
+                      </a>
+                    ))}
+                  </nav>
+                )}
                 {page.flow && <div className="module-flow">{page.flow}</div>}
               </div>
             )}

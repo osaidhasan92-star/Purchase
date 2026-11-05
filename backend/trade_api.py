@@ -277,6 +277,17 @@ def listing(key):
         if len(statuses) > 12 or any(len(s) > 80 for s in statuses):
             problem("Invalid status filter")
         query = query.where(model.status.in_(statuses))
+    if request.args.get("from") or request.args.get("to"):
+        from .erp import day
+        from datetime import date, timedelta
+        start = day(request.args["from"]) if request.args.get("from") else None
+        end = day(request.args["to"]) if request.args.get("to") else None
+        if start and end and start > end:
+            problem("Start date must precede end date")
+        if start:
+            query = query.where(model.document_date >= start)
+        if end and end != date.max.isoformat():
+            query = query.where(model.document_date < (date.fromisoformat(end) + timedelta(days=1)).isoformat())
     for field in ("rfqId", "poId", "orderId", "invoiceId", "quotationId", "requestId"):
         if request.args.get(field):
             column = store.FIELDS[key].get(field)

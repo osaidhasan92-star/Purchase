@@ -1,4 +1,7 @@
-import { ModuleDashboard } from "../../components/dashboard/ModuleDashboard";
+import {
+  AccountingDashboard,
+  type AccountingData,
+} from "./AccountingDashboard";
 import { useEffect, useRef, useState } from "react";
 import type { Bridge, User } from "../../types";
 import { Dialog } from "../../components/Dialog";
@@ -7,6 +10,7 @@ import { FinanceForm, type FormState } from "./FinanceForms";
 import { FinanceReports, Pager, DataTable } from "./FinanceReports";
 import {
   money,
+  today,
   str,
   titles,
   requestKey,
@@ -34,9 +38,23 @@ export function FinancePage({
     [summary, setSummary] = useState<Summary | null>(null),
     [page, setPage] = useState(1),
     [search, setSearch] = useState(""),
-    [status, setStatus] = useState(""),
-    [from, setFrom] = useState(""),
-    [to, setTo] = useState(""),
+    [status, setStatus] = useState(
+      () => new URLSearchParams(location.search).get("status") || "",
+    ),
+    [from, setFrom] = useState(() =>
+      view === "accounting"
+        ? today().slice(0, 7) + "-01"
+        : new URLSearchParams(location.search).get("from") || "",
+    ),
+    [to, setTo] = useState(() =>
+      view === "accounting"
+        ? today()
+        : new URLSearchParams(location.search).get("to") || "",
+    ),
+    [period, setPeriod] = useState("month"),
+    [account, setAccount] = useState(
+      () => new URLSearchParams(location.search).get("account") || "",
+    ),
     [source, setSource] = useState(
       () => new URLSearchParams(location.search).get("source") || "",
     ),
@@ -59,7 +77,7 @@ export function FinancePage({
     const timer = setTimeout(() => {
       const path =
         view === "accounting"
-          ? "/finance/summary"
+          ? "/finance/dashboard?" + new URLSearchParams({ from, to })
           : "/finance/" +
             {
               accounts: "accounts",
@@ -76,6 +94,7 @@ export function FinancePage({
               from,
               to,
               source,
+              account,
             });
       bridge
         .request<Summary | PageData>(path)
@@ -96,7 +115,7 @@ export function FinancePage({
       active = false;
       clearTimeout(timer);
     };
-  }, [bridge, view, page, search, status, from, to, source, reload]);
+  }, [bridge, view, page, search, status, from, to, source, account, reload]);
   async function openEntry(id: number) {
     if (locked.current) return;
     locked.current = true;
@@ -149,6 +168,21 @@ export function FinancePage({
     setDetail(null);
     setForm({ kind, record });
   };
+  const actionOpened = useRef(false);
+  useEffect(() => {
+    if (view !== "accounting" || actionOpened.current) return;
+    const action = new URLSearchParams(location.search).get("action");
+    if (action === "transfer" && create && approve) {
+      actionOpened.current = true;
+      setForm({ kind: "transfer" });
+    } else if (action === "lock" && user.role === "Admin" && summary) {
+      actionOpened.current = true;
+      setForm({
+        kind: "period-lock",
+        record: summary.periodLock as unknown as Row,
+      });
+    }
+  }, [view, create, approve, user.role, summary]);
   const columns: [string, string, boolean?][] =
     view === "accounts"
       ? [
@@ -176,53 +210,36 @@ export function FinancePage({
       data-native-finance={view}
       aria-busy={loading}
     >
-      <div className="section-head">
-        <div>
-          <h2>{view === "accounting" ? "Financial position" : titles[view]}</h2>
-          <p>Pakistan · PKR · Posted journals drive financial balances.</p>
+      {view !== "accounting" && (
+        <div className="section-head">
+          <div>
+            <h2>{titles[view]}</h2>
+            <p>Pakistan · PKR · Posted journals drive financial balances.</p>
+          </div>
+          <div className="finance-actions">
+            {view === "accounts" && create && (
+              <button className="btn-primary" onClick={() => add("account")}>
+                New Account
+              </button>
+            )}
+            {view === "journals" && create && (
+              <button className="btn-primary" onClick={() => add("journal")}>
+                New Journal Entry
+              </button>
+            )}
+            {view === "bank" && create && (
+              <button className="btn-primary" onClick={() => add("statement")}>
+                New Statement Line
+              </button>
+            )}
+            {view === "aged" && approve && (
+              <button className="btn-primary" onClick={() => add("reconcile")}>
+                Match Open Items
+              </button>
+            )}
+          </div>
         </div>
-        <div className="finance-actions">
-          {view === "accounts" && create && (
-            <button className="btn-primary" onClick={() => add("account")}>
-              New Account
-            </button>
-          )}
-          {view === "journals" && create && (
-            <button className="btn-primary" onClick={() => add("journal")}>
-              New Journal Entry
-            </button>
-          )}
-          {view === "bank" && create && (
-            <button className="btn-primary" onClick={() => add("statement")}>
-              New Statement Line
-            </button>
-          )}
-          {view === "aged" && approve && (
-            <button className="btn-primary" onClick={() => add("reconcile")}>
-              Match Open Items
-            </button>
-          )}
-          {view === "accounting" && (
-            <>
-              {create && approve && (
-                <button className="btn-primary" onClick={() => add("transfer")}>
-                  Bank / Cash Transfer
-                </button>
-              )}
-              {user.role === "Admin" && summary && (
-                <button
-                  className="btn-secondary"
-                  onClick={() =>
-                    add("period-lock", summary.periodLock as unknown as Row)
-                  }
-                >
-                  Period Lock
-                </button>
-              )}
-            </>
-          )}
-        </div>
-      </div>
+      )}
       {error && (
         <p className="modern-error" role="alert">
           {error}{" "}
@@ -243,6 +260,23 @@ export function FinancePage({
               }}
             />
           </label>
+          {view === "aged" && (
+            <label>
+              Aging account
+              <select
+                aria-label="Aging account"
+                value={account}
+                onChange={(e) => {
+                  setAccount(e.target.value);
+                  setPage(1);
+                }}
+              >
+                <option value="">All accounts</option>
+                <option value="1100">Receivables</option>
+                <option value="2100">Payables</option>
+              </select>
+            </label>
+          )}
           {(view === "bank" || view === "journals") && (
             <label>
               Status
@@ -309,7 +343,36 @@ export function FinancePage({
       ) : loading ? (
         <p role="status">Loading accounting records…</p>
       ) : view === "accounting" && summary ? (
-        <ModuleDashboard kind="accounting" summary={summary} bridge={bridge} />
+        <AccountingDashboard
+          data={summary as AccountingData}
+          bridge={bridge}
+          user={user}
+          period={period}
+          onPeriod={(value) => {
+            setPeriod(value);
+            setTo(today());
+            const [y, m] = today().split("-");
+            setFrom(
+              value === "all"
+                ? ""
+                : value === "year"
+                  ? y + "-01-01"
+                  : value === "quarter"
+                    ? y +
+                      "-" +
+                      String(Math.floor((Number(m) - 1) / 3) * 3 + 1).padStart(
+                        2,
+                        "0",
+                      ) +
+                      "-01"
+                    : today().slice(0, 7) + "-01",
+            );
+          }}
+          onTransfer={() => add("transfer")}
+          onLock={() =>
+            add("period-lock", summary.periodLock as unknown as Row)
+          }
+        />
       ) : (
         <>
           {(view === "accounts" || view === "aged") && (

@@ -11,7 +11,7 @@ module.exports = async (page, base) => {
       ["sales", "Sales Order Trend"],
       ["purchase-dashboard", "Purchase Order Trend"],
       ["overview", "Operational Snapshot"],
-      ["accounting", "Financial Position"],
+      ["accounting", "Financial Overview"],
       ["inventory", "Product Stock Values"],
       ["manufacturing", "Production Status"],
       ["expenses", "Expense Amounts by Status"],

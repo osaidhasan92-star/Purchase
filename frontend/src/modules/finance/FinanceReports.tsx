@@ -111,9 +111,19 @@ export function FinanceReports({
   bridge: Bridge;
   onEntry: (id: number) => void;
 }) {
-  const [kind, setKind] = useState("trial"),
-    [start, setStart] = useState(""),
-    [end, setEnd] = useState(today()),
+  const [kind, setKind] = useState(() => {
+      const report =
+        new URLSearchParams(location.search).get("report") || "trial";
+      return ["trial", "ledger", "pnl", "balance", "cash"].includes(report)
+        ? report
+        : "trial";
+    }),
+    [start, setStart] = useState(
+      () => new URLSearchParams(location.search).get("from") || "",
+    ),
+    [end, setEnd] = useState(
+      () => new URLSearchParams(location.search).get("to") || today(),
+    ),
     [search, setSearch] = useState(""),
     [page, setPage] = useState(1),
     [data, setData] = useState<PageData & { summary?: Summary }>({

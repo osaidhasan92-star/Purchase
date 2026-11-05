@@ -456,6 +456,83 @@ def summary():
     )
 
 
+@bp.get("/dashboard")
+@read
+def dashboard():
+    """Ledger aggregates and authorized document headers; never load line graphs."""
+    from datetime import date
+    from . import trade_store
+    from .trade_api import visibility
+
+    start, end = dates()
+    result = summary_values(report_totals(start, end), start, end)
+    result["periodLock"] = control_record()
+    last = date.fromisoformat(end)
+    months = []
+    for offset in range(5, -1, -1):
+        number = last.year * 12 + last.month - 1 - offset
+        months.append(f"{number // 12:04d}-{number % 12 + 1:02d}")
+    month = func.substr(JournalEntry.date, 1, 7)
+    grouped = db.session.execute(
+        select(month, Account.kind, func.sum(
+            case((Account.kind == "income", JournalLine.credit - JournalLine.debit),
+                 else_=JournalLine.debit - JournalLine.credit)))
+        .select_from(JournalLine).join(JournalEntry).join(Account, Account.code == JournalLine.account)
+        .where(JournalEntry.status == "Posted", JournalEntry.date >= months[0] + "-01",
+               JournalEntry.date <= end, Account.kind.in_(("income", "expense")))
+        .group_by(month, Account.kind)
+    ).all()
+    values = {(m, kind): str(value or 0) for m, kind, value in grouped}
+    result["trend"] = [dict(month=m, income=values.get((m, "income"), "0"),
+                            expenses=values.get((m, "expense"), "0")) for m in months]
+    balances = dict(db.session.execute(
+        select(JournalLine.account, func.sum(JournalLine.debit - JournalLine.credit))
+        .join(JournalEntry).where(JournalEntry.status == "Posted", JournalEntry.date <= end,
+                                 JournalLine.account.in_(("1000", "1010")))
+        .group_by(JournalLine.account)
+    ).all())
+    conditions = [BankStatementLine.matched_line.is_(None), BankStatementLine.date <= end]
+    if start:
+        conditions.append(BankStatementLine.date >= start)
+    unmatched = db.session.execute(select(
+        func.count(),
+        func.coalesce(func.sum(case((BankStatementLine.amount > 0, BankStatementLine.amount), else_=0)), 0),
+        func.coalesce(func.sum(case((BankStatementLine.amount < 0, -BankStatementLine.amount), else_=0)), 0),
+    ).select_from(BankStatementLine).where(*conditions)).one()
+    result["banking"] = dict(bank=str(balances.get("1010", 0)), cash=str(balances.get("1000", 0)),
+                             unmatched=unmatched[0], unmatchedReceipts=str(unmatched[1]),
+                             unmatchedPayments=str(unmatched[2]), paymentPosting="direct")
+    state = app_document().stored_data
+    recent = []
+    for key, permission, field in (("customerInvoices", "sales_invoices", "customerInvoices"),
+                                    ("invoices", "invoices", "vendorBills")):
+        result[field] = None
+        if not allowed(g.user, state, permission) or not state.get(trade_store.MARKER):
+            continue
+        model = trade_store.MODELS[key]
+        scope = [visibility(key), model.document_date <= end]
+        if start:
+            scope.append(model.document_date >= start)
+        groups = db.session.execute(select(model.status, func.count()).where(*scope).group_by(model.status)).all()
+        statuses = {status or "Unknown": n for status, n in groups}
+        result[field] = dict(draft=statuses.get("Draft", 0) + statuses.get("Matched", 0),
+            unpaid=statuses.get("Posted", 0) + statuses.get("Approved", 0),
+            partial=statuses.get("Partially Paid", 0), paid=statuses.get("Paid", 0),
+            total=sum(statuses.values()))
+        rows = db.session.execute(select(model.original_id, model.number, model.document_date,
+            model.partner_name, model.amount, model.status).where(*scope)
+            .order_by(model.document_date.desc(), model.id.desc()).limit(8)).all()
+        for identity, number, on_date, partner, amount, status in rows:
+            posted = status in ("Posted", "Approved", "Partially Paid", "Paid")
+            document = "Posted" if posted else "Draft" if status == "Matched" else status or "Unknown"
+            payment = "Paid" if status == "Paid" else "Partially Paid" if status == "Partially Paid" else "Not Paid" if status in ("Draft", "Matched", "Posted", "Approved") else "—"
+            recent.append(dict(id=identity, key=key, number=number or str(identity), date=on_date,
+                partner=partner or "—", amount=str(amount or 0), documentStatus=document,
+                paymentStatus=payment))
+    result["recent"] = sorted(recent, key=lambda r: (r["date"] or "", r["number"], r["key"]), reverse=True)[:8]
+    return jsonify(result)
+
+
 @bp.get("/reports")
 @read
 def reports():

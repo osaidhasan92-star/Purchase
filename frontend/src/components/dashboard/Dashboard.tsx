@@ -109,11 +109,15 @@ export function Trend({
   rows,
   secondary,
   color = "#232e78",
+  secondaryColor = "#95a4bd",
+  showScale = false,
   title,
 }: {
   rows: { month: string; value: number; second?: number }[];
   secondary?: boolean;
   color?: string;
+  secondaryColor?: string;
+  showScale?: boolean;
   title: string;
 }) {
   const id = useId().replace(/:/g, "");
@@ -137,9 +141,11 @@ export function Trend({
     return () => observer.disconnect();
   }, []);
   const max = Math.max(1, ...rows.flatMap((r) => [r.value, r.second || 0]));
+  const min = Math.min(0, ...rows.flatMap((r) => [r.value, r.second || 0]));
+  const startX = showScale ? 65 : 28;
   const x = (i: number) =>
-      28 + (i * (width - 56)) / Math.max(1, rows.length - 1),
-    y = (value: number) => 190 - (value / max) * 150;
+      startX + (i * (width - startX - 28)) / Math.max(1, rows.length - 1),
+    y = (value: number) => 190 - ((value - min) / (max - min)) * 150;
   const points = (second = false) =>
     rows
       .map((r, i) => `${x(i)},${y(second ? r.second || 0 : r.value)}`)
@@ -157,7 +163,7 @@ export function Trend({
         {[40, 78, 116, 154, 190].map((v) => (
           <line
             key={v}
-            x1="22"
+            x1={showScale ? 60 : 22}
             x2={width - 20}
             y1={v}
             y2={v}
@@ -165,7 +171,7 @@ export function Trend({
           />
         ))}
         <polygon
-          points={`28,190 ${points()} ${width - 28},190`}
+          points={`${startX},${y(0)} ${points()} ${width - 28},${y(0)}`}
           fill={`url(#${id})`}
         />
         <polyline
@@ -177,12 +183,28 @@ export function Trend({
         {secondary && (
           <polyline
             points={points(true)}
-            stroke="#95a4bd"
+            stroke={secondaryColor}
             strokeWidth="2"
-            strokeDasharray="5 4"
+            strokeDasharray={showScale ? undefined : "5 4"}
             fill="none"
           />
         )}
+        {showScale &&
+          [40, 78, 116, 154, 190].map((v) => (
+            <text
+              key={v}
+              x="54"
+              y={v + 3}
+              textAnchor="end"
+              style={{ fontSize: 9 }}
+            >
+              Rs{" "}
+              {Number(max - ((v - 40) / 150) * (max - min)).toLocaleString(
+                "en",
+                { notation: "compact", maximumFractionDigits: 1 },
+              )}
+            </text>
+          ))}
         {rows.map((r, i) => (
           <g key={r.month}>
             <circle

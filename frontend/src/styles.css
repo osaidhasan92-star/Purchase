@@ -1556,3 +1556,360 @@
 .unified-dashboard .ref-recent small {
   overflow-wrap: anywhere;
 }
+
+/* Accounting dashboard: approved banking, document and reporting composition. */
+.acct-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-bottom: 18px;
+}
+.acct-toolbar > div {
+  display: flex;
+  gap: 9px;
+  flex-wrap: wrap;
+}
+.acct-toolbar select {
+  min-height: 38px;
+  padding: 8px 34px 8px 13px;
+  border: 1px solid #dce3f1;
+  border-radius: 8px;
+  color: #364569;
+  background: #fff;
+  font: inherit;
+  font-size: 12px;
+}
+.acct-toolbar .btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  text-decoration: none;
+  min-height: 38px;
+}
+#workspace-root .acct-toolbar .acct-new-invoice {
+  background: #008d85;
+  border-color: #008d85;
+}
+#workspace-root .acct-toolbar .acct-new-bill {
+  background: #7143c4;
+  border-color: #7143c4;
+}
+#workspace-root [data-dashboard="accounting"] .ref-kpi-label {
+  font-size: 12px;
+  font-weight: 650;
+  color: #243358;
+}
+#workspace-root [data-dashboard="accounting"] .ref-kpi {
+  min-height: 116px;
+}
+#workspace-root [data-dashboard="accounting"] .ref-main-grid {
+  grid-template-columns: minmax(0, 1.42fr) minmax(0, 1fr);
+}
+#workspace-root [data-dashboard="accounting"] .ref-panel h3 {
+  font-size: 17px;
+}
+#workspace-root [data-dashboard="accounting"] .ref-panel-head p {
+  font-size: 11px;
+}
+.acct-chart-legend {
+  display: flex;
+  justify-content: center;
+  gap: 24px;
+  flex-wrap: wrap;
+  padding: 0 16px 19px;
+  font-size: 11px;
+  color: #526385;
+}
+.acct-chart-legend span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.acct-chart-legend i {
+  width: 20px;
+  height: 3px;
+  display: inline-block;
+  background: #099d92;
+  border-radius: 3px;
+}
+.acct-chart-legend span:last-child i {
+  background: #8554de;
+}
+.acct-bank-balances {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  padding: 5px 20px 16px;
+}
+.acct-bank-balances > div {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid #e4e9f3;
+  border-radius: 9px;
+  background: #fafbfe;
+  min-width: 0;
+}
+.acct-bank-balances > div > svg {
+  width: 24px;
+  height: 24px;
+  color: #0b8c85;
+}
+.acct-bank-balances span {
+  min-width: 0;
+  font-size: 11px;
+  color: #7886a1;
+}
+.acct-bank-balances strong {
+  display: block;
+  overflow-wrap: anywhere;
+  color: #263962;
+  font-size: 17px;
+  margin-top: 4px;
+}
+.acct-unmatched {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 12px;
+  margin: 0 20px 16px;
+  border: 1px solid #f3dfb5;
+  border-radius: 8px;
+  background: #fff8e9;
+  color: #88591d;
+  font-size: 11px;
+}
+.acct-unmatched > span {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+.acct-unmatched > a {
+  text-decoration: none;
+  color: #303f72;
+  white-space: nowrap;
+  border: 1px solid #d8deed;
+  border-radius: 6px;
+  padding: 7px;
+  background: #fff;
+  font-size: 10px;
+  font-weight: 650;
+}
+.acct-banking-totals {
+  margin: 0 20px;
+}
+.acct-banking-totals > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  border-top: 1px solid #e7ecf5;
+  padding: 13px 0;
+  font-size: 11px;
+}
+.acct-banking-totals dt {
+  color: #667795;
+}
+.acct-banking-totals dd {
+  margin: 0;
+  font-weight: 700;
+  color: #304369;
+}
+.acct-bank-note {
+  margin: 0;
+  padding: 0 20px 16px;
+  font-size: 10px;
+  line-height: 1.7;
+  color: #96a0b3;
+}
+.acct-invoice-counts {
+  padding: 2px 20px 8px;
+}
+.acct-invoice-counts > a {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 10px 0;
+  border-bottom: 1px solid #e8edf5;
+  color: #53617e;
+  text-decoration: none;
+  font-size: 12px;
+}
+.acct-count {
+  min-width: 35px;
+  text-align: center;
+  border-radius: 5px;
+  padding: 2px 7px;
+  font-size: 11px;
+}
+.acct-draft {
+  background: #eef0f6;
+  color: #6d7791;
+}
+.acct-open {
+  background: #e8f1fe;
+  color: #4878bb;
+}
+.acct-partial {
+  background: #fff0ce;
+  color: #ae7a22;
+}
+.acct-paid,
+.acct-posted {
+  background: #dff4ec;
+  color: #198565;
+}
+.acct-panel-link {
+  padding: 0 20px 16px;
+}
+.acct-panel-link .ref-link {
+  max-width: none;
+  background: none;
+  color: #5e3eb2;
+  font-size: 11px;
+  padding-left: 0;
+  gap: 9px;
+}
+.acct-report-links {
+  display: grid;
+  padding: 0 20px 18px;
+}
+.acct-report-links a {
+  display: flex;
+  gap: 11px;
+  align-items: center;
+  padding: 9px 0;
+  color: #6542ad;
+  border-bottom: 1px solid #e9edf5;
+  text-decoration: none;
+  font-size: 12px;
+}
+.acct-report-links a > span:first-of-type {
+  flex: 1;
+}
+.acct-transactions-wrap {
+  overflow: auto;
+  padding: 0 20px 18px;
+}
+.acct-transactions {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 760px;
+}
+#workspace-root .acct-transactions th {
+  text-transform: none;
+  font-size: 11px;
+  color: #5c6e8f;
+}
+#workspace-root .acct-transactions td {
+  font-size: 11px;
+  padding: 14px 10px;
+}
+.acct-transactions td:nth-child(4) {
+  white-space: nowrap;
+}
+.acct-transactions td a {
+  color: #6b43bd;
+  text-decoration: none;
+  font-weight: 650;
+}
+.acct-state {
+  display: inline-block;
+  font-size: 10px;
+  padding: 4px 7px;
+  border-radius: 5px;
+  white-space: nowrap;
+}
+.acct-controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-top: 16px;
+  padding: 12px 0;
+  color: #8b96ab;
+  font-size: 11px;
+}
+.acct-controls > div {
+  display: flex;
+  gap: 8px;
+}
+.finance-module-nav {
+  min-width: 0;
+}
+.finance-module-nav .module-tabs button {
+  cursor: pointer;
+  font-family: inherit;
+}
+.finance-submenu {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 10px;
+  background: #fff;
+  border: 1px solid #e0e7f3;
+  border-top: 0;
+  border-radius: 0 0 10px 10px;
+  box-shadow: 0 8px 18px #26396708;
+}
+.finance-submenu a {
+  padding: 9px 12px;
+  text-decoration: none;
+  color: #5f4b96;
+  border-radius: 6px;
+  font-size: 12px;
+}
+.finance-submenu a:hover,
+.finance-submenu a:focus-visible {
+  background: #f0edfa;
+}
+@media (max-width: 1150px) {
+  .acct-unmatched {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+@media (max-width: 700px) {
+  #workspace-root [data-dashboard="accounting"] .ref-main-grid {
+    grid-template-columns: 1fr;
+  }
+  .acct-toolbar {
+    align-items: stretch;
+  }
+  .acct-toolbar > div {
+    width: 100%;
+  }
+  .acct-toolbar > div > a {
+    flex: 1;
+    justify-content: center;
+  }
+  .acct-bank-balances {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+  .acct-bank-balances > div {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .acct-bank-balances strong {
+    font-size: 16px;
+  }
+  .acct-transactions-wrap {
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+}
+.acct-matched-clear {
+  background: #edf9f4;
+  border-color: #d2eadf;
+  color: #278367;
+}
+.finance-module-nav .module-tab.active {
+  color: #643cae !important;
+  border-bottom-color: #7143c4 !important;
+}

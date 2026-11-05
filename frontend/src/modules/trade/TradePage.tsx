@@ -90,7 +90,15 @@ export function TradePage({
     [search, setSearch] = useState(
       () => new URLSearchParams(location.search).get("search") || "",
     ),
-    [status, setStatus] = useState(""),
+    [status, setStatus] = useState(
+      () => new URLSearchParams(location.search).get("status") || "",
+    ),
+    [from, setFrom] = useState(
+      () => new URLSearchParams(location.search).get("from") || "",
+    ),
+    [to, setTo] = useState(
+      () => new URLSearchParams(location.search).get("to") || "",
+    ),
     [reload, setReload] = useState(0),
     [loading, setLoading] = useState(true),
     [error, setError] = useState("");
@@ -116,6 +124,8 @@ export function TradePage({
         sourceId: params.get("sourceId") || undefined,
         leadId: params.get("leadId") || undefined,
       });
+    if (params.get("new") === "1" && bridge.can(config.module, "create"))
+      setForm({});
     return () => {
       active.current = false;
     };
@@ -134,6 +144,8 @@ export function TradePage({
             pageSize: "25",
             search,
             status,
+            from,
+            to,
           }),
       )
       .then((result) => {
@@ -148,7 +160,7 @@ export function TradePage({
     return () => {
       alive = false;
     };
-  }, [resource, page, search, status, reload, bridge]);
+  }, [resource, page, search, status, from, to, reload, bridge]);
   const open = async (row: TradeRecord, edit = false) => {
     setOpening(String(row.id));
     setError("");
@@ -273,7 +285,14 @@ export function TradePage({
             event.preventDefault();
             const fields = new FormData(event.currentTarget);
             setSearch(str(fields.get("search")).trim());
-            setStatus(str(fields.get("status")).trim());
+            const nextStatus = str(fields.get("status")).trim();
+            setStatus(
+              resource === "invoices" && nextStatus === "Draft"
+                ? "Draft|Matched"
+                : nextStatus,
+            );
+            setFrom(str(fields.get("from")).trim());
+            setTo(str(fields.get("to")).trim());
             setPage(1);
             setReload((v) => v + 1);
           }}
@@ -287,10 +306,37 @@ export function TradePage({
           />
           <input
             name="status"
+            defaultValue={
+              resource === "invoices" && status === "Draft|Matched"
+                ? "Draft"
+                : status
+            }
             aria-label="Status filter"
             placeholder="Status (optional)"
             maxLength={80}
           />
+          {(resource === "invoices" || resource === "customerInvoices") && (
+            <>
+              <label>
+                From
+                <input
+                  aria-label="From date"
+                  type="date"
+                  name="from"
+                  defaultValue={from}
+                />
+              </label>
+              <label>
+                To
+                <input
+                  aria-label="To date"
+                  type="date"
+                  name="to"
+                  defaultValue={to}
+                />
+              </label>
+            </>
+          )}
           <button type="submit" className="btn-secondary">
             Search
           </button>

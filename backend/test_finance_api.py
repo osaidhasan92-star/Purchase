@@ -583,3 +583,72 @@ def test_financial_journal_access_does_not_grant_private_hr_source(app):
     assert (
         f.get("/api/hr/records/payroll/" + payroll["id"] + "/print").status_code == 403
     )
+
+
+def test_accounting_dashboard_posts_period_totals_documents_and_bank_matching(app):
+    from backend import trade_store
+    c, h = session(app)
+    receipt = post(c, h, journal(c, h, 1000, debit="1010", credit="4100", date="2026-10-05"))
+    post(c, h, journal(c, h, 200, debit="6105", credit="1010", date="2026-11-01"))
+    post(c, h, journal(c, h, 300, debit="1000", credit="3000", date="2026-10-05"))
+    journal(c, h, 999, debit="1010", credit="4100", date="2026-10-05")  # Draft is excluded.
+    post(c, h, journal(c, h, 500, debit="1010", credit="4100", date="2027-01-01"))
+    statement = command(c, h, "statement", dict(account="1010", date="2026-10-05", description="Matched receipt", amount=1000))
+    line = next(l for l in receipt["lines"] if l["account"] == "1010")
+    command(c, h, "match-bank", dict(id=statement["id"], version=statement["version"], lineId=line["id"], lineVersion=line["version"]))
+    command(c, h, "statement", dict(account="1010", date="2026-10-06", description="Unmatched receipt", amount=80))
+    command(c, h, "statement", dict(account="1010", date="2026-10-07", description="Unmatched payment", amount=-30))
+    with app.app_context():
+        groups = {
+            "customerInvoices": [("a", "Paid", 100), ("b", "Partially Paid", 200), ("c", "Posted", 300), ("d", "Draft", 400)],
+            "invoices": [("e", "Approved", 500), ("f", "Matched", 600), ("g", "Paid", 700)],
+        }
+        for key, rows in groups.items():
+            for i, (identity, status, amount) in enumerate(rows):
+                db.session.add(trade_store.MODELS[key](id=identity, original_id=identity, position=i,
+                    number=key+"-"+identity, document_date="2026-10-15", status=status,
+                    partner_name="Dashboard partner", amount=amount, created_by="admin", extras={}, record_version=identity))
+        for i in range(10):
+            identity="extra-"+str(i)
+            db.session.add(trade_store.MODELS["customerInvoices"](id=identity, original_id=identity, position=i+4,
+                number=identity, document_date="2026-10-01", status="Draft", amount=1, created_by="admin", extras={}, record_version=identity))
+        db.session.commit()
+    response=c.get('/api/finance/dashboard?from=2026-10-01&to=2026-11-30')
+    assert response.status_code == 200, response.json
+    data=response.json
+    assert Decimal(data['profit']) == 800 and Decimal(data['cashBank']) == 1100
+    assert data['banking'] == dict(bank='800.00', cash='300.00', unmatched=2,
+        unmatchedReceipts='80.00', unmatchedPayments='30.00', paymentPosting='direct')
+    assert len(data['trend']) == 6
+    assert next(r for r in data['trend'] if r['month']=='2026-10')['income']=='1000.00'
+    assert next(r for r in data['trend'] if r['month']=='2026-11')['expenses']=='200.00'
+    assert data['customerInvoices'] == dict(draft=11,unpaid=1,partial=1,paid=1,total=14)
+    assert data['vendorBills'] == dict(draft=1,unpaid=1,partial=0,paid=1,total=3)
+    assert len(data['recent']) == 8
+    partial=next(r for r in data['recent'] if r['id']=='b')
+    assert partial['documentStatus']=='Posted' and partial['paymentStatus']=='Partially Paid'
+    matched=next(r for r in data['recent'] if r['id']=='f')
+    assert matched['documentStatus']=='Draft'
+    november=c.get('/api/finance/dashboard?from=2026-11-01&to=2026-11-30').json
+    assert Decimal(november['profit']) == -200
+    assert november['customerInvoices']['total']==0 and november['recent']==[]
+    assert c.get('/api/finance/dashboard?from=2026-12-01&to=2026-11-01').status_code==400
+    assert c.get('/api/trade/customerInvoices?status=Draft&from=2026-11-01&to=2026-11-30').json['total']==0
+    assert c.get('/api/trade/invoices?status=Draft%7CMatched&from=2026-10-01&to=2026-10-31').json['total']==1
+    assert c.get('/api/trade/invoices?from=2026-12-01&to=2026-11-01').status_code==400
+
+
+
+def test_accounting_dashboard_respects_document_permissions(app):
+    c, _ = finance_user(app)
+    with app.app_context():
+        doc=db.session.get(Document,'app')
+        state=deepcopy(doc.data)
+        for key in ('sales_invoices','invoices'):
+            state['roles']['Finance']['permissions'][key]['view']=False
+        doc.data=state
+        db.session.commit()
+    data=c.get('/api/finance/dashboard').json
+    assert data['customerInvoices'] is None and data['vendorBills'] is None and data['recent']==[]
+    seller, _ = session(app,'seller')
+    assert seller.get('/api/finance/dashboard').status_code==403
