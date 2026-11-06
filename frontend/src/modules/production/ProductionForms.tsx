@@ -11,6 +11,8 @@ export interface ComponentRow {
   unit?: string;
   quantity: string;
   available?: string;
+  reserved?: string;
+  staged?: string;
   shortage?: string;
   estimatedCost?: string;
 }
@@ -34,6 +36,20 @@ export interface Order extends Row {
   components: ComponentRow[];
   journalHref?: string | null;
   movementsHref?: string | null;
+  parentOrder?: { id: number; number: string } | null;
+  productionResult?: {
+    plannedQuantity?: string;
+    producedQuantity?: string;
+    scrapCost?: string;
+    backorderId?: number;
+    backorderNumber?: string;
+    components?: {
+      productId: string;
+      planned: string;
+      consumed: string;
+      scrap: string;
+    }[];
+  };
 }
 export type FormState = {
   kind: "bom" | "edit-bom" | "order";

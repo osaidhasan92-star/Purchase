@@ -404,7 +404,9 @@ def test_production_uses_staging_and_cannot_consume_sales_reservations(app):
 
     order = production_action(c, h, order, "confirm")
     production_action(c, h, order, "complete", 400)
-    # A smaller operation may consume staged quantity without touching reserved Stock.
+    # The failed operation retains its allocation until explicitly cancelled.
+    production_action(c, h, order, "cancel")
+    # A smaller operation may consume released staging without touching reserved Stock.
     bom = production(
         c,
         h,

@@ -1,3 +1,4 @@
+import { ProductionCompletion } from "./ProductionCompletion";
 import { ModuleDashboard } from "../../components/dashboard/ModuleDashboard";
 import { useEffect, useRef, useState } from "react";
 import type { Bridge } from "../../types";
@@ -42,11 +43,15 @@ export function ProductionPage({
     [busy, setBusy] = useState(false),
     [form, setForm] = useState<FormState | null>(null),
     [bom, setBom] = useState<Bom | null>(null),
-    [order, setOrder] = useState<Order | null>(null);
+    [order, setOrder] = useState<Order | null>(null),
+    [completion, setCompletion] = useState(false);
   const locked = useRef(false),
     keys = useRef(new Map<string, string>());
   useEffect(() => {
-    const bomId = new URLSearchParams(location.search).get("bomId");
+    const params = new URLSearchParams(location.search);
+    const orderId = params.get("orderId");
+    if (view === "production-orders" && orderId) void open(Number(orderId));
+    const bomId = params.get("bomId");
     if (
       view === "production-orders" &&
       bomId &&
@@ -156,6 +161,8 @@ export function ProductionPage({
     confirm: "Confirm Order",
     start: "Start Production",
     complete: "Complete Production",
+    reserve: "Check Availability",
+    stage: "Stage Materials",
     cancel: "Cancel Order",
   };
   const canCreate = bridge.can("manufacturing", "create");
@@ -427,7 +434,20 @@ export function ProductionPage({
           </div>
         </Dialog>
       )}
-      {order && !form && (
+      {order && completion && (
+        <ProductionCompletion
+          order={order}
+          bridge={bridge}
+          onClose={() => setCompletion(false)}
+          onSaved={(record) => {
+            setOrder(record);
+            setCompletion(false);
+            setReload((v) => v + 1);
+            bridge.toast("Production posted");
+          }}
+        />
+      )}
+      {order && !form && !completion && (
         <Dialog
           title={"Manufacturing Order " + order.number}
           busy={busy}
@@ -454,7 +474,8 @@ export function ProductionPage({
                   {order.materialsAvailable
                     ? "Materials currently available."
                     : "Material shortage: review required and available quantities before completion."}{" "}
-                  Confirmation does not reserve stock.
+                  Confirmation reserves available components. Stage Materials
+                  moves this order’s reserved Stock to Production.
                 </p>
               </>
             )}
@@ -462,12 +483,66 @@ export function ProductionPage({
               columns={[
                 ["product", "Component"],
                 ["quantity", "Required"],
-                ["available", "Current available"],
+                ["reserved", "Reserved for order"],
+                ["staged", "Staged for order"],
+                ["available", "Usable by order"],
                 ["shortage", "Current shortage"],
                 ["unit", "Unit"],
               ]}
               rows={order.components.map((c, i) => ({ ...c, id: i }))}
             />
+            {order.parentOrder && (
+              <p>
+                Backorder of{" "}
+                <a
+                  href={
+                    "erp.html?view=production-orders&orderId=" +
+                    order.parentOrder.id
+                  }
+                >
+                  {order.parentOrder.number}
+                </a>
+              </p>
+            )}
+            {order.productionResult?.backorderId && (
+              <p>
+                Remaining production:{" "}
+                <a
+                  href={
+                    "erp.html?view=production-orders&orderId=" +
+                    order.productionResult.backorderId
+                  }
+                >
+                  {order.productionResult.backorderNumber}
+                </a>
+              </p>
+            )}
+            {order.productionResult?.components && (
+              <>
+                <p>
+                  Original planned output:{" "}
+                  {order.productionResult.plannedQuantity} · Produced:{" "}
+                  {order.productionResult.producedQuantity} · Scrap cost: PKR{" "}
+                  {money(order.productionResult.scrapCost)}
+                </p>
+                <DataTable
+                  columns={[
+                    ["product", "Component"],
+                    ["planned", "Original plan"],
+                    ["consumed", "Actual consumed"],
+                    ["scrap", "Scrap"],
+                  ]}
+                  rows={order.productionResult.components.map((c, i) => ({
+                    ...c,
+                    id: i,
+                    product:
+                      order.components.find(
+                        (line) => line.productId === c.productId,
+                      )?.product || c.productId,
+                  }))}
+                />
+              </>
+            )}
             {order.journalHref && (
               <p>
                 <a className="btn-secondary" href={order.journalHref}>
@@ -494,7 +569,9 @@ export function ProductionPage({
                 key={a}
                 className={a === "complete" ? "btn-primary" : "btn-secondary"}
                 disabled={busy}
-                onClick={() => void act(a)}
+                onClick={() =>
+                  a === "complete" ? setCompletion(true) : void act(a)
+                }
               >
                 {labels[a]}
               </button>

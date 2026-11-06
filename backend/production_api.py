@@ -19,12 +19,21 @@ from .erp import (
     day,
     lock,
     next_number,
-    finish_manufacturing,
 )
 from .scope import remember
 from .trade_store import version
 from .trade_service import text
 from .finance_api import paged, search_term
+
+from .production_workflow import (
+    held,
+    free,
+    reserve,
+    release,
+    stage,
+    complete,
+    ProductionResult,
+)
 
 bp = Blueprint("production", __name__, url_prefix="/api/production")
 
@@ -130,8 +139,13 @@ def order_record(o):
     for line, product, balance in rows:
         qty = balance.quantity if balance else Decimal(0)
         value = balance.value if balance else Decimal(0)
-        from .warehouse_api import available,quantities
-        usable=available(product.id)+quantities(product.id)["Production"]
+        usable = sum(
+            (
+                free(product.id, loc) + held(product.id, loc, o.id)
+                for loc in ("Stock", "Production")
+            ),
+            Decimal(0),
+        )
         enough = usable >= line.quantity
         ready = ready and enough
         with localcontext() as context:
@@ -152,12 +166,24 @@ def order_record(o):
                 unit=product.unit,
                 quantity=str(line.quantity),
                 available=str(usable),
+                reserved=str(
+                    held(product.id, "Stock", o.id)
+                    + held(product.id, "Production", o.id)
+                ),
+                staged=str(held(product.id, "Production", o.id)),
                 shortage=str(max(Decimal(0), line.quantity - usable)),
                 estimatedCost=str(cost),
             )
         )
         snapshot.append(
-            dict(productId=line.product_id, quantity=str(qty), usable=str(usable), value=str(value))
+            dict(
+                productId=line.product_id,
+                quantity=str(qty),
+                usable=str(usable),
+                value=str(value),
+                reserved=str(held(product.id, "Stock", o.id)),
+                staged=str(held(product.id, "Production", o.id)),
+            )
         )
     value = dict(
         id=o.id,
@@ -175,7 +201,8 @@ def order_record(o):
             {
                 k: v
                 for k, v in c.items()
-                if k not in ("available", "shortage", "estimatedCost")
+                if k
+                not in ("available", "shortage", "estimatedCost", "reserved", "staged")
             }
             for c in components
         ],
@@ -189,11 +216,19 @@ def order_record(o):
     if allowed(g.user, app_document().stored_data, "manufacturing", "approve"):
         actions = {
             "Draft": ["confirm", "cancel"],
-            "Confirmed": ["start", "complete"],
-            "In Progress": ["complete"],
+            "Confirmed": ["reserve", "stage", "start", "complete", "cancel"],
+            "In Progress": ["reserve", "stage", "complete", "cancel"],
         }.get(o.state, [])
+    result = db.session.get(ProductionResult, o.id)
+    parent = (
+        db.session.get(ManufacturingOrder, result.parent_id)
+        if result and result.parent_id
+        else None
+    )
     return {
         **value,
+        "productionResult": result.snapshot if result else {},
+        "parentOrder": dict(id=parent.id, number=parent.number) if parent else None,
         "components": components,
         "bomName": b.name,
         "version": version(current),
@@ -413,7 +448,15 @@ def command(command):
         "order": {"bomId", "bomVersion", "quantity", "date"},
         "confirm": {"id", "version"},
         "start": {"id", "version"},
-        "complete": {"id", "version"},
+        "complete": {
+            "id",
+            "version",
+            "producedQuantity",
+            "conversionCost",
+            "components",
+        },
+        "reserve": {"id", "version"},
+        "stage": {"id", "version"},
         "cancel": {"id", "version"},
     }
     if command not in fields:
@@ -523,20 +566,32 @@ def command(command):
         else:
             o = get(ManufacturingOrder, data.get("id"))
             check_version(data, order_record(o)["version"])
+            if command in ("reserve", "stage"):
+                if o.state not in ("Confirmed", "In Progress"):
+                    problem(
+                        "Confirm an unfinished order before allocating materials", 409
+                    )
+                (reserve if command == "reserve" else stage)(o)
             transitions = {
                 "confirm": ("Draft", "Confirmed"),
                 "start": ("Confirmed", "In Progress"),
-                "cancel": ("Draft", "Cancelled"),
+                "cancel": (("Draft", "Confirmed", "In Progress"), "Cancelled"),
             }
-            if command in transitions:
+            if command in ("reserve", "stage"):
+                pass
+            elif command in transitions:
                 before, after = transitions[command]
-                if o.state != before:
+                if o.state not in (before if isinstance(before, tuple) else (before,)):
                     problem("Action unavailable in this manufacturing state", 409)
                 o.state = after
+                if command == "confirm":
+                    reserve(o)
+                elif command == "cancel":
+                    release(o)
             else:
                 if o.state not in ("Confirmed", "In Progress"):
                     problem("Confirm an unfinished order before completion", 409)
-                finish_manufacturing(o)
+                complete(o, data)
         db.session.flush()
         resource = "orders"
         identity = o.id
@@ -567,7 +622,7 @@ def print_order(identity):
     r = order_record(get(ManufacturingOrder, identity))
     response = make_response(
         render_template_string(
-            """<!doctype html><html lang="en"><meta charset="utf-8"><title>{{r.number}}</title><style>body{font:14px Arial;margin:36px;color:#172338}table{width:100%;border-collapse:collapse}th,td{padding:10px;text-align:left;border-bottom:1px solid #ddd}@media print{button{display:none}tr{break-inside:avoid}}</style><h1>{{company.get('name','Company')}}</h1><h2>Manufacturing Order {{r.number}}</h2><p>{{r.date}} · {{r.state}} · WH / Stock · PKR</p><p>{{r.product}} · {{r.sku}} · Output {{r.quantity}}</p><p>BoM: {{r.bomName}}</p><table><tr><th>Component</th><th>SKU</th><th>Required quantity</th><th>Unit</th></tr>{% for c in r.components %}<tr><td>{{c.product}}</td><td>{{c.sku}}</td><td>{{c.quantity}}</td><td>{{c.unit}}</td></tr>{% endfor %}</table><p>Conversion cost: PKR {{r.conversionCost}} · Posted actual cost: PKR {{r.actualCost}}</p><p>Component quantities are the order snapshot. Stock availability can change before completion.</p><button onclick="window.print()">Print / Save as PDF</button></html>""",
+            """<!doctype html><html lang="en"><meta charset="utf-8"><title>{{r.number}}</title><style>body{font:14px Arial;margin:36px;color:#172338}table{width:100%;border-collapse:collapse}th,td{padding:10px;text-align:left;border-bottom:1px solid #ddd}@media print{button{display:none}tr{break-inside:avoid}}</style><h1>{{company.get('name','Company')}}</h1><h2>Manufacturing Order {{r.number}}</h2><p>{{r.date}} · {{r.state}} · WH / Stock · PKR</p><p>{{r.product}} · {{r.sku}} · Output {{r.quantity}}</p><p>BoM: {{r.bomName}}</p><table><tr><th>Component</th><th>SKU</th><th>Required quantity</th><th>Unit</th></tr>{% for c in r.components %}<tr><td>{{c.product}}</td><td>{{c.sku}}</td><td>{{c.quantity}}</td><td>{{c.unit}}</td></tr>{% endfor %}</table><p>Conversion cost: PKR {{r.conversionCost}} · Posted actual cost: PKR {{r.actualCost}}</p>{% if r.productionResult.get('producedQuantity') %}<p>Original planned output: {{r.productionResult.plannedQuantity}} · Produced: {{r.productionResult.producedQuantity}} · Scrap expense: PKR {{r.productionResult.scrapCost}}</p><table><tr><th>Component</th><th>Planned</th><th>Actual consumed</th><th>Scrap</th></tr>{% for c in r.productionResult.components %}<tr><td>{{c.product}}</td><td>{{c.planned}}</td><td>{{c.consumed}}</td><td>{{c.scrap}}</td></tr>{% endfor %}</table>{% endif %}{% if r.parentOrder %}<p>Backorder of {{r.parentOrder.number}}</p>{% endif %}{% if r.productionResult.get('backorderNumber') %}<p>Remaining production: {{r.productionResult.backorderNumber}}</p>{% endif %}<p>Component quantities are the order snapshot. Stock availability can change before completion.</p><button onclick="window.print()">Print / Save as PDF</button></html>""",
             r=r,
             company=app_document().stored_data.get("company", {}),
         )

@@ -35,10 +35,10 @@ Inventory → Warehouse Operations → Locations & Availability displays quantit
 - Receipts, positive adjustments and manufactured outputs enter Stock.
 - Customer returns enter Returns and cannot be dispatched directly.
 - Sales deliveries leave Stock against their order reservation.
-- Manufacturing consumes Production staging first, then unreserved Stock. It cannot use quarantined Returns or another order's reserved Stock.
+- Manufacturing confirmation reserves components by order in Production/Stock. Stage Materials moves its reserved Stock to Production. Completion consumes its own allocations then free eligible materials; it cannot use Returns or another order's reserved materials. See [Manufacturing workflow](MANUFACTURING_MIGRATION.md).
 - Other negative movements consume unreserved Stock.
 
-**New Internal Transfer** moves an approved quantity between the three locations. Transfers out of Stock cannot take reserved quantities. Transfer records are immutable, reasoned and date/period-checked; inventory creation and approval permissions are required. They appear in the Internal Transfers register, independently of the financial stock-movement register. Moving a quantity internally does not change the product's company-wide on-hand quantity, average valuation or accounting journals. Per-location valuation/cost layers are not introduced; valuation remains the existing one-company product-average model.
+**New Internal Transfer** moves an approved quantity between the three locations. Transfers out of Stock or Production cannot take quantities reserved for Sales or Manufacturing. Transfer records are immutable, reasoned and date/period-checked; inventory creation and approval permissions are required. They appear in the Internal Transfers register, independently of the financial stock-movement register. Moving a quantity internally does not change the product's company-wide on-hand quantity, average valuation or accounting journals. Per-location valuation/cost layers are not introduced; valuation remains the existing one-company product-average model.
 
 ## Integrity and verification
 

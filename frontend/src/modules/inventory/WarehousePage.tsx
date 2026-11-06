@@ -136,7 +136,15 @@ export function WarehousePage({ bridge }: { bridge: Bridge }) {
   };
   const columns =
     area === "locations"
-      ? ["Product", "Stock", "Production", "Returns", "Reserved", "Available"]
+      ? [
+          "Product",
+          "Stock",
+          "Production",
+          "Returns",
+          "Stock reserved",
+          "Production reserved",
+          "Stock available",
+        ]
       : area === "reservations"
         ? ["Order", "Line", "Product", "Required", "Reserved", "Action"]
         : area === "backorders"
@@ -186,9 +194,10 @@ export function WarehousePage({ bridge }: { bridge: Bridge }) {
         ))}
       </div>
       <p className="hint">
-        Confirm sales orders to reserve stock. When new stock arrives, use Check
-        Availability. Returned goods must be transferred from Returns to Stock
-        before dispatch.
+        Confirm Sales or Manufacturing orders to reserve materials.
+        Manufacturing allocations are managed in Manufacturing Orders. When new
+        stock arrives, use Check Availability. Returned goods must be
+        transferred from Returns to Stock before dispatch.
       </p>
       {error && !form && (
         <p role="alert" className="modern-error">
@@ -214,6 +223,7 @@ export function WarehousePage({ bridge }: { bridge: Bridge }) {
                       <td key={loc}>{r.locations?.[loc] || "0"}</td>
                     ))}
                     <td>{String(r.reserved)}</td>
+                    <td>{String(r.productionReserved)}</td>
                     <td>{String(r.available)}</td>
                   </>
                 ) : area === "reservations" ? (

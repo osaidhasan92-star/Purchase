@@ -17,15 +17,23 @@ business/HR aggregates or the legacy manufacturing renderer.
    a link explaining the prerequisite. Select a BoM, output quantity and production
    date; the form previews scaled component quantities and conversion cost.
 4. The server copies the BoM quantities/cost into the order. View current material
-   availability/shortages and estimated cost. Confirm the order, optionally Start
-   Production, then Complete Production. Confirmation does not reserve inventory.
-5. Completion consumes all components at current average cost, receives finished
-   goods and posts the related journals in one transaction. Shortage or period-lock
-   failure rolls back every movement, balance, journal and state change.
+   availability/shortages and estimated cost. Confirm to reserve available components.
+   Use Check Availability after replenishment. Stage Materials moves the order's
+   reserved Stock quantities to Production without changing value or posting journals.
+   Optionally Start Production, then choose Complete Production to record actuals.
+5. Enter finished quantity, actual consumed materials, separate component scrap and
+   actual conversion cost. The form defaults to proportional planned quantities.
+   Completing less than the order quantity closes this order for the produced quantity
+   and creates a linked Confirmed manufacturing backorder for the remaining output
+   and proportional planned materials/cost. Both records retain origin links.
+   Consumption, scrap, output, accounting and backorder creation commit together.
+   Shortage or period-lock failure rolls back every movement and state change.
 6. Inspect posted actual cost, Stock Movements and authorized Journal Entries.
    Authorized users can print the manufacturing order through Print / Save as PDF.
 
-Only Draft orders can be cancelled. Confirmed orders can complete directly or pass
+Unfinished Draft, Confirmed and In Progress orders can be cancelled, releasing all
+allocations. Already staged physical materials remain in Production until transferred
+or allocated to another order. Confirmed orders can complete directly or pass
 through In Progress, preserving the existing one-step workflow. Completed orders
 and their economic snapshots are immutable. To change the source/quantity/date of
 an unfinished draft, cancel it and create a new order.
@@ -43,8 +51,21 @@ Conversion accrual is not a supplier payment or settlement. The final cost comes
 actual stock movements, rather than the browser's preview. Zero-value movements may
 carry no journal. The order's posting date follows the existing accounting period lock.
 
-Availability and cost estimates are current views, not reservations or committed
-posting values. Active-order versions include component balances; if stock changes,
+Reservations are per order, component and Stock/Production location. Sales orders,
+other manufacturing orders, scrap and generic transfers cannot use these allocations.
+Completion can use its own allocations plus free eligible materials for actual overuse;
+it never uses another order's allocation or quarantined Returns. Check Availability
+refreshes assignment explicitly; incoming receipts do not reassign waiting orders.
+
+Component scrap debits Inventory Adjustment/Loss (5105) and credits inventory; it is
+excluded from finished-goods value. Consumption debits WIP, and the recorded actual
+conversion cost accrues through 2400. Material and conversion cost enter output
+inventory and clear WIP. Planned conversion cost for a backorder is the original plan
+less the proportional planned cost, independent of actual cost variance. Recorded
+plans, consumption, scrap and remainder links appear in details and print layouts.
+
+Availability and cost estimates remain current views rather than committed posting
+values. Active-order versions include balances and allocations; if stock changes,
 reload details before an action. Preview calculations do not apply posting amount caps
 prematurely, allowing large shortage plans to remain readable. Actual posting retains
 the existing quantity/amount bounds and stock validation.
@@ -64,7 +85,17 @@ Native resources are under `/api/production`:
 | `GET /orders/<id>/print` | Authenticated escaped manufacturing order print layout |
 | `POST /commands/<command>` | Atomic create/edit/action commands |
 
-Commands: `bom`, `edit-bom`, `order`, `confirm`, `start`, `complete`, `cancel`.
+Commands: `bom`, `edit-bom`, `order`, `confirm`, `reserve`, `stage`, `start`,
+`complete`, `cancel`. Manufacturing approval permission authorizes allocation,
+staging, cancellation and completion. Stage Materials is the manufacturing-specific
+transfer of this order's own allocated stock; generic warehouse transfers retain
+Inventory creation/approval permissions.
+
+Completion accepts optional `producedQuantity`, `conversionCost` and `components`
+containing exactly every original `productId` with nonnegative `quantity` (consumed)
+and `scrap`. At least one consumed material must be positive. Omitted actuals retain
+full planned-completion defaults for older clients. Extra/duplicate component IDs,
+negative amounts and output above the order remainder are rejected.
 Inputs are allowlisted. Each command requires an actor-scoped idempotency key; BoM
 edits/order actions require current record versions, and order creation requires the
 current BoM version. Stale records/source selections return 409; missing versions
@@ -100,7 +131,11 @@ python -m flask --app backend.app migrate-storage
 python -m flask --app backend.app run --host 127.0.0.1 --port 5000
 ```
 
-`init-db` adds `production_command`. Existing BoMs, order/component snapshots,
+This release requires `migrate-storage` to add `material_reservation` and
+`production_result`, then allocate available materials for historical active orders
+oldest first (after existing Sales reservations). Repeat upgrades retain allocations
+and do not repost completed orders. `init-db` also creates these tables and the existing
+`production_command`. Existing BoMs, order/component snapshots,
 stock balances/movements, journal IDs and source keys remain in their original tables.
 There is no ledger rewrite or replay. The storage migration is safe to repeat and
 upgrades older master/trade/HR releases if necessary. Keep your existing login;
@@ -118,9 +153,9 @@ navigation and native production resources/read models. Chromium exercises actua
 BoM creation/editing, BoM-to-order handoff, confirmation/start/completion, shortage
 errors, cancellation, printing and mobile forms with synthetic data.
 
-This is one-level, one-step, full-batch production. Work-center routing, scheduling,
-capacity, partial consumption/output, backorders, subcontracting, by-products,
+This is one-level, one-step production with actual component consumption, component
+scrap and partial-output backorders. Work-center routing, scheduling, capacity,
+finished-output scrap, subcontracting, by-products,
 lot/serial traceability and reversal/unbuild workflows remain separate features.
 Measured query/index, concurrency and deployment/load acceptance remain necessary
-before large-scale production claims. Expenses and administration are the remaining
-native content conversion phases.
+before large-scale production claims.

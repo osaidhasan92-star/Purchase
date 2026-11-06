@@ -375,11 +375,14 @@ def create_mo():
 def advance_mo(identity,action):
     order=row(ManufacturingOrder,identity)
     if action=='complete' and order.state=='Done':return done(mo_json(order))
-    transitions={'confirm':('Draft','Confirmed'),'start':('Confirmed','In Progress'),'cancel':('Draft','Cancelled')}
+    transitions={'confirm':('Draft','Confirmed'),'start':('Confirmed','In Progress'),'cancel':(('Draft','Confirmed','In Progress'),'Cancelled')}
     if action in transitions:
         before,after=transitions[action]
-        if order.state!=before:raise InvalidBusinessState('Invalid production transition')
+        if order.state not in (before if isinstance(before,tuple) else (before,)):raise InvalidBusinessState('Invalid production transition')
         order.state=after
+        from .production_workflow import reserve, release
+        if action=='confirm':reserve(order)
+        elif action=='cancel':release(order)
     elif action=='complete':
         from .erp import finish_manufacturing
         finish_manufacturing(order)

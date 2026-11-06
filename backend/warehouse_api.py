@@ -114,7 +114,9 @@ def ensure_locations(product_id):
 
 
 def reserved(product_id):
-    return Decimal(
+    from .production_workflow import held
+
+    return held(product_id, "Stock") + Decimal(
         str(
             db.session.scalar(
                 select(func.coalesce(func.sum(Reservation.quantity), 0)).where(
@@ -136,12 +138,15 @@ def available(product_id):
 
 
 def stock_state(product_id):
+    from .production_workflow import held
+
     values = quantities(product_id)
     result = dict(
         productId=str(product_id),
         locations={k: str(v) for k, v in values.items()},
         reserved=str(reserved(product_id)),
         available=str(available(product_id)),
+        productionReserved=str(held(product_id, "Production")),
     )
     return {**result, "version": version(result)}
 
@@ -234,6 +239,13 @@ def change_locations(product_id, quantity, source, kind):
         ).quantity += quantity
         return
     need = -quantity
+    if kind in ("Manufacturing Consumption", "Manufacturing Scrap") and g.get(
+        "production_order_id"
+    ):
+        from .production_workflow import consume
+
+        consume(product_id, need, g.production_order_id)
+        return
     if source.startswith("deliveries:"):
         _, identity, position = source.split(":")
         delivery = db.session.get(store.MODELS["deliveries"], identity)
@@ -253,6 +265,8 @@ def change_locations(product_id, quantity, source, kind):
                 row.quantity -= need
             db.session.get(LocationBalance, (str(product_id), "Stock")).quantity -= need
             return
+    from .production_workflow import held as production_held
+
     locations = (
         ("Production", "Stock") if kind == "Manufacturing Consumption" else ("Stock",)
     )
@@ -260,7 +274,11 @@ def change_locations(product_id, quantity, source, kind):
         sum(
             (
                 quantities(product_id)[name]
-                - (reserved(product_id) if name == "Stock" else 0)
+                - (
+                    reserved(product_id)
+                    if name == "Stock"
+                    else production_held(product_id, name)
+                )
                 for name in locations
             ),
             Decimal(0),
@@ -274,7 +292,12 @@ def change_locations(product_id, quantity, source, kind):
             need,
             max(
                 Decimal(0),
-                row.quantity - (reserved(product_id) if location == "Stock" else 0),
+                row.quantity
+                - (
+                    reserved(product_id)
+                    if location == "Stock"
+                    else production_held(product_id, location)
+                ),
             ),
         )
         row.quantity -= take
@@ -579,6 +602,8 @@ def command(command):
             problem("Choose a stock product")
         if data.get("version") != stock_state(identity)["version"]:
             problem("Stock or reservations changed; reload", 409)
+        from .production_workflow import held as production_held
+
         source, target = data.get("fromLocation"), data.get("toLocation")
         if source not in LOCATIONS or target not in LOCATIONS or source == target:
             problem("Choose different internal locations")
@@ -589,7 +614,9 @@ def command(command):
         if not isinstance(reason, str) or not 1 <= len(reason.strip()) <= 300:
             problem("Enter a transfer reason")
         if qty > (
-            available(identity) if source == "Stock" else quantities(identity)[source]
+            available(identity)
+            if source == "Stock"
+            else quantities(identity)[source] - production_held(identity, source)
         ):
             problem("Transfer exceeds unreserved source-location stock")
         ensure_locations(identity)

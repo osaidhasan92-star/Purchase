@@ -321,7 +321,10 @@ def sync_products(state):
             db.session.add(StockBalance(product_id=pid, quantity=0, value=0))
         elif product.kind != kind:
             from .warehouse_api import Reservation
-            if db.session.scalar(select(StockMove.id).where(StockMove.product_id == pid).limit(1)) or db.session.scalar(select(Reservation.order_id).where(Reservation.product_id==pid,Reservation.required>0).limit(1)):
+            from .production_workflow import has_open_obligations
+            if (has_open_obligations(pid)
+                or db.session.scalar(select(StockMove.id).where(StockMove.product_id == pid).limit(1))
+                or db.session.scalar(select(Reservation.order_id).where(Reservation.product_id == pid, Reservation.required > 0).limit(1))):
                 raise InvalidBusinessState('A product with stock history or open stock reservations cannot change product type')
         product.name, product.sku, product.unit, product.kind = str(item.get('name', 'Product'))[:160], str(item.get('sku', ''))[:80], str(item.get('unit', 'Each'))[:40], kind
     db.session.flush()
@@ -525,27 +528,11 @@ def sync_business(previous, current, namespace):
 
 
 def finish_manufacturing(order):
-    """Complete one production order in the caller's stock/accounting transaction."""
-    from .scope import object_creator
+    """Shared native/compatibility production completion and accounting transaction."""
     if order.state == 'Done':
         return order
-    if order.state not in ('Confirmed','In Progress'):
-        raise InvalidBusinessState('Confirm the manufacturing order first')
-    g.scope_creator = object_creator(order) or g.user.id
-    check_period(order.date)
-    total = Decimal(0)
-    for index,line in enumerate(sorted(order.lines,key=lambda l:l.id)):
-        move=stock_move(line.product_id,-line.quantity,f'mo:{order.id}:component:{index}',
-                        'Manufacturing Consumption','1250',value_date=order.date)
-        total-=move.value
-    if order.conversion_cost:
-        journal_pair(f'mo:{order.id}:conversion','Accrued production conversion cost',
-                     '1250','2400',order.conversion_cost,order.date)
-    total+=order.conversion_cost
-    stock_move(order.product_id,order.quantity,f'mo:{order.id}:output','Manufacturing Output',
-               '1250',value_date=order.date,total_value=total)
-    order.actual_cost=total
-    order.state='Done'
+    from .production_workflow import complete
+    complete(order, {})
     return order
 
 

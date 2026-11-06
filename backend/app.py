@@ -881,6 +881,8 @@ def create_app(config=None):
         initialize_workflow_keys()
         from .warehouse_api import initialize_warehouse
         initialize_warehouse()
+        from .production_workflow import initialize as initialize_production
+        initialize_production()
         db.session.commit()
         click.echo('Database initialized; existing records were preserved.')
 
@@ -904,6 +906,8 @@ def create_app(config=None):
             initialize_workflow_keys()
             from .warehouse_api import initialize_warehouse
             initialize_warehouse()
+            from .production_workflow import initialize as initialize_production
+            initialize_production()
         except (ValueError,ArithmeticError) as error:
             db.session.rollback()
             raise click.ClickException(str(error)) from error

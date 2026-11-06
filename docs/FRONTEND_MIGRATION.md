@@ -202,3 +202,18 @@ Validation: `backend/test_billing_policies.py` covers defaults, pre-delivery/rec
 Inventory now includes Warehouse Operations with Locations & Availability, Reservations, Backorders and Internal Transfers. Sales orders expose Check Availability and Release Reservation; delivery forms use their current dispatchable quantities, and order/receipt/delivery details show reservation/backorder references. Physical stock updates enforce location and reservation limits; manufacturing availability excludes reserved Stock and quarantined Returns.
 
 **Migration required:** stop the app, activate its environment and run `python -m flask --app backend.app migrate-storage`, then restart and hard-refresh. See [WAREHOUSE_OPERATIONS.md](WAREHOUSE_OPERATIONS.md) for the one-warehouse defaults, remaining manual steps and control boundaries.
+
+
+## Actual production and manufacturing backorders
+
+Manufacturing Orders now reserve components on confirmation, support explicit Check
+Availability and Stage Materials, and open a shared responsive form for actual output,
+consumption, component scrap and conversion cost. Partial output creates a linked
+manufacturing order for the remaining plan. Details and print layouts show actuals
+and origin/remainder links. Warehouse location rows distinguish Stock reservations
+from Production reservations. See [Manufacturing migration](MANUFACTURING_MIGRATION.md).
+
+Existing installations must stop workers, back up and run
+`python -m flask --app backend.app migrate-storage` before restarting. The migration
+adds allocation/result tables without reposting completed production. Rebuilt assets
+are included; desktop users do not need Node.
