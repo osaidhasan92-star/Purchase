@@ -337,7 +337,7 @@ def execute(url, rows, workers, iterations):
         raise ValueError("Use rows >= 1, iterations 1..120, workers 1..100")
     validate_database(url)
     app = create_app(
-        dict(SQLALCHEMY_DATABASE_URI=url, COOKIE_SECURE=False, TESTING=True)
+        dict(SQLALCHEMY_DATABASE_URI=url, COOKIE_SECURE=False, TESTING=True, APPROVAL_CONTROLS=False)
     )
     password = secrets.token_urlsafe(32)
     try:
@@ -348,7 +348,7 @@ def execute(url, rows, workers, iterations):
         ]
         return dict(
             schemaVersion=1,
-            mode="in-process threaded Flask API service; no HTTP/network or multi-process workers",
+            mode="in-process threaded Flask API service; approval controls disabled for historical posting baseline; no HTTP/network or multi-process workers",
             database=make_url(url).get_backend_name(),
             python=platform.python_version(),
             platform=platform.system(),

@@ -384,3 +384,7 @@ historical duplicates. Existing installations must run `init-db` and `migrate-st
 before using this version. `RESOURCE_CONCURRENCY=false` restores the old exclusive
 paths for these modules; HR/payroll have their separate switch. Sustained production
 HTTP capacity, security/operations and client acceptance remain separate readiness work.
+
+## Approval limits and separation of duties
+
+Independent PKR approval controls are enabled by default. Before restarting the updated application, run `python -m flask --app backend.app migrate-storage` to create the approval tables. Open **Pending Approvals** from any ERP workspace to review requests, record decisions, and configure per-user limits as an administrator. See [approval controls and rollout verification](docs/approval-controls.md) for policy defaults, covered actions, migration, testing, and operational limitations.
