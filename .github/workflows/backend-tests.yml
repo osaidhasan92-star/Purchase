@@ -13,12 +13,13 @@ jobs:
           node-version: '22'
       - run: pip install -r backend/requirements.txt pytest
       - run: python -m pytest backend -q
-      - run: for file in app.js backend-client.js crm-workspace.js workspace.js workspace-loader.js trade-workspace.js finance-workspace.js inventory-workspace.js production-workspace.js expense-workspace.js admin-workspace.js remaining-workspace.js hr-workspace.js; do node --check "$file"; done
+      - run: for file in app.js approval-inbox.js backend-client.js crm-workspace.js workspace.js workspace-loader.js trade-workspace.js finance-workspace.js inventory-workspace.js production-workspace.js expense-workspace.js admin-workspace.js remaining-workspace.js hr-workspace.js; do node --check "$file"; done
       - run: npm ci
       - run: npm run check:format
       - run: npm run build:frontend
       - run: git diff --exit-code -- frontend-dist
       - run: npm run test:dom
+      - run: node tests/approval-dom.cjs
   postgres:
     runs-on: ubuntu-latest
     services:
@@ -80,3 +81,4 @@ jobs:
       - run: npm run build:frontend
       - run: npx playwright install --with-deps chromium
       - run: npm run test:browser
+      - run: node tests/approval-browser.cjs

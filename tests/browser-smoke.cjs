@@ -29,7 +29,7 @@ const assert = require("node:assert/strict");
     assert.equal(setup.status, 0, setup.stderr);
     server = spawn(
       python,
-      ["-m", "flask", "--app", "backend.app", "run", "--port", String(port)],
+      ['-c', `from backend.app import app; app.config['APPROVAL_CONTROLS']=False; app.run(port=${port})`],
       { env, cwd, stdio: "ignore" },
     );
     for (let i = 0; i < 100; i++) {
