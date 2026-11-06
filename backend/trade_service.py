@@ -153,7 +153,14 @@ CREATE_FIELDS = {
         "notes",
     },
 }
-EDITABLE = {"requests", "salesQuotations", "orders", "quotations", "invoices", "customerInvoices"}
+EDITABLE = {
+    "requests",
+    "salesQuotations",
+    "orders",
+    "quotations",
+    "invoices",
+    "customerInvoices",
+}
 
 
 class TradeCommand(db.Model):
@@ -263,43 +270,93 @@ def parent(state, key, identity, data):
 
 
 def product_policies(product):
-    service=product.get("productType", "service" if str(product.get("unit","")).lower()=="service" else "stock")=="service"
-    result = dict(salesInvoicePolicy=product.get("salesInvoicePolicy","ordered" if service else "delivered"),
-                purchaseBillPolicy=product.get("purchaseBillPolicy","ordered" if service else "received"))
-    if result["salesInvoicePolicy"] not in ("ordered","delivered") or result["purchaseBillPolicy"] not in ("ordered","received"):
+    service = (
+        product.get(
+            "productType",
+            "service" if str(product.get("unit", "")).lower() == "service" else "stock",
+        )
+        == "service"
+    )
+    result = dict(
+        salesInvoicePolicy=product.get(
+            "salesInvoicePolicy", "ordered" if service else "delivered"
+        ),
+        purchaseBillPolicy=product.get(
+            "purchaseBillPolicy", "ordered" if service else "received"
+        ),
+    )
+    if result["salesInvoicePolicy"] not in ("ordered", "delivered") or result[
+        "purchaseBillPolicy"
+    ] not in ("ordered", "received"):
         problem("Invalid product invoicing/billing policy")
     return result
 
 
-def billing_basis(state,order,index,customer):
-    line=order["items"][index]
-    policy=line.get("salesInvoicePolicy" if customer else "purchaseBillPolicy", "ordered" if customer else "received")
-    if policy not in (("ordered","delivered") if customer else ("ordered","received")):
+def billing_basis(state, order, index, customer):
+    line = order["items"][index]
+    policy = line.get(
+        "salesInvoicePolicy" if customer else "purchaseBillPolicy",
+        "ordered" if customer else "received",
+    )
+    if policy not in (
+        ("ordered", "delivered") if customer else ("ordered", "received")
+    ):
         problem("Invalid order invoicing/billing policy")
-    quantity=Decimal(str(line["quantity"]))
-    actual=dispatched(state,order,index) if customer else received(state,order,index)
-    return policy, min(quantity,actual) if policy in ("delivered","received") else quantity
+    quantity = Decimal(str(line["quantity"]))
+    actual = (
+        dispatched(state, order, index) if customer else received(state, order, index)
+    )
+    if order.get("fulfillmentClosed"):
+        closed = next(
+            (
+                Decimal(str(v["quantity"]))
+                for v in order.get("closedRemainder", [])
+                if v["lineIndex"] == index
+            ),
+            Decimal(0),
+        )
+        return policy, max(Decimal(0), min(quantity - closed, actual))
+    return policy, (
+        min(quantity, actual) if policy in ("delivered", "received") else quantity
+    )
 
 
-def invoice_remaining(state,order,index,customer,exclude=None):
-    _,basis=billing_basis(state,order,index,customer)
-    return max(Decimal(0),basis-billed_quantity(state,order,index,customer,exclude))
+def invoice_remaining(state, order, index, customer, exclude=None):
+    _, basis = billing_basis(state, order, index, customer)
+    return max(
+        Decimal(0), basis - billed_quantity(state, order, index, customer, exclude)
+    )
 
 
-def recheck_invoice_policy(state,key,row):
-    customer=key=="customerInvoices"
-    order=find(state,"salesOrders" if customer else "orders",row["orderId" if customer else "poId"])
-    for position,line in enumerate(row.get("items",[])):
-        index=int(line.get("lineIndex",position))
-        if index<0 or index>=len(order["items"]) or Decimal(str(line.get("quantity",0)))>invoice_remaining(state,order,index,customer,row["id"]):
-            problem("Invoice/bill exceeds the quantity permitted by the order's invoicing/billing policy")
+def recheck_invoice_policy(state, key, row):
+    customer = key == "customerInvoices"
+    order = find(
+        state,
+        "salesOrders" if customer else "orders",
+        row["orderId" if customer else "poId"],
+    )
+    for position, line in enumerate(row.get("items", [])):
+        index = int(line.get("lineIndex", position))
+        if (
+            index < 0
+            or index >= len(order["items"])
+            or Decimal(str(line.get("quantity", 0)))
+            > invoice_remaining(state, order, index, customer, row["id"])
+        ):
+            problem(
+                "Invoice/bill exceeds the quantity permitted by the order's invoicing/billing policy"
+            )
 
 
 def add(state, key, values):
     from .warehouse_api import annotate_backorder
-    annotate_backorder(key,values)
-    if key in ("orders","salesOrders"):
-        values["items"]=[{**line,**product_policies(find(state,"products",line["productId"]))} for line in values["items"]]
+
+    annotate_backorder(key, values)
+    if key in ("orders", "salesOrders"):
+        values["items"] = [
+            {**line, **product_policies(find(state, "products", line["productId"]))}
+            for line in values["items"]
+        ]
     identity = int(time.time() * 1000) * 1000 + secrets.randbelow(1000)
     while db.session.get(store.MODELS[key], str(identity)) or any(
         str(r["id"]) == str(identity) for r in state.get(key, [])
@@ -439,21 +496,71 @@ def attachment(data, module):
 
 
 def returned_quantity(source):
-    if not has_app_context(): return Decimal(0)
+    if not has_app_context():
+        return Decimal(0)
     from .erp import StockMove
+
     original = select(StockMove.id).where(StockMove.source == source)
-    return Decimal(str(db.session.scalar(select(func.coalesce(func.sum(func.abs(StockMove.quantity)),0)).where(StockMove.return_of.in_(original))) or 0))
+    return Decimal(
+        str(
+            db.session.scalar(
+                select(func.coalesce(func.sum(func.abs(StockMove.quantity)), 0)).where(
+                    StockMove.return_of.in_(original)
+                )
+            )
+            or 0
+        )
+    )
 
 
 def received(state, order, index):
-    return sum((max(Decimal(0), Decimal(str((r.get("items", [])[index] if index<len(r.get("items",[])) else {}).get("acceptedQty",0))) - returned_quantity(f'receipts:{r["id"]}:{index}')) for r in state.get("receipts",[]) if str(r.get("poId"))==str(order["id"])),Decimal(0))
+    return sum(
+        (
+            max(
+                Decimal(0),
+                Decimal(
+                    str(
+                        (
+                            r.get("items", [])[index]
+                            if index < len(r.get("items", []))
+                            else {}
+                        ).get("acceptedQty", 0)
+                    )
+                )
+                - returned_quantity(f'receipts:{r["id"]}:{index}'),
+            )
+            for r in state.get("receipts", [])
+            if str(r.get("poId")) == str(order["id"])
+        ),
+        Decimal(0),
+    )
 
 
 def dispatched(state, order, index, reserved=False):
     product = str(order["items"][index].get("productId"))
-    return sum((max(Decimal(0),Decimal(str(item.get("deliveredQty",0)))-returned_quantity(f'deliveries:{d["id"]}:{position}'))
-        for d in state.get("deliveries",[]) if str(d.get("orderId"))==str(order["id"]) and (d.get("status")!="Cancelled" if reserved else d.get("status")=="Delivered")
-        for position,item in enumerate(d.get("items",[])) if (item.get("lineIndex")==index if "lineIndex" in item else str(item.get("productId"))==product)),Decimal(0))
+    return sum(
+        (
+            max(
+                Decimal(0),
+                Decimal(str(item.get("deliveredQty", 0)))
+                - returned_quantity(f'deliveries:{d["id"]}:{position}'),
+            )
+            for d in state.get("deliveries", [])
+            if str(d.get("orderId")) == str(order["id"])
+            and (
+                d.get("status") != "Cancelled"
+                if reserved
+                else d.get("status") == "Delivered"
+            )
+            for position, item in enumerate(d.get("items", []))
+            if (
+                item.get("lineIndex") == index
+                if "lineIndex" in item
+                else str(item.get("productId")) == product
+            )
+        ),
+        Decimal(0),
+    )
 
 
 def billed_quantity(state, order, index, customer=False, exclude=None):
@@ -471,7 +578,28 @@ def billed_quantity(state, order, index, customer=False, exclude=None):
             if int(item.get("lineIndex", position)) == index:
                 result += Decimal(str(item.get("quantity", 0)))
         from .credit_api import CreditNote, CreditLine
-        result -= Decimal(str(db.session.scalar(select(func.coalesce(func.sum(CreditLine.quantity),0)).join(CreditNote).where(CreditNote.kind==("customer" if customer else "vendor"),CreditNote.invoice_id==str(bill["id"]),CreditNote.status=="Posted",CreditLine.line_index.in_([p for p,i in enumerate(bill.get("items",[])) if int(i.get("lineIndex",p))==index]))) or 0))
+
+        result -= Decimal(
+            str(
+                db.session.scalar(
+                    select(func.coalesce(func.sum(CreditLine.quantity), 0))
+                    .join(CreditNote)
+                    .where(
+                        CreditNote.kind == ("customer" if customer else "vendor"),
+                        CreditNote.invoice_id == str(bill["id"]),
+                        CreditNote.status == "Posted",
+                        CreditLine.line_index.in_(
+                            [
+                                p
+                                for p, i in enumerate(bill.get("items", []))
+                                if int(i.get("lineIndex", p)) == index
+                            ]
+                        ),
+                    )
+                )
+                or 0
+            )
+        )
     return result
 
 
@@ -493,9 +621,11 @@ def invoice_lines(state, order, items, customer=False, exclude=None):
         used.add(index)
         src = order["items"][index]
         quantity = number(item.get("quantity"), "Invoice quantity", True, QTY)
-        remaining = invoice_remaining(state,order,index,customer,exclude)
+        remaining = invoice_remaining(state, order, index, customer, exclude)
         if quantity > remaining:
-            problem("Invoice quantity exceeds the remaining quantity permitted by the invoicing/billing policy")
+            problem(
+                "Invoice quantity exceeds the remaining quantity permitted by the invoicing/billing policy"
+            )
         product = find(state, "products", src["productId"])
         line = calculate_line(
             product,
@@ -523,9 +653,27 @@ def invoice_lines(state, order, items, customer=False, exclude=None):
                     str(previous_line.get("taxAmount", previous_line.get("tax", 0)))
                 )
                 from .credit_api import CreditNote, CreditLine
-                credit_amount, credit_tax = db.session.execute(select(func.coalesce(func.sum(CreditLine.amount),0),func.coalesce(func.sum(CreditLine.tax),0)).join(CreditNote).where(CreditNote.kind==("customer" if customer else "vendor"),CreditNote.invoice_id==str(bill["id"]),CreditNote.status=="Posted",CreditLine.line_index==position)).one()
+
+                credit_amount, credit_tax = db.session.execute(
+                    select(
+                        func.coalesce(func.sum(CreditLine.amount), 0),
+                        func.coalesce(func.sum(CreditLine.tax), 0),
+                    )
+                    .join(CreditNote)
+                    .where(
+                        CreditNote.kind == ("customer" if customer else "vendor"),
+                        CreditNote.invoice_id == str(bill["id"]),
+                        CreditNote.status == "Posted",
+                        CreditLine.line_index == position,
+                    )
+                ).one()
                 prior_tax += tax - credit_tax
-                prior_net += Decimal(str(previous_line.get("total", 0))) - tax - credit_amount + credit_tax
+                prior_net += (
+                    Decimal(str(previous_line.get("total", 0)))
+                    - tax
+                    - credit_amount
+                    + credit_tax
+                )
         original = calculate_line(
             product,
             src["quantity"],
@@ -556,16 +704,24 @@ def invoice_lines(state, order, items, customer=False, exclude=None):
 
 
 def credit_amount(kind, identity):
-    if not has_app_context(): return Decimal(0)
+    if not has_app_context():
+        return Decimal(0)
     from .credit_api import CreditNote
-    return db.session.scalar(select(func.coalesce(func.sum(CreditNote.amount),0)).where(CreditNote.kind==kind,CreditNote.invoice_id==str(identity),CreditNote.status=="Posted")) or Decimal(0)
+
+    return db.session.scalar(
+        select(func.coalesce(func.sum(CreditNote.amount), 0)).where(
+            CreditNote.kind == kind,
+            CreditNote.invoice_id == str(identity),
+            CreditNote.status == "Posted",
+        )
+    ) or Decimal(0)
 
 
 def match_bill(state, bill):
     order = find(state, "orders", bill.get("poId"))
     allocated = sum(
         (
-            Decimal(str(b.get("amount", 0))) - credit_amount("vendor",b["id"])
+            Decimal(str(b.get("amount", 0))) - credit_amount("vendor", b["id"])
             for b in state.get("invoices", [])
             if str(b.get("poId")) == str(order["id"])
             and str(b["id"]) != str(bill["id"])
@@ -575,7 +731,7 @@ def match_bill(state, bill):
     )
     accepted_value = Decimal(0)
     for index, line in enumerate(order.get("items", [])):
-        _,basis=billing_basis(state,order,index,False)
+        _, basis = billing_basis(state, order, index, False)
         calc = (
             calculate_line(
                 {
@@ -601,7 +757,9 @@ def match_bill(state, bill):
         if index >= len(order.get("items", [])):
             matched = False
             continue
-        if Decimal(str(line.get("quantity", 0))) > invoice_remaining(state,order,index,False,bill["id"]):
+        if Decimal(str(line.get("quantity", 0))) > invoice_remaining(
+            state, order, index, False, bill["id"]
+        ):
             matched = False
     bill["matchStatus"] = "Matched" if matched else "Exception"
     bill["matchReason"] = (
@@ -658,7 +816,11 @@ def recompute(state, key, row):
                 ),
                 Decimal(0),
             )
-            balance = Decimal(str(bill["amount"])) - paid - Decimal(str(bill.get("creditedAmount",0)))
+            balance = (
+                Decimal(str(bill["amount"]))
+                - paid
+                - Decimal(str(bill.get("creditedAmount", 0)))
+            )
             if balance < 0:
                 problem("Payments exceed the invoice balance")
             bill.update(
@@ -687,10 +849,32 @@ def recompute(state, key, row):
                 and b.get("status") in ("Posted", "Approved", "Partially Paid", "Paid")
             ]
             from .credit_api import CreditNote
-            credits = db.session.scalar(select(func.coalesce(func.sum(CreditNote.amount),0)).where(CreditNote.kind==("customer" if customer else "vendor"),CreditNote.invoice_id.in_([str(b["id"]) for b in linked]),CreditNote.status=="Posted")) or Decimal(0)
-            billed = sum((Decimal(str(b.get("amount", 0))) for b in linked), Decimal(0)) - credits
-            paid = billed - sum((Decimal(str(b.get("balance",0))) for b in linked),Decimal(0))
+
+            credits = db.session.scalar(
+                select(func.coalesce(func.sum(CreditNote.amount), 0)).where(
+                    CreditNote.kind == ("customer" if customer else "vendor"),
+                    CreditNote.invoice_id.in_([str(b["id"]) for b in linked]),
+                    CreditNote.status == "Posted",
+                )
+            ) or Decimal(0)
+            billed = (
+                sum((Decimal(str(b.get("amount", 0))) for b in linked), Decimal(0))
+                - credits
+            )
+            paid = billed - sum(
+                (Decimal(str(b.get("balance", 0))) for b in linked), Decimal(0)
+            )
             total = Decimal(str(order.get("total", 0)))
+            if order.get("fulfillmentClosed"):
+                total = sum(
+                    (
+                        Decimal(str(line.get("total", 0)))
+                        * billing_basis(state, order, index, customer)[1]
+                        / Decimal(str(line["quantity"]))
+                        for index, line in enumerate(order.get("items", []))
+                    ),
+                    Decimal(0),
+                ).quantize(MONEY)
             quantities_done = [
                 (
                     dispatched(state, order, index)
@@ -714,6 +898,12 @@ def recompute(state, key, row):
                 if billed and paid >= billed
                 else "Partially Paid" if paid else "Unpaid"
             )
+            if linked and credits > 0 and billed == 0:
+                order["invoiceStatus"] = "Fully Credited"
+                order["paymentStatus"] = "No Balance Due"
+            if order.get("fulfillmentClosed"):
+                order["deliveryStatus"] = "Closed"
+                continue
             if customer:
                 order["deliveryStatus"] = (
                     "Delivered"
@@ -729,7 +919,12 @@ def recompute(state, key, row):
                         else (
                             "Partially Delivered"
                             if any_done
-                            else "Confirmed" if order.get("status") in ("Delivered","Partially Delivered","Completed") else order.get("status", "Confirmed")
+                            else (
+                                "Confirmed"
+                                if order.get("status")
+                                in ("Delivered", "Partially Delivered", "Completed")
+                                else order.get("status", "Confirmed")
+                            )
                         )
                     )
                 )
@@ -739,7 +934,7 @@ def recompute(state, key, row):
                     if complete and total > 0 and billed >= total and paid >= total
                     else "Received" if complete else "Partially Received"
                 )
-            elif order.get("status") in ("Received","Partially Received","Completed"):
+            elif order.get("status") in ("Received", "Partially Received", "Completed"):
                 order["status"] = "Approved"
 
 
@@ -769,7 +964,7 @@ def create(state, key, data):
                     if allowed(g.user, state, "requests", "edit")
                     else "Pending Approval"
                 ),
-                **attachment(data, "requests")
+                **attachment(data, "requests"),
             ),
         )
     if key == "rfqs":
@@ -846,7 +1041,7 @@ def create(state, key, data):
                 items=items,
                 **totals(items),
                 status="Received",
-                **attachment(data, "quotations")
+                **attachment(data, "quotations"),
             ),
         )
         source["status"] = "Response Received"
@@ -882,7 +1077,7 @@ def create(state, key, data):
                 notes=text(data, "notes", limit=10000),
                 items=items,
                 **totals(items),
-                status="Draft"
+                status="Draft",
             ),
         )
     if key in ("orders", "salesOrders"):
@@ -929,7 +1124,7 @@ def create(state, key, data):
                 160,
             ),
             invoiceStatus="Not Invoiced",
-            paymentStatus="Unpaid"
+            paymentStatus="Unpaid",
         )
         if customer:
             values.update(
@@ -958,7 +1153,7 @@ def create(state, key, data):
                 terms=text(data, "terms", limit=10000),
                 status="Draft",
                 source="Quotation" if source else "Direct PO",
-                **attachment(data, "orders")
+                **attachment(data, "orders"),
             )
         result = add(state, key, values)
         if source and customer:
@@ -984,7 +1179,8 @@ def create(state, key, data):
             )
         if customer:
             from .warehouse_api import reserve_order
-            reserve_order(state,source)
+
+            reserve_order(state, source)
         entered = quantities(data.get("items"))
         seen = set()
         items = []
@@ -1024,8 +1220,11 @@ def create(state, key, data):
                     value.get("deliveredQty", 0), "Delivery quantity", False, QTY
                 )
                 from .warehouse_api import dispatch_available
-                if qty > min(remain,dispatch_available(state,source,index)):
-                    problem("Delivery exceeds reserved stock or remaining order quantity; check availability")
+
+                if qty > min(remain, dispatch_available(state, source, index)):
+                    problem(
+                        "Delivery exceeds reserved stock or remaining order quantity; check availability"
+                    )
                 items.append(
                     dict(
                         lineIndex=index,
@@ -1184,14 +1383,18 @@ def create(state, key, data):
         ):
             problem("Select an open posted/approved invoice")
         amount = number(data.get("amount"), "Payment amount", True)
-        balance = Decimal(str(source.get("amount", 0))) - Decimal(str(source.get("creditedAmount",0))) - sum(
-            (
-                Decimal(str(p.get("amount", 0)))
-                for p in state.get(key, [])
-                if str(p.get("invoiceId")) == str(source["id"])
-                and p.get("status") == ("Received" if customer else "Processed")
-            ),
-            Decimal(0),
+        balance = (
+            Decimal(str(source.get("amount", 0)))
+            - Decimal(str(source.get("creditedAmount", 0)))
+            - sum(
+                (
+                    Decimal(str(p.get("amount", 0)))
+                    for p in state.get(key, [])
+                    if str(p.get("invoiceId")) == str(source["id"])
+                    and p.get("status") == ("Received" if customer else "Processed")
+                ),
+                Decimal(0),
+            )
         )
         if amount > balance:
             problem("Payment exceeds the outstanding balance")
@@ -1244,14 +1447,30 @@ TRANSITIONS = {
         "expire": ({"Sent"}, "Expired", "edit"),
     },
     "orders": {
+        "close": (
+            {
+                "Approved",
+                "Sent to Vendor",
+                "Partially Received",
+                "Received",
+                "Completed",
+            },
+            "Closed",
+            "approve",
+        ),
         "submit": ({"Draft"}, "Pending Approval", "edit"),
         "approve": ({"Pending Approval"}, "Approved", "approve"),
         "send": ({"Approved"}, "Sent to Vendor", "edit"),
         "cancel": ({"Draft", "Pending Approval", "Approved"}, "Cancelled", "edit"),
     },
     "salesOrders": {
-        "reserve": ({"Confirmed","Partially Delivered"}, "Confirmed", "edit"),
-        "unreserve": ({"Confirmed","Partially Delivered"}, "Confirmed", "edit"),
+        "close": (
+            {"Confirmed", "Partially Delivered", "Delivered", "Completed"},
+            "Closed",
+            "approve",
+        ),
+        "reserve": ({"Confirmed", "Partially Delivered"}, "Confirmed", "edit"),
+        "unreserve": ({"Confirmed", "Partially Delivered"}, "Confirmed", "edit"),
         "cancel": ({"Confirmed"}, "Cancelled", "edit"),
     },
     "deliveries": {
@@ -1263,7 +1482,11 @@ TRANSITIONS = {
         "post": ({"Pending Approval", "Matched"}, "Approved", "approve"),
         "approve": ({"Matched"}, "Approved", "approve"),
         "reset": ({"Pending Approval", "Exception", "Matched"}, "Draft", "approve"),
-        "cancel": ({"Draft", "Pending Approval", "Exception", "Matched"}, "Cancelled", "edit"),
+        "cancel": (
+            {"Draft", "Pending Approval", "Exception", "Matched"},
+            "Cancelled",
+            "edit",
+        ),
     },
     "customerInvoices": {
         "submit": ({"Draft"}, "Pending Approval", "edit"),
@@ -1293,8 +1516,17 @@ def act(state, key, row, action, data):
     if not permission:
         problem("Unknown document action")
     permit(key, permission, state)
-    if set(data) - {"requestKey", "version"}:
+    if set(data) - (
+        {"requestKey", "version", "reason"}
+        if action == "close" and key in ("orders", "salesOrders")
+        else {"requestKey", "version"}
+    ):
         problem("Unknown action fields")
+    if action == "close" and key in ("orders", "salesOrders"):
+        from .order_resolution import close
+
+        close(state, key, row, data)
+        return
     if key == "quotations" and action == "award":
         permit("comparisons", "approve", state)
         if row.get("status") != "Received":
@@ -1352,22 +1584,40 @@ def act(state, key, row, action, data):
         find(state, "rfqs", row["rfqId"])["status"] = "Response Received"
         row["status"] = "Cleared"
         return
-    if key=='salesOrders' and action in ('reserve','unreserve'):
-        if row.get('status') not in ('Confirmed','Partially Delivered'):problem('Order is not open',409)
+    if key == "salesOrders" and action in ("reserve", "unreserve"):
+        if row.get("status") not in ("Confirmed", "Partially Delivered"):
+            problem("Order is not open", 409)
         from .warehouse_api import reserve_order
-        row["reservationPaused"]=action=="unreserve"
-        reserve_order(state,row);row['availabilityCheckedAt']=utcnow();return
-    if key=='salesOrders' and action=='cancel':
-        if any(str(d.get('orderId'))==str(row['id']) and d.get('status')!='Cancelled' for k in ('deliveries','customerInvoices') for d in state.get(k,[])):
-            problem('Cancel pending deliveries/drafts first; fulfilled or posted orders cannot cancel')
+
+        row["reservationPaused"] = action == "unreserve"
+        reserve_order(state, row)
+        row["availabilityCheckedAt"] = utcnow()
+        return
+    if key == "salesOrders" and action == "cancel":
+        if any(
+            str(d.get("orderId")) == str(row["id"]) and d.get("status") != "Cancelled"
+            for k in ("deliveries", "customerInvoices")
+            for d in state.get(k, [])
+        ):
+            problem(
+                "Cancel pending deliveries/drafts first; fulfilled or posted orders cannot cancel"
+            )
     origins, target, _ = TRANSITIONS[key][action]
     if row.get("status") not in origins:
         problem("Action is not available in the current document status", 409)
-    if key in ("invoices", "customerInvoices") and action in ("post", "approve", "reset"):
+    if key in ("invoices", "customerInvoices") and action in (
+        "post",
+        "approve",
+        "reset",
+    ):
         finance_authority(state)
-    if key in ("invoices", "customerInvoices") and action in ("post","approve"):
-        recheck_invoice_policy(state,key,row)
-    if key == "invoices" and action in ("post", "approve") and not match_bill(state, row):
+    if key in ("invoices", "customerInvoices") and action in ("post", "approve"):
+        recheck_invoice_policy(state, key, row)
+    if (
+        key == "invoices"
+        and action in ("post", "approve")
+        and not match_bill(state, row)
+    ):
         problem(row["matchReason"])
     if (
         key == "orders"
@@ -1431,8 +1681,19 @@ def edit(state, key, row, data):
     for field in editable - {"items"}:
         if field in data:
             row[field] = (
-                on_date(data, field, required=field in ("deliveryDate", "invoiceDate", "dueDate"))
-                if field in ("validUntil", "deliveryDate", "requiredDate", "invoiceDate", "dueDate")
+                on_date(
+                    data,
+                    field,
+                    required=field in ("deliveryDate", "invoiceDate", "dueDate"),
+                )
+                if field
+                in (
+                    "validUntil",
+                    "deliveryDate",
+                    "requiredDate",
+                    "invoiceDate",
+                    "dueDate",
+                )
                 else text(
                     data, field, limit=10000 if field in ("notes", "terms") else 1000
                 )
@@ -1440,12 +1701,22 @@ def edit(state, key, row, data):
     if key in ("invoices", "customerInvoices"):
         if "items" in data:
             customer = key == "customerInvoices"
-            order = find(state, "salesOrders" if customer else "orders", row["orderId" if customer else "poId"])
+            order = find(
+                state,
+                "salesOrders" if customer else "orders",
+                row["orderId" if customer else "poId"],
+            )
             items = invoice_lines(state, order, data["items"], customer, row["id"])
             total = totals(items)
             if total["total"] <= 0:
                 problem("Invoice total must be positive")
-            row.update(items=items, subtotal=total["subtotal"], taxAmount=total["taxAmount"], amount=total["total"], balance=total["total"])
+            row.update(
+                items=items,
+                subtotal=total["subtotal"],
+                taxAmount=total["taxAmount"],
+                amount=total["total"],
+                balance=total["total"],
+            )
         if key == "invoices":
             match_bill(state, row)
         return
@@ -1472,8 +1743,26 @@ def edit(state, key, row, data):
         items = price_lines(state, data["items"], source)
         if key == "orders":
             for line in items:
-                previous=next((old for old in row.get("items",[]) if str(old.get("productId"))==str(line["productId"])),None)
-                line.update({"salesInvoicePolicy":previous.get("salesInvoicePolicy","ordered"),"purchaseBillPolicy":previous.get("purchaseBillPolicy","received")} if previous else product_policies(find(state,"products",line["productId"])))
+                previous = next(
+                    (
+                        old
+                        for old in row.get("items", [])
+                        if str(old.get("productId")) == str(line["productId"])
+                    ),
+                    None,
+                )
+                line.update(
+                    {
+                        "salesInvoicePolicy": previous.get(
+                            "salesInvoicePolicy", "ordered"
+                        ),
+                        "purchaseBillPolicy": previous.get(
+                            "purchaseBillPolicy", "received"
+                        ),
+                    }
+                    if previous
+                    else product_policies(find(state, "products", line["productId"]))
+                )
         if key == "requests":
             row.update(lineItems=items, items=len(items), total=totals(items)["total"])
         else:
@@ -1488,7 +1777,11 @@ def available_actions(key, row, state):
         if row.get("status") in origins and allowed(
             g.user, state, COLLECTIONS[key], action_permission(key, action, row)
         ):
-            if key in ("invoices", "customerInvoices") and action in ("post", "approve", "reset") and not allowed(g.user, state, "accounting", "approve"):
+            if (
+                key in ("invoices", "customerInvoices")
+                and action in ("post", "approve", "reset")
+                and not allowed(g.user, state, "accounting", "approve")
+            ):
                 continue
             output.append(action)
     if (
@@ -1595,7 +1888,8 @@ def execute(key, identity=None, action=None):
     context.persist()
     sync_business(original, state, "app")
     from .warehouse_api import refresh_persist
-    refresh_persist(key,row)
+
+    refresh_persist(key, row)
     statement = update(Document).where(Document.name == "app")
     if locked_context:
         statement = statement.values(revision=Document.revision + 1)

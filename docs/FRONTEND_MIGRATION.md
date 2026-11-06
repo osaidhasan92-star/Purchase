@@ -217,3 +217,17 @@ Existing installations must stop workers, back up and run
 `python -m flask --app backend.app migrate-storage` before restarting. The migration
 adds allocation/result tables without reposting completed production. Rebuilt assets
 are included; desktop users do not need Node.
+
+
+## Order returns and remainder closure
+
+Sales and Purchase order details now show fulfillment, returns, invoice/bill and posted
+credit quantities, with bounded permission-filtered links to receipts/deliveries,
+invoices/bills and credit settlements. Returned customer goods have an inspection/
+restock shortcut in Warehouse Operations. Approved Close Remaining Quantity records
+a reason and releases demand without rewriting existing financial obligations. Closed
+orders retain billing/payment actions for eligible fulfilled quantities and do not reopen
+after later returns. See [Order returns and closure](ORDER_RETURNS_AND_CLOSURE.md).
+
+No new schema migration is required for this step on the preceding release. Restart
+the backend and hard-refresh after installing the included compiled frontend bundle.

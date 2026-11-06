@@ -1,3 +1,4 @@
+import { OrderProgress } from "./OrderProgress";
 import { useEffect, useRef, useState } from "react";
 import type { Bridge, User } from "../../types";
 import { Dialog } from "../../components/Dialog";
@@ -58,6 +59,11 @@ function nextSteps(
         : []),
       ...add("customerInvoices", "Create Invoice"),
     ];
+  if (row.status === "Closed" && ["orders", "salesOrders"].includes(resource))
+    return add(
+      resource === "orders" ? "invoices" : "customerInvoices",
+      resource === "orders" ? "Record Bill" : "Create Invoice",
+    );
   if (
     resource === "invoices" &&
     ["Approved", "Partially Paid"].includes(row.status)
@@ -109,7 +115,9 @@ export function TradePage({
     } | null>(null),
     [detail, setDetail] = useState<Detail | null>(null),
     [busy, setBusy] = useState(false),
-    [opening, setOpening] = useState("");
+    [opening, setOpening] = useState(""),
+    [closing, setClosing] = useState<TradeRecord | null>(null),
+    [closeReason, setCloseReason] = useState("");
   const canCreate =
     bridge.can(config.module, "create") &&
     (!["payments", "customerPayments"].includes(resource) ||
@@ -127,6 +135,17 @@ export function TradePage({
         leadId: params.get("leadId") || undefined,
       });
     if (params.get("new") === "1" && canCreate) setForm({});
+    if (params.get("documentId")) {
+      bridge
+        .request<Detail>(
+          "/trade/" +
+            resource +
+            "/" +
+            encodeURIComponent(params.get("documentId")!),
+        )
+        .then(setDetail)
+        .catch((e) => setError(errorMessage(e)));
+    }
     return () => {
       active.current = false;
     };
@@ -192,7 +211,13 @@ export function TradePage({
       if (active.current) setOpening("");
     }
   };
-  const act = async (row: TradeRecord, action: string) => {
+  const act = async (row: TradeRecord, action: string, reason?: string) => {
+    if (action === "close" && reason === undefined) {
+      setClosing(row);
+      setCloseReason("");
+      setError("");
+      return;
+    }
     if (action === "edit") {
       void open(row, true);
       return;
@@ -201,7 +226,8 @@ export function TradePage({
     actionBusy.current = true;
     setBusy(true);
     setError("");
-    const identity = String(row.id) + ":" + action + ":" + row.version;
+    const identity =
+      String(row.id) + ":" + action + ":" + row.version + ":" + (reason || "");
     let key = actionKeys.current.get(identity);
     if (!key) {
       key = keyFor(resource + "-" + action);
@@ -217,11 +243,16 @@ export function TradePage({
           action,
         {
           method: "POST",
-          body: JSON.stringify({ version: row.version, requestKey: key }),
+          body: JSON.stringify({
+            version: row.version,
+            requestKey: key,
+            ...(action === "close" ? { reason } : {}),
+          }),
         },
       );
       if (active.current) {
         if (detail?.record.id === row.id) setDetail(result);
+        setClosing(null);
         setReload((v) => v + 1);
         bridge.toast(actionLabels[action] + " completed");
       }
@@ -270,20 +301,31 @@ export function TradePage({
             Returns / Stock
           </a>
         )}
-      {row.actions?.map((action) => (
-        <button
-          key={action}
-          type="button"
-          className="btn-sm"
-          disabled={busy || !!opening}
-          onClick={() => void act(row, action)}
-        >
-          {action === "submit" &&
-          ["invoices", "customerInvoices"].includes(resource)
-            ? "Submit for Review"
-            : actionLabels[action] || "Edit"}
-        </button>
-      ))}
+      {row.actions
+        ?.filter(
+          (action) =>
+            action !== "close" ||
+            (detail?.record.id === row.id &&
+              detail.context.lines?.some((line) => line.remaining > 0) &&
+              detail.context.lines?.some(
+                (line) =>
+                  (line.fulfilled || line.receivedForInspection || 0) > 0,
+              )),
+        )
+        .map((action) => (
+          <button
+            key={action}
+            type="button"
+            className="btn-sm"
+            disabled={busy || !!opening}
+            onClick={() => void act(row, action)}
+          >
+            {action === "submit" &&
+            ["invoices", "customerInvoices"].includes(resource)
+              ? "Submit for Review"
+              : actionLabels[action] || "Edit"}
+          </button>
+        ))}
       {nextSteps(resource, row)
         .filter(
           (step) =>
@@ -298,7 +340,13 @@ export function TradePage({
             className="btn-sm trade-link"
             href={route(step.resource, step.sourceId)}
           >
-            {step.label}
+            {detail?.record.id === row.id &&
+            detail.context.lines?.some((line) => (line.returned || 0) > 0) &&
+            ["deliveries", "receipts"].includes(step.resource)
+              ? step.resource === "deliveries"
+                ? "Create Replacement Delivery"
+                : "Receive Replacement Goods"
+              : step.label}
           </a>
         ))}
     </>
@@ -533,7 +581,60 @@ export function TradePage({
           }}
         />
       )}
-      {detail && !form && (
+      {closing && (
+        <Dialog
+          title="Close Remaining Quantity"
+          busy={busy}
+          onClose={() => setClosing(null)}
+        >
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              void act(closing, "close", closeReason);
+            }}
+          >
+            <div className="modal-body credit-form">
+              <p>
+                This approves closure of the unfulfilled remainder and releases
+                its stock reservations. Existing invoices, credits, payments and
+                journals remain in place. This action cannot be reopened.
+              </p>
+              <label>
+                Closure reason
+                <textarea
+                  required
+                  maxLength={500}
+                  value={closeReason}
+                  onChange={(event) => setCloseReason(event.target.value)}
+                />
+              </label>
+              {error && (
+                <p role="alert" className="modern-error">
+                  {error}
+                </p>
+              )}
+            </div>
+            <div className="modal-foot">
+              <button
+                type="button"
+                className="btn-secondary"
+                disabled={busy}
+                onClick={() => setClosing(null)}
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="btn-primary"
+                disabled={busy || !closeReason.trim()}
+              >
+                Approve Closure
+              </button>
+            </div>
+          </form>
+        </Dialog>
+      )}
+      {detail && !form && !closing && (
         <Dialog
           title={config.singular + " " + str(detail.record[config.number])}
           busy={busy}
@@ -557,6 +658,9 @@ export function TradePage({
                 ["reservationStatus", "Stock Reservation"],
                 ["reservedQuantity", "Reserved Quantity"],
                 ["backorderReference", "Backorder"],
+                ["closedAt", "Remainder closed"],
+                ["closedByName", "Approved by"],
+                ["closeReason", "Closure reason"],
                 ["matchStatus", "Bill Control Check"],
               ]
                 .filter(([field]) => detail.record[field] !== undefined)
@@ -586,6 +690,13 @@ export function TradePage({
                   )
                   .join(" · ")}
               </p>
+            )}
+            {["orders", "salesOrders"].includes(resource) && (
+              <OrderProgress
+                context={detail.context}
+                bridge={bridge}
+                customer={resource === "salesOrders"}
+              />
             )}
             <DocumentLines lines={economicLines(detail.record)} />
             {detail.context.sourceLines && (

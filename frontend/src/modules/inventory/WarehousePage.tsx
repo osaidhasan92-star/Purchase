@@ -25,17 +25,21 @@ export function WarehousePage({ bridge }: { bridge: Bridge }) {
   ].includes(initial)
     ? initial
     : "locations";
+  const inspectionProduct =
+    new URLSearchParams(location.search).get("inspectProduct") || "";
+  const canInspect =
+    bridge.can("inventory", "create") && bridge.can("inventory", "approve");
   const [items, setItems] = useState<Row[]>([]),
     [total, setTotal] = useState(0),
     [page, setPage] = useState(1),
     [reload, setReload] = useState(0),
     [loading, setLoading] = useState(true),
     [error, setError] = useState(""),
-    [form, setForm] = useState(false),
-    [product, setProduct] = useState(""),
+    [form, setForm] = useState(!!inspectionProduct && canInspect),
+    [product, setProduct] = useState(inspectionProduct),
     [stock, setStock] = useState<Row | null>(null),
-    [source, setSource] = useState("Stock"),
-    [target, setTarget] = useState("Production"),
+    [source, setSource] = useState(inspectionProduct ? "Returns" : "Stock"),
+    [target, setTarget] = useState(inspectionProduct ? "Stock" : "Production"),
     [quantity, setQuantity] = useState(""),
     [date, setDate] = useState(today()),
     [reason, setReason] = useState(""),
@@ -144,6 +148,7 @@ export function WarehousePage({ bridge }: { bridge: Bridge }) {
           "Stock reserved",
           "Production reserved",
           "Stock available",
+          "Inspection",
         ]
       : area === "reservations"
         ? ["Order", "Line", "Product", "Required", "Reserved", "Action"]
@@ -225,6 +230,18 @@ export function WarehousePage({ bridge }: { bridge: Bridge }) {
                     <td>{String(r.reserved)}</td>
                     <td>{String(r.productionReserved)}</td>
                     <td>{String(r.available)}</td>
+                    <td>
+                      {canInspect && Number(r.locations?.Returns) > 0 && (
+                        <a
+                          href={
+                            "erp.html?view=warehouse&area=transfers&inspectProduct=" +
+                            encodeURIComponent(String(r.productId))
+                          }
+                        >
+                          Inspect / Restock
+                        </a>
+                      )}
+                    </td>
                   </>
                 ) : area === "reservations" ? (
                   <>
@@ -377,6 +394,14 @@ export function WarehousePage({ bridge }: { bridge: Bridge }) {
           onClose={() => setForm(false)}
         >
           <form className="modal-body credit-form" onSubmit={transfer}>
+            {source === "Returns" && (
+              <p>
+                Inspect returned goods before releasing them. Transfer only
+                approved usable quantities to Stock, and record your inspection
+                decision in the reason. Unusable goods remain in Returns for
+                separate disposition.
+              </p>
+            )}
             {error && (
               <p role="alert" className="modern-error">
                 {error}
@@ -388,6 +413,11 @@ export function WarehousePage({ bridge }: { bridge: Bridge }) {
               label="Stock Product"
               name="transferProduct"
               value={product}
+              pinned={
+                product && stock
+                  ? [{ id: product, name: String(stock.name || product) }]
+                  : []
+              }
               onSelect={(values) => setProduct(String(values[0]?.id || ""))}
               required
             />

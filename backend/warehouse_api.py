@@ -154,7 +154,7 @@ def stock_state(product_id):
 def reserve_order(state, order):
     from .trade_service import dispatched
 
-    cancelled = order.get("status") == "Cancelled"
+    cancelled = order.get("status") in ("Cancelled", "Closed")
     total = Decimal(0)
     demand = Decimal(0)
     for index, line in enumerate(order.get("items", [])):
@@ -215,6 +215,8 @@ def reserve_order(state, order):
 def dispatch_available(state, order, index):
     from .trade_service import dispatched
 
+    if order.get("fulfillmentClosed"):
+        return Decimal(0)
     line = order["items"][index]
     product = db.session.get(ERPProduct, str(line.get("productId")))
     remaining = max(
@@ -353,7 +355,7 @@ def backorders(state, key, order, origin=None):
                 status="Waiting",
             )
             db.session.add(row)
-        row.quantity = remaining
+        row.quantity = Decimal(0) if order.get("fulfillmentClosed") else remaining
         product = db.session.get(ERPProduct, str(line["productId"]))
         ready = (
             (
@@ -366,7 +368,7 @@ def backorders(state, key, order, origin=None):
         )
         row.status = (
             "Cancelled"
-            if order.get("status") == "Cancelled"
+            if order.get("status") in ("Cancelled", "Closed")
             else (
                 "Done"
                 if remaining == 0

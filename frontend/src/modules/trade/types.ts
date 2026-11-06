@@ -50,6 +50,14 @@ export interface OrderLineContext {
   productName: string;
   unit: string;
   ordered: number;
+  fulfilled?: number;
+  receivedForInspection?: number;
+  rejected?: number;
+  returned?: number;
+  netFulfilled?: number;
+  invoiced?: number;
+  credited?: number;
+  closedRemaining?: number;
   received: number;
   remaining: number;
   dispatchAvailable?: number;
@@ -63,6 +71,15 @@ export interface OrderLineContext {
   discountPercent: number;
 }
 export interface TradeContext {
+  financialQuantitiesAvailable?: boolean;
+  creditQuantitiesAvailable?: boolean;
+  relatedDocuments?: {
+    resource: string;
+    id: string | number;
+    number: string;
+    status: string;
+    kind?: string;
+  }[];
   invoiceLimits?: {
     lineIndex: number;
     billingPolicy: string;
@@ -186,7 +203,7 @@ export const configs: Record<Resource, ResourceConfig> = {
       resource: "orders",
       field: "poId",
       label: "Purchase Order",
-      status: "Approved|Sent to Vendor|Partially Received|Received",
+      status: "Approved|Sent to Vendor|Partially Received|Received|Closed",
     },
   },
   payments: {
@@ -255,7 +272,7 @@ export const configs: Record<Resource, ResourceConfig> = {
       resource: "salesOrders",
       field: "orderId",
       label: "Sales Order",
-      status: "Confirmed|Partially Delivered|Delivered",
+      status: "Confirmed|Partially Delivered|Delivered|Closed",
     },
   },
   customerPayments: {
@@ -275,6 +292,7 @@ export const configs: Record<Resource, ResourceConfig> = {
   },
 };
 export const actionLabels: Record<string, string> = {
+  close: "Close Remaining Quantity",
   submit: "Submit for Approval",
   approve: "Approve",
   post: "Post Document",

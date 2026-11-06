@@ -45,3 +45,15 @@ Inventory → Warehouse Operations → Locations & Availability displays quantit
 Commands participate in the existing transaction and request-key/version controls. Reservations share product locks with native stock and manufacturing writers; internal warehouse commands use the compatibility serialization gate. Locations cannot go negative. Source order limits, pending delivery quantities and reservations are all enforced by the server. Products with stock history or open stock reservation obligations cannot change product type.
 
 `backend/test_warehouse_api.py` covers competing and simultaneous confirmations, reservation release/resume, shared-source limits, backorder closure, return quarantine, internal transfer value/journal conservation, stale/duplicate requests, read/write permissions, manufacturing staging, product type protection and migration preservation. `tests/warehouse-browser.cjs` covers real transfer and backorder fulfillment actions and desktop/mobile forms. PostgreSQL concurrency/load verification is still required in the deployment environment; local SQLite tests are not a capacity claim.
+
+
+## Inspection and closed order remainders
+
+Location rows with returned stock expose Inspect / Restock to authorized Inventory
+creators/approvers. The transfer opens with the product and Returns → Stock selected;
+record the actual inspection decision as its immutable reason. Only usable quantities
+should be released; this is an internal transfer rather than a separate quality
+inspection register. Sales/Purchase order details link the related returns and credits.
+Approved Close Remaining Quantity releases Sales reservations and cancels open
+backorders without rewriting original demand, stock movements or journals. Later
+returns leave that order Closed. See [Order returns and closure](ORDER_RETURNS_AND_CLOSURE.md).

@@ -45,3 +45,13 @@ The pre-existing vendor bill status `Approved` denotes a posted payable. Custome
 `backend/test_credit_api.py` covers customer and vendor partial returns, original/return quantity caps, unpaid-balance application, paid refunds, same-partner applications, wrong-partner rejection, immutable settlement limits, retry idempotency, review permissions, stale versions, draft cancellation, period locks, services, replacement quantities and vendor average-cost variance.
 
 `tests/credits-browser.cjs` exercises the real customer return/draft/review/post/refund flow and desktop/mobile forms. It runs as part of `npm run test:browser`. Database-specific concurrency checks require the existing PostgreSQL test setup; SQLite results do not establish PostgreSQL load capacity.
+
+
+## Connected order workflow
+
+Order details now connect the original fulfillment documents, stock-return history,
+invoice/bill credit creation and existing credit application/refund screens. For
+inspection/restock, replacement and approved closure of the remaining quantity, see
+[Order returns and closure](ORDER_RETURNS_AND_CLOSURE.md). Closing a remainder does
+not cancel financial documents or issue a refund. Further returns do not reopen a
+closed order's fulfillment demand.
