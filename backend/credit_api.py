@@ -720,6 +720,8 @@ def refresh_return_order(original):
     row = next((v for v in context.state[parts[0]] if str(v["id"]) == parts[1]), None)
     if row:
         recompute(context.state, parts[0], row)
+        from .warehouse_api import refresh
+        refresh(context.state,parts[0],row)
         context.persist()
         db.session.execute(
             update(Document)

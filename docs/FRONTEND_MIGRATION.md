@@ -196,3 +196,9 @@ Invoice/bill forms show the snapshot policy, unallocated quantity and eligible q
 An explicit ordered purchase policy permits posting and paying before receipt. The invoice first debits receipt accrual for stock goods, and the later receipt clears it. The default received policy continues to require accepted receipts; services may use ordered billing without a physical stock receipt. Bill Control Check therefore reflects the configured policy rather than implying that every ordered-policy bill passed a physical three-way match.
 
 Validation: `backend/test_billing_policies.py` covers defaults, pre-delivery/receipt rejection, partial quantity caps, competing draft reservations, post-time rechecking after returns, product-edit snapshot preservation, ordered overrides, services, forged/invalid policy values and mixed-policy purchase lines.
+
+### Warehouse operations
+
+Inventory now includes Warehouse Operations with Locations & Availability, Reservations, Backorders and Internal Transfers. Sales orders expose Check Availability and Release Reservation; delivery forms use their current dispatchable quantities, and order/receipt/delivery details show reservation/backorder references. Physical stock updates enforce location and reservation limits; manufacturing availability excludes reserved Stock and quarantined Returns.
+
+**Migration required:** stop the app, activate its environment and run `python -m flask --app backend.app migrate-storage`, then restart and hard-refresh. See [WAREHOUSE_OPERATIONS.md](WAREHOUSE_OPERATIONS.md) for the one-warehouse defaults, remaining manual steps and control boundaries.

@@ -119,6 +119,11 @@ export function LineEditor({
                   {line.remaining !== undefined
                     ? " · Remaining: " + str(line.remaining)
                     : ""}
+                  {delivery && line.dispatchAvailable !== undefined
+                    ? " · Available to dispatch: " +
+                      str(line.dispatchAvailable) +
+                      " (check availability on the sales order)"
+                    : ""}
                   {invoice && line.billingPolicy
                     ? " · Policy: " + String(line.billingPolicy) + " quantities"
                     : ""}

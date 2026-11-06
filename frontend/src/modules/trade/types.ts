@@ -52,6 +52,8 @@ export interface OrderLineContext {
   ordered: number;
   received: number;
   remaining: number;
+  dispatchAvailable?: number;
+  reserved?: number;
   invoiceRemaining: number;
   billableRemaining: number;
   billingPolicy: string;
@@ -276,6 +278,8 @@ export const actionLabels: Record<string, string> = {
   submit: "Submit for Approval",
   approve: "Approve",
   post: "Post Document",
+  reserve: "Check Availability",
+  unreserve: "Release Reservation",
   reset: "Return to Draft",
   reject: "Reject",
   send: "Mark Sent",

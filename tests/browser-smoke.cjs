@@ -177,6 +177,7 @@ const assert = require("node:assert/strict");
     await require('./accounting-dashboard-browser.cjs')(page,base);
     await require('./credits-browser.cjs')(page,base);
     await require('./billing-policy-browser.cjs')(page,base);
+    await require('./warehouse-browser.cjs')(page,base);
     for (const view of [
       "sales",
       "purchase-dashboard",

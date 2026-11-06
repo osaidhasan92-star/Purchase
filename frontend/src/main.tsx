@@ -1,3 +1,4 @@
+import { WarehousePage } from "./modules/inventory/WarehousePage";
 import { CreditsPage } from "./modules/finance/CreditsPage";
 import { Component, type ErrorInfo, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -87,7 +88,12 @@ window.ModernWorkspace = {
                 view={page.productionView}
                 bridge={bridge}
               />
-            ) : page.native === "inventory" && page.inventoryView ? (
+            ) : page.native === "inventory" &&
+              page.inventoryView === "warehouse" ? (
+              <WarehousePage key={location.search} bridge={bridge} />
+            ) : page.native === "inventory" &&
+              page.inventoryView &&
+              page.inventoryView !== "warehouse" ? (
               <InventoryPage
                 key={page.inventoryView}
                 view={page.inventoryView}

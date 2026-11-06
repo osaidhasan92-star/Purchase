@@ -32,7 +32,7 @@ export interface ShellPage {
   adminView?: "users" | "activities" | "data";
   expenseView?: "expenses" | "expense-claims";
   productionView?: import("./modules/production/ProductionPage").ProductionView;
-  inventoryView?: "inventory" | "stock-moves";
+  inventoryView?: "inventory" | "stock-moves" | "warehouse";
   financeView?: import("./modules/finance/types").FinanceView;
   hrResource?: import("./modules/hr/config").Resource;
   hrReports?: boolean;

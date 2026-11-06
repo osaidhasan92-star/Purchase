@@ -879,6 +879,8 @@ def create_app(config=None):
         initialize()
         from .workflow_keys import initialize as initialize_workflow_keys
         initialize_workflow_keys()
+        from .warehouse_api import initialize_warehouse
+        initialize_warehouse()
         db.session.commit()
         click.echo('Database initialized; existing records were preserved.')
 
@@ -900,6 +902,8 @@ def create_app(config=None):
             migrate_hr(db.session.get(Document, 'hr'))
             from .workflow_keys import initialize as initialize_workflow_keys
             initialize_workflow_keys()
+            from .warehouse_api import initialize_warehouse
+            initialize_warehouse()
         except (ValueError,ArithmeticError) as error:
             db.session.rollback()
             raise click.ClickException(str(error)) from error
@@ -935,6 +939,8 @@ def create_app(config=None):
     app.register_blueprint(hr_blueprint)
     from .finance_api import bp as finance_blueprint
     app.register_blueprint(finance_blueprint)
+    from .warehouse_api import bp as warehouse_blueprint
+    app.register_blueprint(warehouse_blueprint)
     from .credit_api import bp as credit_blueprint
     app.register_blueprint(credit_blueprint)
     from .inventory_api import bp as inventory_blueprint

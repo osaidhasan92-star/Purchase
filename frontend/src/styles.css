@@ -1991,3 +1991,24 @@
 .credit-dialog-body > p {
   overflow-wrap: anywhere;
 }
+
+.warehouse-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 16px 0;
+}
+.warehouse-tabs [aria-current="page"] {
+  background: #eef0f8;
+  color: #253b82;
+}
+[data-native-warehouse] .section-head {
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.warehouse-origin {
+  display: block;
+  margin-top: 5px;
+  font-size: 11px;
+}

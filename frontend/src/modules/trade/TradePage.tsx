@@ -554,6 +554,9 @@ export function TradePage({
                 ["deliveryStatus", "Delivery"],
                 ["invoiceStatus", "Invoicing"],
                 ["paymentStatus", "Payment"],
+                ["reservationStatus", "Stock Reservation"],
+                ["reservedQuantity", "Reserved Quantity"],
+                ["backorderReference", "Backorder"],
                 ["matchStatus", "Bill Control Check"],
               ]
                 .filter(([field]) => detail.record[field] !== undefined)

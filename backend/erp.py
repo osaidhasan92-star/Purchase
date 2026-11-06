@@ -319,8 +319,10 @@ def sync_products(state):
             db.session.add(product)
             db.session.flush()
             db.session.add(StockBalance(product_id=pid, quantity=0, value=0))
-        elif product.kind != kind and db.session.scalar(select(StockMove.id).where(StockMove.product_id == pid).limit(1)):
-            raise InvalidBusinessState('A product with stock history cannot change product type')
+        elif product.kind != kind:
+            from .warehouse_api import Reservation
+            if db.session.scalar(select(StockMove.id).where(StockMove.product_id == pid).limit(1)) or db.session.scalar(select(Reservation.order_id).where(Reservation.product_id==pid,Reservation.required>0).limit(1)):
+                raise InvalidBusinessState('A product with stock history or open stock reservations cannot change product type')
         product.name, product.sku, product.unit, product.kind = str(item.get('name', 'Product'))[:160], str(item.get('sku', ''))[:80], str(item.get('unit', 'Each'))[:40], kind
     db.session.flush()
 
@@ -347,6 +349,8 @@ def stock_move(product_id, quantity, source, kind, counterpart, unit_cost=None, 
         value = dec(total_value) if total_value is not None else dec(quantity * dec(unit_cost or 0, UNIT))
         if value < 0:
             raise InvalidBusinessState('Stock value cannot be negative')
+    from .warehouse_api import change_locations
+    change_locations(product.id,quantity,source,kind)
     entry = journal_pair('stock:' + source, f'{kind}: {product.name}',
                          '1200' if quantity > 0 else counterpart,
                          counterpart if quantity > 0 else '1200', abs(value), value_date)

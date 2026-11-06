@@ -28,7 +28,7 @@ document.addEventListener('click',event=>{
 if(location.pathname.endsWith('/erp.html')){
  const url=new URL(location.href),view=url.searchParams.get('view')||'overview';
  if(view==='dashboard')url.searchParams.set('view','overview');
- if(!Object.hasOwn(WORKSPACE_ROUTES,view)&&!['overview', 'credits', 'accounting', 'accounts', 'journals', 'reports', 'aged', 'bank', 'inventory', 'manufacturing', 'boms', 'expenses', 'stock-moves', 'production-orders', 'expense-claims'].includes(view))url.searchParams.set('view','overview');
+ if(!Object.hasOwn(WORKSPACE_ROUTES,view)&&!['overview', 'warehouse', 'credits', 'accounting', 'accounts', 'journals', 'reports', 'aged', 'bank', 'inventory', 'manufacturing', 'boms', 'expenses', 'stock-moves', 'production-orders', 'expense-claims'].includes(view))url.searchParams.set('view','overview');
  else if(!url.searchParams.has('view'))url.searchParams.set('view','overview');
  if(url.href!==location.href)history.replaceState(null,'',url);
 }
@@ -60,7 +60,7 @@ const NATIVE_HR_ROUTES={
 
 function nativeFinanceView(){const view=new URLSearchParams(location.search).get('view');return workspacePage()==='erp.html'&&['accounting','accounts','journals','reports','aged','bank','credits'].includes(view)?view:null;}
 
-function nativeInventoryView(){const view=new URLSearchParams(location.search).get('view');return workspacePage()==='erp.html'&&['inventory','stock-moves'].includes(view)?view:null;}
+function nativeInventoryView(){const view=new URLSearchParams(location.search).get('view');return workspacePage()==='erp.html'&&['inventory','stock-moves','warehouse'].includes(view)?view:null;}
 
 function nativeProductionView(){const view=new URLSearchParams(location.search).get('view');return workspacePage()==='erp.html'&&['manufacturing','boms','production-orders'].includes(view)?view:null;}
 

@@ -130,7 +130,9 @@ def order_record(o):
     for line, product, balance in rows:
         qty = balance.quantity if balance else Decimal(0)
         value = balance.value if balance else Decimal(0)
-        enough = qty >= line.quantity
+        from .warehouse_api import available,quantities
+        usable=available(product.id)+quantities(product.id)["Production"]
+        enough = usable >= line.quantity
         ready = ready and enough
         with localcontext() as context:
             context.prec = 60
@@ -149,13 +151,13 @@ def order_record(o):
                 sku=product.sku,
                 unit=product.unit,
                 quantity=str(line.quantity),
-                available=str(qty),
-                shortage=str(max(Decimal(0), line.quantity - qty)),
+                available=str(usable),
+                shortage=str(max(Decimal(0), line.quantity - usable)),
                 estimatedCost=str(cost),
             )
         )
         snapshot.append(
-            dict(productId=line.product_id, quantity=str(qty), value=str(value))
+            dict(productId=line.product_id, quantity=str(qty), usable=str(usable), value=str(value))
         )
     value = dict(
         id=o.id,

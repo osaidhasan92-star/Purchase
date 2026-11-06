@@ -296,6 +296,8 @@ def recheck_invoice_policy(state,key,row):
 
 
 def add(state, key, values):
+    from .warehouse_api import annotate_backorder
+    annotate_backorder(key,values)
     if key in ("orders","salesOrders"):
         values["items"]=[{**line,**product_policies(find(state,"products",line["productId"]))} for line in values["items"]]
     identity = int(time.time() * 1000) * 1000 + secrets.randbelow(1000)
@@ -980,6 +982,9 @@ def create(state, key, data):
                 "This order is not open for "
                 + ("delivery" if customer else "receiving")
             )
+        if customer:
+            from .warehouse_api import reserve_order
+            reserve_order(state,source)
         entered = quantities(data.get("items"))
         seen = set()
         items = []
@@ -1018,8 +1023,9 @@ def create(state, key, data):
                 qty = number(
                     value.get("deliveredQty", 0), "Delivery quantity", False, QTY
                 )
-                if qty > remain:
-                    problem("Delivery exceeds remaining unreserved order quantity")
+                from .warehouse_api import dispatch_available
+                if qty > min(remain,dispatch_available(state,source,index)):
+                    problem("Delivery exceeds reserved stock or remaining order quantity; check availability")
                 items.append(
                     dict(
                         lineIndex=index,
@@ -1243,6 +1249,11 @@ TRANSITIONS = {
         "send": ({"Approved"}, "Sent to Vendor", "edit"),
         "cancel": ({"Draft", "Pending Approval", "Approved"}, "Cancelled", "edit"),
     },
+    "salesOrders": {
+        "reserve": ({"Confirmed","Partially Delivered"}, "Confirmed", "edit"),
+        "unreserve": ({"Confirmed","Partially Delivered"}, "Confirmed", "edit"),
+        "cancel": ({"Confirmed"}, "Cancelled", "edit"),
+    },
     "deliveries": {
         "deliver": ({"Pending"}, "Delivered", "edit"),
         "cancel": ({"Pending"}, "Cancelled", "edit"),
@@ -1341,6 +1352,14 @@ def act(state, key, row, action, data):
         find(state, "rfqs", row["rfqId"])["status"] = "Response Received"
         row["status"] = "Cleared"
         return
+    if key=='salesOrders' and action in ('reserve','unreserve'):
+        if row.get('status') not in ('Confirmed','Partially Delivered'):problem('Order is not open',409)
+        from .warehouse_api import reserve_order
+        row["reservationPaused"]=action=="unreserve"
+        reserve_order(state,row);row['availabilityCheckedAt']=utcnow();return
+    if key=='salesOrders' and action=='cancel':
+        if any(str(d.get('orderId'))==str(row['id']) and d.get('status')!='Cancelled' for k in ('deliveries','customerInvoices') for d in state.get(k,[])):
+            problem('Cancel pending deliveries/drafts first; fulfilled or posted orders cannot cancel')
     origins, target, _ = TRANSITIONS[key][action]
     if row.get("status") not in origins:
         problem("Action is not available in the current document status", 409)
@@ -1575,6 +1594,8 @@ def execute(key, identity=None, action=None):
     # Existing immutable stock/accounting services participate in this same transaction.
     context.persist()
     sync_business(original, state, "app")
+    from .warehouse_api import refresh_persist
+    refresh_persist(key,row)
     statement = update(Document).where(Document.name == "app")
     if locked_context:
         statement = statement.values(revision=Document.revision + 1)

@@ -119,6 +119,7 @@ def output(key, row, detail=False):
 def context(key, row, excluded_invoice=None):
     """Return this document's operational quantities, never an entire register."""
     result = {}
+    from .warehouse_api import line_reservation,dispatch_available
     if key in ("orders", "salesOrders"):
         # Only this workflow graph is needed for parent form quantities.
         model = store.MODELS
@@ -160,6 +161,8 @@ def context(key, row, excluded_invoice=None):
                     productName=item.get("productName", ""),
                     unit=item.get("unit", "Each"),
                     ordered=float(quantity),
+                    reserved=float(line_reservation(value["id"],index)) if key=="salesOrders" else 0,
+                    dispatchAvailable=float(dispatch_available(state,value,index)) if key=="salesOrders" else float(max(Decimal(0),quantity-reserved)),
                     received=float(received_qty),
                     remaining=float(max(Decimal(0), quantity - reserved)),
                     invoiceRemaining=float(max(Decimal(0), quantity - billed)),

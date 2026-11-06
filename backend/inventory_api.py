@@ -53,7 +53,10 @@ def read(fn):
 def product_record(p, b):
     qty = b.quantity if b else Decimal(0)
     value = b.value if b else Decimal(0)
+    from .warehouse_api import stock_state
+    warehouse=stock_state(p.id)
     result = dict(
+        warehouseVersion=warehouse["version"],reserved=warehouse["reserved"],available=warehouse["available"],locations=warehouse["locations"],
         id=p.id,
         name=p.name,
         sku=p.sku,

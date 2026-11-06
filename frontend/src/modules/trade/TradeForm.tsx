@@ -307,7 +307,10 @@ export function TradeForm({
             receivedQty: line.remaining,
             acceptedQty: line.remaining,
             rejectedQty: 0,
-            deliveredQty: line.remaining,
+            deliveredQty: Math.min(
+              line.remaining,
+              line.dispatchAvailable ?? line.remaining,
+            ),
             inspection: "Accepted",
           })),
         );
