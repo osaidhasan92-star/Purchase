@@ -1,0 +1,158 @@
+# Simulation results — current migration coverage
+
+The original 26 October baseline is retained below. The Sales/Purchasing phase adds
+native React form execution in Chromium and canonical SQL header/line storage.
+[Phase 2](TRADE_MIGRATION.md) describes current scope and upgrade instructions.
+
+Current checks include 128 backend scenarios, 50 shared screen/view renders and real
+browser flows: request → RFQ → comparison/award → PO → two receipts/bills → partial
+and full payments; CRM lead → draft edit/print → approval/acceptance → order → two
+deliveries/invoices → partial and full collections. Backend cases independently
+check quantities, PKR totals, split tax rounding, discounted GRNI clearing, source
+foreign keys, migration of posted data without reposting, private Sales pagination,
+version conflicts and command idempotency. Native routes are checked for compact
+network access without business/HR aggregate loading or saving.
+
+Current Expenses coverage includes protected PDF upload, owner/direct-manager/Finance
+SQL scope, versioned approval/reimbursement, cash payment, rejection and mobile forms.
+See [phase 7](EXPENSES_MIGRATION.md).
+
+Administration coverage adds account creation/edit/reset/activation, manager cycles, role
+normalization/session revocation, company preservation, own-audit SQL scope and native
+forms/import-export. See [phase 8](ADMINISTRATION_MIGRATION.md).
+
+Overview and remaining CRM register coverage includes exact historical migration/rollback,
+quote/lead privacy, non-posting tracking statuses, safe seed eligibility and native browser
+forms. See [phase 9](OVERVIEW_CRM_MIGRATION.md).
+
+Query-local workflow verification now includes aggregate-projection barriers, 1,000
+unrelated trade rows plus 1,000 employees, concurrent payroll, derived index integrity
+and full SQLite/PostgreSQL backup/restore drills. See [phase 10](QUERY_LOCAL_HARDENING.md).
+
+## Earlier baseline — 26 October 2026
+
+Tested branch: `codex/database-backend`. Tests use isolated, temporary SQLite databases;
+no client or production data is used or changed.
+
+## Executed coverage
+
+- 29 backend tests: authentication, CSRF, permissions, session revocation, PDF access,
+  version conflicts, persistence across app instances, posting validation and ERP scenarios.
+- 48 screen/view renders using jsdom against the real Flask HTTP backend, with actual
+  form submission and action handlers. Checks cover the single workspace URL, active tabs,
+  shared customer/product context, and restricted roles.
+- CRM lead handoff to sales; quotation approval, acceptance, order, delivery, invoice,
+  partial customer collection; purchasing with two partial receipts, bills and payments.
+- BOM manufacturing: draft, confirm, start, complete; component consumption, finished
+  goods cost, conversion accrual and WIP clearance. Insufficient components roll back.
+- Expense submission, approval and bank reimbursement; payroll approval and bank
+  payment automatically post journals.
+- Manpower request approval, candidate record creation, employee creation, attendance,
+  leave approval and separation. Duplicate attendance and overlapping leave are blocked.
+  A separate backend scenario verifies separation revokes a linked login.
+- Manual journal balance rejection, draft/post/reverse, cash/bank transfer, statement
+  matching and period-lock enforcement.
+- Customer/vendor stock returns, duplicate return idempotency and excessive-return
+  rejection; negative stock, overbilling, overpayments and posted document edits rejected.
+- Admin-only company profile in the dropdown, including opening it outside the overview.
+
+## Combined business-day scenario
+
+A single fresh company is seeded with cash PKR 25,000, bank PKR 250,000,
+100 panels at PKR 500 and 200 fastener packs at PKR 50.
+
+The simulation receives two additional panels for PKR 1,000 and pays the vendor;
+delivers one panel and invoices PKR 1,500; collects PKR 600 and then PKR 900;
+manufactures two kits using four panels, eight fastener packs and PKR 200 conversion;
+pays PKR 1,250 travel expense; approves PKR 55,000 gross payroll with PKR 2,000
+deductions and pays PKR 53,000 net; then transfers PKR 5,000 bank to cash and
+matches the bank statement line.
+
+| Final check | Expected and actual |
+| --- | ---: |
+| Panels on hand | 97 |
+| Fastener packs on hand | 192 |
+| Finished kits on hand | 2 |
+| Total inventory value | PKR 60,700 |
+| Cash | PKR 31,500 |
+| Bank | PKR 189,750 |
+| Cash + bank | PKR 221,250 |
+| Customer receivables | PKR 0 |
+| Vendor accounts payable | PKR 0 |
+| Work in progress | PKR 0 |
+| Profit / (loss) | PKR (55,250) |
+| Balance sheet difference | PKR 0 |
+
+Every journal's debits equal credits. The stock valuation matches inventory account 1200.
+A new authenticated session reads the same final reports. Deductions and conversion
+accrual remain liabilities; zero vendor payable does not mean all liabilities are zero.
+
+## Reproduce
+
+From the repository root, install backend requirements and pytest, then run:
+
+```text
+python -m pytest backend -q
+npm ci
+npm run test:dom
+```
+
+`test_complete_demo_business_day` and `test_customer_and_vendor_stock_returns` in
+`backend/test_demo_simulation.py` retain the new scenarios for subsequent CI runs.
+
+## Scope and remaining limits
+
+The earlier baseline below used API/DOM execution. Current phase checks additionally
+exercise Chromium native forms and print layouts, including responsive behavior.
+They do not establish production load or deployment acceptance. PostgreSQL is covered
+by the repository CI job; local backend runs use SQLite.
+
+Recruitment stages are now server actions. Create an employee and select an offered
+candidate to mark the candidate Hired atomically; direct employee creation is also supported. Stock returns update physical stock and
+related cost postings; commercial refunds/credit notes are separate. Separation records
+store final-settlement amounts but do not provide a complete final-settlement accounting
+workflow. Attendance and leave do not automatically calculate payroll deductions.
+Pakistan statutory payroll/tax filing, advanced manufacturing planning and full Odoo
+feature parity remain outside this demo. Passing these tests establishes the executed
+scenarios, not every possible user action or production readiness.
+
+
+## HR migration phase
+
+Native HR adds 10 backend scenarios for journals, immutable approvals, idempotency,
+versions, validation/overlap, SQL scope, atomic account creation, session revocation,
+offboarding rollback, recruitment, migration and safe CSV export. The 48-view DOM
+suite now checks native HR resources/read models. Chromium exercises actual HR
+forms/actions, duplicate attendance errors, payroll approval/payment, payslips,
+account creation, separation and mobile dialogs. See [HR phase scope](HR_MIGRATION.md).
+
+
+## Accounting and Finance migration phase
+
+Eleven native backend scenarios independently verify balanced journals, draft edit/post/
+reverse, report equations, SQL pagination/no aggregate projection, permissions, versions/
+idempotency, partial AR matching, bank statement matching, period locks, safe CSV and
+upgrade without reposting. The 48-view DOM suite adds native finance resource/read-model
+simulations. Chromium exercises actual accounts, journals, transfers, statement and AR
+matching, reports, locks, print and mobile forms. See [Finance phase](FINANCE_MIGRATION.md).
+
+
+## Inventory migration phase
+
+Seven native stock scenarios cover adjustment/scrap ledger tie-outs, negative stock,
+versions/idempotency, partial vendor/customer returns and exact cents, company access,
+SQL reads/writes without aggregate projection, paging/export and upgrade preservation.
+The shared DOM suite adds native inventory simulations. Chromium exercises real stock
+forms, source returns, insufficient-stock errors, movement details/export and mobile
+layouts. See [Inventory scope and upgrade](INVENTORY_MIGRATION.md).
+
+
+## Manufacturing migration phase
+
+Nine native production scenarios independently verify material/output cost, WIP and
+conversion accrual, snapshot preservation after BoM edits, versions/idempotency,
+shortage/period-lock rollback, permissions, SQL paging/aggregate avoidance, print
+escaping, large shortage estimates and upgrade without reposting. The 48-view DOM
+suite now uses native production resources/read models. Chromium covers actual BoM
+create/edit, source handoff, order actions, shortage errors, cancellation, print and
+mobile layouts. See [Manufacturing scope and upgrade](MANUFACTURING_MIGRATION.md).
