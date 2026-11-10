@@ -131,7 +131,7 @@ async function main() {
     'erp:overview','erp:approvals','erp:accounting','erp:accounts','erp:journals','erp:reports','erp:aged','erp:bank','erp:inventory','erp:warehouse','erp:stock-moves','erp:manufacturing','erp:production-orders','erp:boms','erp:expenses','erp:expense-claims'];
   for (const name of names) {(await page(name)).window.close();}
 
-  // Workflow links open the native form and leave saving to that form.
+  // Existing direct routes still open their native forms.
   for (const route of [
     'rfqs&new=1', 'sales-orders&new=1', 'vendors&new=1', 'customers&new=1',
     'expense-claims&new=1', 'hr-payroll&new=1', 'boms&new=1',
@@ -165,35 +165,139 @@ async function main() {
     }
     return request(path, options);
   };
-  const dispatchChange = (element, value) => {
-    element.value = value;
-    element.dispatchEvent(new assistantPage.window.Event('change'));
-  };
+  const catalogue = (await request('/assistant/status')).processes;
+  assert.deepEqual([...assistantDoc.querySelector('[data-process]').options].slice(1).map(option => option.value),
+    catalogue.map(process => process.id), 'Each available assistant workflow needs a chat questionnaire');
+  const create = (path, body) => request(path, {
+    method: 'POST', body: JSON.stringify({...body, requestKey: 'assistant-smoke-' + Math.random().toString(36).slice(2)}),
+  });
+  const product = (await create('/products', {name: 'Chat test product', sku: 'CHAT-ERP', rate: 25})).record;
+  const vendor = (await create('/vendors', {name: 'Chat test vendor'})).record;
+  let purchase = (await create('/trade/requests', {
+    department: 'Chat smoke test', items: [{productId: product.id, quantity: 2, rate: 25}],
+  })).record;
+  for (const action of ['submit', 'approve']) {
+    purchase = (await create('/trade/requests/' + purchase.id + '/actions/' + action, {version: purchase.version})).record;
+  }
   const composer = assistantDoc.querySelector('[data-chat]');
-  const send = text => {
+  const send = async text => {
     composer.elements.question.value = text;
     composer.dispatchEvent(new assistantPage.window.Event('submit', {cancelable: true}));
+    await waitFor(() => !composer.querySelector('button').disabled, 'Chat composer remained disabled');
   };
-  send('RFQ banani hai');
-  await waitFor(() => assistantDoc.querySelector('[data-open-process]'), 'Typed RFQ workflow did not load');
-  assert.match(assistantDoc.querySelector('.erp-ai-message--user').textContent, /RFQ banani hai/);
-  assert.equal(new URL(assistantDoc.querySelector('[data-open-process]').href).search, '?view=rfqs&new=1');
-  await waitFor(() => !composer.querySelector('button').disabled, 'Chat composer remained disabled');
-  send('Show pending approvals');
-  const reviewList = assistantDoc.querySelector('[data-review-list]');
-  await waitFor(() => reviewList.options.length === 2, 'Eligible approval did not load');
-  dispatchChange(reviewList, '21');
-  assert.match(assistantDoc.querySelector('[data-preview]').textContent, /PKR 50.00/);
+  const latest = () => [...assistantDoc.querySelectorAll('.erp-ai-message--assistant')].at(-1).textContent;
+  await send('RFQ banani hai');
+  assert.match(latest(), /Approved purchase request/);
+  await send(purchase.requestNo);
+  assert.match(latest(), new RegExp(purchase.requestNo));
+  await send('1');
+  assert.match(latest(), /How many vendor/);
+  await send('1');
+  await send(vendor.name);
+  assert.match(latest(), /Chat test vendor/);
+  await send('1');
+  await send('2027-02-30');
+  assert.match(latest(), /valid date/);
+  await send('2099-12-31');
+  await send('Skip');
+  assert.match(assistantDoc.querySelector('[data-workflow-review]').textContent, /Chat test vendor/);
+  assert.equal(assistantDoc.querySelector('[data-open-process], #workspace-root [role="dialog"]'), null);
+  assert.equal((await request('/trade/rfqs')).total, 0);
+  await send('Confirm');
+  assert.match(latest(), /Saved in ERP/);
+  assert.equal((await request('/trade/rfqs')).total, 1);
+  await send('Confirm');
+  assert.equal((await request('/trade/rfqs')).total, 1);
+
+  await send('Send RFQ');
+  assert.match(latest(), /Draft RFQ/);
+  await send('List');
+  await send('1');
+  assert.match(latest(), /Confirm to submit/);
+  assert.equal((await request('/trade/rfqs')).items[0].status, 'Draft');
+  await send('Confirm');
+  assert.equal((await request('/trade/rfqs')).items[0].status, 'Sent');
+
+  await send('Record supplier quotation');
+  await send('List');
+  await send('1');
+  assert.match(latest(), /Chat test vendor/);
+  await send('1');
+  await send('Today');
+  await send('2099-12-31');
+  await send('Skip');
+  await send('Skip');
+  assert.match(latest(), /Chat test product \(2\).*Vendor unit rate/);
+  await send('30');
+  await send('Skip');
+  await send('Skip');
+  await send('Skip');
+  assert.match(latest(), /Confirm to submit/);
+  await send('Confirm');
+  assert.equal((await request('/trade/quotations')).items[0].total, 60);
+
+  await send('Create expense claim');
+  await send('Test cancelled draft');
+  await send('Cancel');
+  assert.match(latest(), /Draft cancelled/);
+  assert.equal((await request('/expenses/claims')).total, 0);
+
+  // The standard transport retains the assistant on the same page on a 202.
+  const originalFetch = assistantPage.window.fetch;
+  assistantPage.window.fetch = (url, options) => {
+    if (url === '/api/expenses/commands/create') {
+      return Promise.resolve(new Response(JSON.stringify({
+        approvalPending: true, approval: {id: 55}, message: 'Submitted for independent approval.',
+      }), {status: 202}));
+    }
+    return originalFetch(url, options);
+  };
+  await send('Create expense claim');
+  await send('Test queued action');
+  await send('Today');
+  await send('List');
+  await send('1');
+  await send('25');
+  await send('0');
+  assert.match(latest(), /Confirm to submit/);
+  await send('Confirm');
+  assert.match(latest(), /Submitted for independent approval.*Approval #55/s);
+  assert.equal(assistantPage.window.location.search, '?view=overview');
+  assistantPage.window.fetch = originalFetch;
+
+  await send('Show pending approvals');
+  await send('List');
+  assert.match(latest(), /Expense A/);
+  assert.doesNotMatch(latest(), /Expense B/);
+  await send('1');
+  await send('Approve');
+  await send('Verified receipt');
+  assert.match(latest(), /Confirm to submit/);
   assert.equal(approvalCalls.length, 0);
-  const decisionForm = assistantDoc.querySelector('[data-decision]');
-  decisionForm.elements.decision.value = 'approve';
-  decisionForm.elements.reason.value = 'Verified receipt';
-  decisionForm.dispatchEvent(new assistantPage.window.Event('submit', {cancelable: true}));
-  await waitFor(() => assistantDoc.querySelector('[data-review-status]').textContent === 'Approved and executed in ERP.',
-    'Approval confirmation did not complete');
+  await send('Confirm');
   assert.equal(approvalCalls.length, 1);
   assert.equal(approvalCalls[0].path, '/approvals/requests/21/approve');
   assert.deepEqual(JSON.parse(approvalCalls[0].options.body), {version: 'v21', reason: 'Verified receipt'});
+  assert.equal(approvalCalls[0].options.keepApprovalInChat, true);
+  const customer = (await create('/customers', {name: 'Chat order customer'})).customer;
+  const service = (await create('/products', {name: 'Chat order service', productType: 'service', unit: 'Service'})).record;
+  let quotation = (await create('/trade/salesQuotations', {
+    customerId: customer.id, items: [{productId: service.id, quantity: 1, rate: 100}],
+  })).record;
+  for (const action of ['submit', 'approve', 'send', 'accept']) {
+    quotation = (await create('/trade/salesQuotations/' + quotation.id + '/actions/' + action,
+      {version: quotation.version})).record;
+  }
+  await send('Create sales order');
+  assert.match(latest(), /Accepted sales quotation/);
+  await send(quotation.quotationNo);
+  await send('1');
+  await send('Today');
+  await send('Skip');
+  assert.match(latest(), /Chat order customer/);
+  assert.equal((await request('/trade/salesOrders')).total, 0);
+  await send('Confirm');
+  assert.equal(String((await request('/trade/salesOrders')).items[0].quotationId), String(quotation.id));
   assistantPage.window.close();
 
   let profilePage=await page('sales');

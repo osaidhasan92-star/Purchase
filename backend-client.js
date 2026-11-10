@@ -28,7 +28,7 @@ const BackendPersistence = (() => {
     if (!error && !pending) setTimeout(() => { if (!pending && !failed) el.remove(); }, 2500);
   }
 
-  async function request(path, options = {}) {
+  async function request(path, {keepApprovalInChat = false, ...options} = {}) {
     const method = (options.method || 'GET').toUpperCase();
     const headers = new Headers(options.headers || {});
     if (options.body && !(options.body instanceof FormData)) headers.set('Content-Type', 'application/json');
@@ -36,10 +36,11 @@ const BackendPersistence = (() => {
     const response = await fetch('/api' + path, {...options, method, headers, credentials: 'same-origin', cache: 'no-store'});
     const data = await response.json().catch(() => ({}));
     if (response.status === 202 && data.approvalPending && data.approval?.id) {
+      if (keepApprovalInChat) return data;
       location.href='erp.html?view=approvals&submitted='+encodeURIComponent(String(data.approval.id));
       throw new Error(data.message || 'Submitted for independent approval');
     }
-    if (response.status===400 && data.error==='Use Pending Approvals to record a decision reason' && window.ModernWorkspace?.askDecisionReason && typeof options.body==='string') {
+    if (!keepApprovalInChat && response.status===400 && data.error==='Use Pending Approvals to record a decision reason' && window.ModernWorkspace?.askDecisionReason && typeof options.body==='string') {
       const reason=await window.ModernWorkspace.askDecisionReason();
       if(!reason)throw new Error('Decision cancelled');
       return request(path,{...options,body:JSON.stringify({...JSON.parse(options.body),approvalReason:reason})});

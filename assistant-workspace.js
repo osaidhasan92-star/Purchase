@@ -38,28 +38,6 @@ window.addEventListener('workspace:ready', async () => {
         <label>Choose a workflow <select data-process></select></label>
       </details>
     </footer>
-    <section data-reviews hidden aria-label="Pending approval decisions">
-      <p>Select an eligible request and review it before deciding.</p>
-      <a href="/erp.html?view=approvals">Open Pending Approvals</a>
-      <label>Pending request <select data-review-list></select></label>
-      <div class="erp-ai-review-nav">
-        <button type="button" data-review-prev>Previous</button>
-        <button type="button" data-review-next>Next</button>
-      </div>
-      <p data-review-status role="status"></p>
-      <form data-decision hidden>
-        <pre data-preview></pre>
-        <label>Decision
-          <select name="decision" required>
-            <option value="">Choose a decision</option>
-            <option value="approve">Approve and execute</option>
-            <option value="reject">Reject</option>
-          </select>
-        </label>
-        <label>Decision reason <textarea name="reason" required maxlength="500" rows="2"></textarea></label>
-        <button type="submit">Confirm decision</button>
-      </form>
-    </section>
   `;
 
   const form = dialog.querySelector('[data-chat]');
@@ -67,7 +45,9 @@ window.addEventListener('workspace:ready', async () => {
   const submit = form.querySelector('button');
   const messages = dialog.querySelector('.erp-ai-messages');
   const mode = dialog.querySelector('[data-mode]');
-  mode.textContent = config.configured ? 'AI enabled · Messages may be sent to OpenAI' : 'Quick commands · No AI model connected';
+  mode.textContent = config.configured
+    ? 'Chat workflows · General questions may be sent to OpenAI'
+    : 'Chat workflows · Quick commands available';
 
   function scrollToLatest() {
     messages.scrollTop = messages.scrollHeight;
@@ -84,8 +64,19 @@ window.addEventListener('workspace:ready', async () => {
     return bubble;
   }
 
-  message('assistant', 'Assalam o alaikum! Type what you want to do in ERP. I can find a form or help you review a pending approval.');
-  const workflows = setupProcesses(dialog, config, message, scrollToLatest);
+  message('assistant', 'Assalam o alaikum! Type what you want to do in ERP. I’ll ask for one detail at a time and show a summary before you confirm.');
+  const workflows = setupAssistantWorkflows(config, message, scrollToLatest);
+  const picker = dialog.querySelector('[data-process]');
+  picker.add(new Option('Choose a workflow', ''));
+  for (const process of config.processes.filter(item => workflows.has(item.id))) {
+    picker.add(new Option(process.group + ' · ' + process.label, process.id));
+  }
+  picker.addEventListener('change', () => {
+    if (submit.disabled || !picker.value) return;
+    workflows.start(picker.value);
+    picker.value = '';
+    input.focus();
+  });
   const examples = [
     ['rfq', 'RFQ banani hai'],
     ['sales-order', 'Create sales order'],
@@ -99,6 +90,7 @@ window.addEventListener('workspace:ready', async () => {
     button.type = 'button';
     button.textContent = example;
     button.addEventListener('click', () => {
+      if (workflows.active()) return;
       input.value = example;
       input.focus();
     });
@@ -115,17 +107,21 @@ window.addEventListener('workspace:ready', async () => {
     event.preventDefault();
     const question = input.value.trim();
     if (!question || submit.disabled) return;
-    submit.disabled = true;
+    submit.disabled = picker.disabled = true;
     input.value = '';
     message('user', question);
-    const reply = message('assistant', 'Working on it…');
+    let reply;
     try {
+      if (await workflows.answer(question)) return;
+      reply = message('assistant', 'Working on it…');
       const result = await BackendPersistence.request('/assistant/chat', {
         method: 'POST',
         body: JSON.stringify({question}),
       });
       reply.querySelector('p').textContent = result.answer;
-      if (result.process) await workflows.open(result.process.id, reply);
+      if (result.process && !workflows.start(result.process.id)) {
+        reply.querySelector('p').textContent = 'This workflow is not available in chat yet.';
+      }
       if (result.snapshot) {
         const details = document.createElement('details');
         const summary = document.createElement('summary');
@@ -136,9 +132,10 @@ window.addEventListener('workspace:ready', async () => {
         reply.appendChild(details);
       }
     } catch (error) {
-      reply.querySelector('p').textContent = error.message;
+      if (reply) reply.querySelector('p').textContent = error.message;
+      else message('assistant', error.message);
     } finally {
-      submit.disabled = false;
+      submit.disabled = picker.disabled = false;
       if (dialog.open) input.focus();
       scrollToLatest();
     }
@@ -146,140 +143,286 @@ window.addEventListener('workspace:ready', async () => {
   document.body.append(launcher, dialog);
 });
 
-function setupProcesses(dialog, config, message, scrollToLatest) {
+function setupAssistantWorkflows(config, message, scrollToLatest) {
   const processes = new Map(config.processes.map(item => [item.id, item]));
-  const picker = dialog.querySelector('[data-process]');
-  const reviews = dialog.querySelector('[data-reviews]');
-  const reviewList = reviews.querySelector('[data-review-list]');
-  const reviewStatus = reviews.querySelector('[data-review-status]');
-  const previous = reviews.querySelector('[data-review-prev]');
-  const next = reviews.querySelector('[data-review-next]');
-  const decision = reviews.querySelector('[data-decision]');
-  let page = 1;
-  let records = new Map();
-  let reviewBusy = false;
+  const ask = text => message('assistant', text);
+  const pageSize = 10;
+  let draft = null;
 
-  picker.add(new Option('Choose a workflow', ''));
-  for (const process of processes.values()) {
-    picker.add(new Option(process.group + ' · ' + process.label, process.id));
+  function has(id) {
+    return processes.has(id) && !!assistantWorkflow(id);
   }
 
-  function showPreview() {
-    const row = records.get(reviewList.value);
-    decision.reset();
-    decision.hidden = !row;
-    if (row) {
-      decision.querySelector('[data-preview]').textContent = JSON.stringify({
-        request: row.label,
-        module: row.module,
-        operation: row.operation,
-        amount: row.currency + ' ' + row.amount,
-        requestedBy: row.requester,
-        details: row.details,
-      }, null, 2);
+  function start(id) {
+    if (!has(id)) return false;
+    if (draft) {
+      ask('Finish this draft or type Cancel before starting another workflow.');
+      return true;
     }
+    const flow = assistantWorkflow(id);
+    draft = {
+      id, flow, fields: [...flow.fields], values: {}, references: {},
+      summary: [], key: 'assistant-' + crypto.randomUUID(),
+    };
+    ask(processes.get(id).label + '\nType Cancel at any time to discard the draft.');
+    prompt();
+    return true;
   }
 
-  function setReviewBusy(busy) {
-    reviewBusy = busy;
-    picker.disabled = busy;
-    reviewList.disabled = busy;
-    decision.querySelector('button').disabled = busy;
-    if (busy) previous.disabled = next.disabled = true;
-  }
-
-  async function loadReviews(message = '') {
-    setReviewBusy(true);
-    records = new Map();
-    reviewList.replaceChildren(new Option('Choose a pending request', ''));
-    showPreview();
-    reviewStatus.textContent = 'Loading pending requests…';
-    try {
-      const data = await BackendPersistence.request('/approvals/requests?' +
-        new URLSearchParams({status: 'Pending', page: String(page), pageSize: '25'}));
-      if (!data.enabled) {
-        reviewStatus.textContent = 'Independent approvals are disabled.';
+  function prompt() {
+    while (draft.fields[0]?.when && !draft.fields[0].when(draft.values)) draft.fields.shift();
+    const field = draft.fields[0];
+    if (!field) {
+      const bubble = ask(processes.get(draft.id).label + '\n\n' +
+        draft.summary.join('\n') + '\n\nType Confirm to submit, Restart to change the details, or Cancel.');
+      bubble.dataset.workflowReview = '';
+      scrollToLatest();
+      return;
+    }
+    if (field.fromRecord) {
+      field.options = field.fromRecord(draft.references);
+      if (!field.options.length) {
+        draft.blocked = true;
+        ask('There are no eligible options for this record. Type Restart or Cancel.');
         return;
       }
-      for (const row of data.items.filter(item => item.canDecide)) {
-        records.set(String(row.id), row);
-        reviewList.add(new Option(row.label + ' · ' + row.currency + ' ' + row.amount, row.id));
+    }
+    if (field.recordActions) {
+      const actions = draft.references.id.record.actions || [];
+      field.choices = field.recordActions.filter(action => actions.includes(action));
+      if (!field.choices.length) {
+        draft.blocked = true;
+        ask('There are no eligible chat actions for this record. Type Restart to choose another record or Cancel.');
+        return;
       }
-      previous.disabled = page === 1;
-      next.disabled = page * data.pageSize >= data.total;
-      reviewStatus.textContent = message || (records.size
-        ? 'Page ' + page
-        : 'No eligible requests on page ' + page + '. Check other pages or open Pending Approvals.');
-    } catch (error) {
-      reviewStatus.textContent = error.message;
-    } finally {
-      setReviewBusy(false);
     }
+    if (field.sourceLines) {
+      draft.fields.shift();
+      const lines = field.rows(draft.references[field.sourceLines]);
+      if (!lines?.length) {
+        draft.blocked = true;
+        ask('There are no document lines available. Type Restart to choose another source or Cancel.');
+        return;
+      }
+      const entries = draft.values[field.key] = lines.map(field.initial);
+      draft.fields.unshift(...lines.flatMap((line, index) => {
+        const label = line.product || line.productName || line.description || 'Item';
+        const quantity = line.quantity == null ? '' : ' (' + line.quantity + ')';
+        return field.columns(line).map(column => ({
+          ...column, target: entries[index],
+          label: 'Line ' + (index + 1) + ' · ' + label + quantity + ' · ' + column.label,
+        }));
+      }));
+      prompt();
+      return;
+    }
+    let suffix = '';
+    if (field.lookup) {
+      suffix = field.approval
+        ? 'Type the approval ID or type List to see eligible requests.'
+        : 'Type a name or number to search, or type List.';
+    }
+    if (field.choices) suffix = field.choices.join(' / ');
+    if (field.options) suffix = field.options.map((row, index) => (index + 1) + '. ' + display(row)).join('\n');
+    if (field.type === 'date') suffix = 'Use YYYY-MM-DD or type Today.';
+    if (field.type === 'month') suffix = 'Use YYYY-MM.';
+    if (field.optional) suffix += (suffix ? ' ' : '') + 'Type Skip to leave it blank.';
+    if (field.repeat) suffix = 'Enter a whole number from ' + (field.minimum || 1) + ' to 20.';
+    ask((field.repeat ? 'How many ' + field.label.toLowerCase() + ' entries?' : field.label + '?') +
+      (suffix ? '\n' + suffix : ''));
   }
 
-  async function openProcess(id, bubble) {
-    const process = processes.get(id);
-    if (!process) return;
-    if (process.url) {
-      const link = document.createElement('a');
-      link.dataset.openProcess = '';
-      link.href = process.url;
-      link.textContent = process.label;
-      bubble.appendChild(link);
-      scrollToLatest();
-    } else if (!reviewBusy) {
-      bubble.appendChild(reviews);
-      reviews.hidden = false;
-      page = 1;
-      await loadReviews();
-      scrollToLatest();
+  function display(row) {
+    const number = row.number || row.requestNo || row.rfqNo || row.quotationNo || row.poNo ||
+      row.orderNo || row.invoiceNo || row.sku || row.code;
+    const label = row.label || row.name || row.product || row.customerName || row.vendorName ||
+      row.description || row.employee || row.memo;
+    const amount = row.openAmount ?? row.total ?? row.amount;
+    return [number || (!label || row.canDecide ? row.id : ''), label,
+      amount == null ? '' : (row.currency || 'PKR') + ' ' + amount,
+      row.remaining == null ? '' : 'Available ' + row.remaining, row.status || row.state]
+      .filter(Boolean).join(' · ');
+  }
+
+  async function lookup(field, text, command) {
+    const previous = field.results;
+    if (previous && /^\d+$/.test(text) && Number(text) <= previous.rows.length && Number(text) > 0) {
+      const row = previous.rows[Number(text) - 1];
+      const details = field.detail
+        ? await BackendPersistence.request(field.detail + '/' + encodeURIComponent(row.id))
+        : {record: row};
+      const record = details[field.recordKey || 'record'];
+      const version = record[field.versionField || 'version'];
+      if (field.version && !version) throw new Error('The source record is missing its version.');
+      if (field.approval) {
+        ask('Approval #' + row.id + ' · ' + row.label + '\n' +
+          JSON.stringify({amount: row.currency + ' ' + row.amount, operation: row.operation,
+            requestedBy: row.requester, details: row.details}, null, 2));
+      }
+      draft.references[field.key] = details;
+      if (field.version) draft.values[field.version] = version;
+      const linkedCustomer = field.key === 'leadId' && record.customerName ? ' · ' + record.customerName : '';
+      return {value: field.approval ? row : record.id, shown: display({...row, ...record}) + linkedCustomer};
+    }
+    if (command === 'next' && !previous?.more) {
+      ask('There are no more results. Type another search or List.');
+      return null;
+    }
+    if (field.approval && !['list', 'next'].includes(command) && !/^\d+$/.test(text)) {
+      ask('Type an approval ID or List.');
+      return null;
+    }
+    const search = command === 'next' ? previous.search : command === 'list' ? '' : text;
+    if (search.length > 160) throw new Error('Search terms can be up to 160 characters.');
+    const page = command === 'next' ? previous.page + 1 : 1;
+    const params = new URLSearchParams({
+      page: String(page), pageSize: String(field.localSearch ? 100 : pageSize),
+    });
+    if (search && field.approval) params.set('id', search);
+    else if (search && !field.localSearch) params.set('search', search);
+    const path = typeof field.lookup === 'function' ? field.lookup(draft.values, draft.references) : field.lookup;
+    const result = await BackendPersistence.request(path + (path.includes('?') ? '&' : '?') + params);
+    if (field.approval && !result.enabled) {
+      ask('Independent approvals are disabled. Type Cancel to return to chat.');
+      return null;
+    }
+    const rows = result.items.filter(row => field.approval ? row.canDecide :
+      !field.localSearch || display(row).toLowerCase().includes(search.toLowerCase()));
+    const more = result.total == null ? result.items.length === pageSize : page * Number(params.get('pageSize')) < result.total;
+    field.results = {rows, page, more, search};
+    ask((rows.length
+      ? rows.map((row, index) => (index + 1) + '. ' + display(row)).join('\n') + '\nType the option number to select.'
+      : 'No eligible matches on this page. Try another search or List.') +
+      (more ? '\nType Next for more results.' : ''));
+    return null;
+  }
+
+  function parse(field, text, command) {
+    if (field.choices) {
+      const value = field.choices.find(option => option.toLowerCase() === command);
+      if (!value) throw new Error('Choose ' + field.choices.join(' / ') + '.');
+      return value;
+    }
+    if (field.type === 'number' || field.repeat) {
+      const value = /^-?\d+(?:\.\d+)?$/.test(text) ? Number(text) : NaN;
+      if (field.repeat) {
+        if (!Number.isInteger(value) || value < (field.minimum || 1) || value > 20)
+          throw new Error('Enter a whole number from ' + (field.minimum || 1) + ' to 20.');
+      } else if (!Number.isFinite(value) || value < field.min || value > (field.max ?? 1e12) ||
+        (field.nonzero && value === 0)) {
+        throw new Error('Enter a valid number for ' + field.label + '.');
+      }
+      return value;
+    }
+    if (field.type === 'date') {
+      if (command === 'today') return new Intl.DateTimeFormat('en-CA', {timeZone: 'Asia/Karachi'}).format(new Date());
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(text) || Number.isNaN(Date.parse(text)) ||
+        new Date(text).toISOString().slice(0, 10) !== text)
+        throw new Error('Enter a valid date in YYYY-MM-DD format.');
+    }
+    if (field.type === 'month' && !/^\d{4}-(0[1-9]|1[0-2])$/.test(text))
+      throw new Error('Enter a valid month in YYYY-MM format.');
+    if (text.length > (field.max || 160)) throw new Error('This answer is too long for ' + field.label + '.');
+    return text;
+  }
+
+  async function submitDraft() {
+    const {id, flow, key, values, references} = draft;
+    const payload = {...flow.defaults, ...values, requestKey: key};
+    for (const key of flow.omit || []) delete payload[key];
+    flow.prepare?.(payload, references);
+    if (flow.nonzeroLines) payload[flow.nonzeroLines] = values[flow.nonzeroLines].filter(line => line.quantity > 0);
+    let path = typeof flow.path === 'function' ? flow.path(values) : flow.path;
+    if (id === 'review') {
+      const {request, action, reason} = values;
+      path = '/approvals/requests/' + encodeURIComponent(request.id) + '/' + action.toLowerCase();
+      delete payload.request;
+      delete payload.action;
+      delete payload.requestKey;
+      payload.version = request.version;
+      payload.reason = reason;
     } else {
-      const note = document.createElement('p');
-      note.textContent = 'The pending approval panel is already processing a request.';
-      bubble.appendChild(note);
+      if (id === 'rfq') payload.vendorIds = values.vendorIds.map(row => row.id);
+      if (['goods-receipt', 'delivery', 'vendor-bill', 'customer-invoice'].includes(id)) {
+        payload.items = values.items.filter(line => line.receivedQty || line.acceptedQty ||
+          line.rejectedQty || line.deliveredQty || line.quantity);
+      }
     }
+    const result = await BackendPersistence.request(path, {
+      method: 'POST', body: JSON.stringify(payload), keepApprovalInChat: true,
+    });
+    draft = null;
+    if (result.approvalPending) {
+      ask((result.message || 'Submitted for independent ERP approval.') + '\nApproval #' + result.approval.id);
+      return;
+    }
+    const record = result.record || result.customer || result.approval;
+    const detail = record ? display(record) : '';
+    ask('Saved in ERP' + (detail ? ' · ' + detail : '') + '.');
   }
 
-  picker.addEventListener('change', () => {
-    if (!picker.value || reviewBusy) return;
-    const id = picker.value;
-    picker.value = '';
-    const reply = message('assistant', processes.get(id).label);
-    void openProcess(id, reply);
-  });
-
-  reviewList.addEventListener('change', showPreview);
-  previous.addEventListener('click', () => {
-    if (!reviewBusy && page > 1) {
-      page -= 1;
-      void loadReviews();
+  async function answer(text) {
+    if (!draft) return false;
+    const command = text.toLowerCase();
+    if (command === 'cancel' || command === 'restart') {
+      const {id} = draft;
+      draft = null;
+      if (command === 'restart') start(id);
+      else ask('Draft cancelled.');
+      return true;
     }
-  });
-  next.addEventListener('click', () => {
-    if (!reviewBusy) {
-      page += 1;
-      void loadReviews();
+    if (draft.blocked) {
+      ask('Type Restart or Cancel.');
+      return true;
     }
-  });
-  decision.addEventListener('submit', async event => {
-    event.preventDefault();
-    const row = records.get(reviewList.value);
-    const action = decision.elements.decision.value;
-    const reason = decision.elements.reason.value.trim();
-    if (reviewBusy || !row || !['approve', 'reject'].includes(action) || !reason) return;
-    setReviewBusy(true);
-    reviewStatus.textContent = 'Submitting decision to ERP…';
+    const field = draft.fields[0];
+    if (!field) {
+      if (command !== 'confirm') ask('Type Confirm to submit, Restart to change the details, or Cancel.');
+      else {
+        try {
+          await submitDraft();
+        } catch (error) {
+          ask(error.message + (error.status >= 400 && error.status < 500
+            ? '\nType Restart to correct the details or Cancel.'
+            : '\nType Confirm to retry the same submission, or Cancel.'));
+        }
+      }
+      return true;
+    }
     try {
-      await BackendPersistence.request('/approvals/requests/' + encodeURIComponent(row.id) + '/' + action, {
-        method: 'POST',
-        body: JSON.stringify({version: row.version, reason}),
+      const skipped = field.optional && command === 'skip';
+      let result;
+      if (skipped) result = {value: undefined, shown: 'Skipped'};
+      else if (field.lookup) result = await lookup(field, text, command);
+      else if (field.options) {
+        const row = /^\d+$/.test(text) && field.options[Number(text) - 1];
+        if (!row) throw new Error('Type one of the option numbers.');
+        result = {value: row.id, shown: display(row)};
+      } else result = {value: parse(field, text, command)};
+      if (field.returns && result.value > 0 && !field.returns.length)
+        throw new Error('There is no validated stock return for this line. Enter 0 to skip it.');
+      if (!result) return true;
+      draft.fields.shift();
+      if (field.repeat) {
+        const entries = draft.values[field.key] = Array.from({length: result.value}, () => ({}));
+        draft.fields.unshift(...entries.flatMap((entry, index) => field.repeat.map(item => ({
+          ...item, target: entry, label: field.label + ' ' + (index + 1) + ' · ' + item.label,
+        }))));
+      } else if (!skipped) {
+        (field.target || draft.values)[field.key] = result.value;
+      }
+      if (field.followUps?.[result.value]) draft.fields.unshift(...field.followUps[result.value]);
+      if (field.returns && result.value > 0) draft.fields.unshift({
+        key: 'returnId', label: 'Validated stock return for ' + field.label,
+        target: field.target, options: field.returns,
       });
-      await loadReviews(action === 'approve' ? 'Approved and executed in ERP.' : 'Request rejected in ERP.');
+      draft.summary.push(field.label + ': ' + (result.shown ?? result.value));
+      prompt();
     } catch (error) {
-      reviewStatus.textContent = error.message;
-    } finally {
-      setReviewBusy(false);
+      ask(error.message);
     }
-  });
-  return {has: id => processes.has(id), open: openProcess};
+    return true;
+  }
+
+  return {has, start, answer, active: () => !!draft};
 }

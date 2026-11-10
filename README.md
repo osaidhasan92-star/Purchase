@@ -139,24 +139,23 @@ Use the database provider's TLS settings when the connection crosses networks.
 Open **AI Assistant** from any signed-in workspace and type what you want
 to do. Try “RFQ banani hai,” “create a payroll draft,” or “show pending approvals.”
 Common written commands work without an AI key. **Browse workflows** lists the
-forms and registers your role can open.
+chat workflows available to your role.
 
-The assistant replies with a link to the existing ERP form or register.
-Select source records, complete the fields and save there. Creating an RFQ
-requires an approved purchase request. The RFQ starts as Draft and follows
-the normal Mark as Sent workflow.
+Answer one question at a time. For an existing record, search by name or document
+number, or type **List**, then enter the number next to the matching result.
+Review the draft and type **Confirm** to submit, **Restart** to enter the details
+again, or **Cancel** to discard it. For example, an RFQ uses an approved purchase
+request and is saved as Draft. “Send RFQ” starts the separate sending workflow.
 
-For approvals, choose an eligible pending request in the Assistant, review the
-record details and PKR amount, select Approve or Reject and enter a decision
-reason before confirming. The Assistant uses the same approval endpoint as the
-ERP inbox. The server rechecks assignment, record access, the reviewer limit,
-independence and version at execution. Use the Pending Approvals screen to
-discover new review requests. The Assistant can also answer questions using
-the selected ERP summary. **ERP figures used** shows the figures behind an answer.
+For an independent approval, select an eligible request, review its details,
+choose Approve or Reject, enter a reason and confirm. The ERP rechecks record
+access, assignment, reviewer limits, independence and version. If a confirmed
+action needs another approver, the chat shows the approval request number.
 
-When a model is configured, broader messages may be sent to OpenAI with
+With a configured model, general chat messages can be sent to OpenAI with
 available workflow labels. Summary questions also send the selected aggregate
-figures within the user's permissions. Keep sensitive information out of free text.
+figures within the user's permissions. Guided workflow answers stay in ERP.
+**ERP figures used** shows the figures behind a summary answer.
 
 For Docker Compose, set `OPENAI_API_KEY` and `ERP_AI_MODEL` in the server's
 private `.env` file. Use a model ID available to your API project. Run

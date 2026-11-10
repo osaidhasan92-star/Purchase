@@ -196,6 +196,15 @@ COMMANDS = (
     ("customer", r"customer"),
     ("vendor", r"vendor|supplier"),
     ("employee", r"employee"),
+    ("reminder", r"reminder|follow up"),
+    ("lead", r"crm lead|lead"),
+    ("manpower", r"manpower request"),
+    ("recruitment", r"candidate"),
+    ("bank-statement", r"bank statement(?: line)?"),
+    ("account", r"ledger account|account"),
+    ("separation", r"employee separation|separation"),
+    ("stock-scrap", r"stock scrap|scrap"),
+    ("stock-return", r"stock return|return stock"),
     ("product", r"product|item"),
 )
 
@@ -206,10 +215,27 @@ def local_workflow(question):
         return None
     if re.search(r"\b(?:approve|reject|pending approvals?|review approvals?)\b", words):
         return "review"
-    if re.search(r"\b(?:send|mark as sent|bhejo|bhejna)\b", words) and re.search(
-        r"\brfqs?\b", words
-    ):
-        return "rfq-register"
+    action = re.search(
+        r"\b(?:submit|send|mark as sent|bhejo|bhejna|accept|expire|award|cancel|close|"
+        r"reserve|release|reimburse|pay|post|match|reconcile|start|stage|complete)\b",
+        words,
+    )
+    if action and not CREATE_INTENT.search(words):
+        for identity, pattern in (
+            ("rfq-register", r"rfqs?"),
+            ("compare-quotes", r"(?:vendor|supplier) quot(?:e|ation)s?"),
+            ("purchase-orders", r"purchase orders?|po"),
+            ("sales-quotes", r"sales quot(?:e|ation)s?"),
+            ("sales-orders", r"sales orders?"),
+            ("expenses", r"expense(?: claim)?s?"),
+            ("production", r"(?:manufacturing|production) orders?|production"),
+            ("journal-register", r"journal(?: entr(?:y|ies))?"),
+            ("bank-match", r"bank statement(?: line)?s?"),
+            ("match-items", r"open items?|outstanding (?:debit|credit) items?"),
+            ("payroll-register", r"payroll"),
+        ):
+            if re.search(r"\b(?:" + pattern + r")\b", words):
+                return identity
     if CREATE_INTENT.search(words):
         matches = []
         for identity, pattern in COMMANDS:
@@ -264,7 +290,7 @@ def chat():
 
 def workflow_reply(process):
     if process["id"] == "review":
-        answer = "Choose a pending request below. Review the details and confirm your decision."
+        answer = "Let’s find the pending request and review your decision in chat."
     else:
-        answer = "I found the workflow. Open the form or register to review and continue."
+        answer = "I found the workflow. Let’s go through the details in chat."
     return jsonify(answer=answer, process=process)

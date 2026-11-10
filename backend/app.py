@@ -796,7 +796,7 @@ def create_app(config=None):
             query['view'] = [legacy_routes[path]]
             return redirect('/erp.html?' + urlencode(query, doseq=True), code=302)
         # Never expose backend source, environment files, database files or backup JS.
-        public = {'frontend-dist/THIRD_PARTY_LICENSES.txt', 'frontend-dist/workspace-app.js', 'frontend-dist/workspace-app.css', 'workspace.js', 'workspace-loader.js', 'assistant-workspace.js', 'remaining-workspace.js', 'admin-workspace.js', 'expense-workspace.js', 'production-workspace.js', 'inventory-workspace.js', 'finance-workspace.js', 'hr-workspace.js', 'trade-workspace.js', 'crm-workspace.js', 'app.js', 'backend-client.js', 'erp.css',
+        public = {'frontend-dist/THIRD_PARTY_LICENSES.txt', 'frontend-dist/workspace-app.js', 'frontend-dist/workspace-app.css', 'workspace.js', 'workspace-loader.js', 'assistant-workspace.js', 'assistant-workflows.js', 'remaining-workspace.js', 'admin-workspace.js', 'expense-workspace.js', 'production-workspace.js', 'inventory-workspace.js', 'finance-workspace.js', 'hr-workspace.js', 'trade-workspace.js', 'crm-workspace.js', 'app.js', 'backend-client.js', 'erp.css',
                   'shared.css', 'styles.css', 'logo.png', 'dexterra-stamp.jpg'}
         pages = {'index.html', 'erp.html'}
         asset = path.startswith('assets/') and Path(path).suffix.lower() in ('.png', '.jpg', '.jpeg', '.webp')
