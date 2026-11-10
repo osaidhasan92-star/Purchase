@@ -45,6 +45,9 @@ window.addEventListener('workspace:ready', async () => {
   const submit = form.querySelector('button');
   const messages = dialog.querySelector('.erp-ai-messages');
   const mode = dialog.querySelector('[data-mode]');
+  const actions = document.createElement('fieldset');
+  actions.className = 'erp-ai-actions';
+  actions.setAttribute('aria-label', 'Available replies');
   mode.textContent = config.configured
     ? 'Chat workflows · General questions may be sent to OpenAI'
     : 'Chat workflows · Quick commands available';
@@ -65,7 +68,24 @@ window.addEventListener('workspace:ready', async () => {
   }
 
   message('assistant', 'Assalam o alaikum! Type what you want to do in ERP. I’ll ask for one detail at a time and show a summary before you confirm.');
-  const workflows = setupAssistantWorkflows(config, message, scrollToLatest);
+  const workflows = setupAssistantWorkflows(config, (text, choices) => {
+    const bubble = message('assistant', text);
+    if (choices) {
+      actions.replaceChildren(...choices.map(([label, reply = label]) => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.textContent = label;
+        button.addEventListener('click', () => {
+          if (button.isConnected) void send(reply, label);
+        });
+        return button;
+      }));
+    }
+    if (actions.childElementCount) bubble.appendChild(actions);
+    else actions.remove();
+    scrollToLatest();
+    return bubble;
+  });
   const picker = dialog.querySelector('[data-process]');
   picker.add(new Option('Choose a workflow', ''));
   for (const process of config.processes.filter(item => workflows.has(item.id))) {
@@ -75,6 +95,7 @@ window.addEventListener('workspace:ready', async () => {
     if (submit.disabled || !picker.value) return;
     workflows.start(picker.value);
     picker.value = '';
+    suggestions.hidden = workflows.active();
     input.focus();
   });
   const examples = [
@@ -90,9 +111,7 @@ window.addEventListener('workspace:ready', async () => {
     button.type = 'button';
     button.textContent = example;
     button.addEventListener('click', () => {
-      if (workflows.active()) return;
-      input.value = example;
-      input.focus();
+      if (!workflows.active()) void send(example);
     });
     suggestions.appendChild(button);
   }
@@ -103,13 +122,16 @@ window.addEventListener('workspace:ready', async () => {
     scrollToLatest();
   });
   dialog.querySelector('[data-close]').addEventListener('click', () => dialog.close());
-  form.addEventListener('submit', async event => {
+  form.addEventListener('submit', event => {
     event.preventDefault();
-    const question = input.value.trim();
+    void send(input.value.trim());
+  });
+
+  async function send(question, label = question) {
     if (!question || submit.disabled) return;
-    submit.disabled = picker.disabled = true;
+    submit.disabled = picker.disabled = actions.disabled = true;
     input.value = '';
-    message('user', question);
+    message('user', label);
     let reply;
     try {
       if (await workflows.answer(question)) return;
@@ -135,17 +157,21 @@ window.addEventListener('workspace:ready', async () => {
       if (reply) reply.querySelector('p').textContent = error.message;
       else message('assistant', error.message);
     } finally {
-      submit.disabled = picker.disabled = false;
+      submit.disabled = picker.disabled = actions.disabled = false;
+      suggestions.hidden = workflows.active();
       if (dialog.open) input.focus();
       scrollToLatest();
     }
-  });
+  }
   document.body.append(launcher, dialog);
 });
 
-function setupAssistantWorkflows(config, message, scrollToLatest) {
+function setupAssistantWorkflows(config, ask) {
   const processes = new Map(config.processes.map(item => [item.id, item]));
-  const ask = text => message('assistant', text);
+  const cancel = ['Cancel'];
+  const restart = ['Restart'];
+  const recovery = [restart, cancel];
+  const review = [['Confirm'], ...recovery];
   const pageSize = 10;
   let draft = null;
 
@@ -156,7 +182,7 @@ function setupAssistantWorkflows(config, message, scrollToLatest) {
   function start(id) {
     if (!has(id)) return false;
     if (draft) {
-      ask('Finish this draft or type Cancel before starting another workflow.');
+      ask('Finish or cancel this draft before starting another workflow.');
       return true;
     }
     const flow = assistantWorkflow(id);
@@ -164,7 +190,7 @@ function setupAssistantWorkflows(config, message, scrollToLatest) {
       id, flow, fields: [...flow.fields], values: {}, references: {},
       summary: [], key: 'assistant-' + crypto.randomUUID(),
     };
-    ask(processes.get(id).label + '\nType Cancel at any time to discard the draft.');
+    ask(processes.get(id).label, []);
     prompt();
     return true;
   }
@@ -174,16 +200,15 @@ function setupAssistantWorkflows(config, message, scrollToLatest) {
     const field = draft.fields[0];
     if (!field) {
       const bubble = ask(processes.get(draft.id).label + '\n\n' +
-        draft.summary.join('\n') + '\n\nType Confirm to submit, Restart to change the details, or Cancel.');
+        draft.summary.join('\n') + '\n\nReview the details. Choose Confirm to submit.', review);
       bubble.dataset.workflowReview = '';
-      scrollToLatest();
       return;
     }
     if (field.fromRecord) {
       field.options = field.fromRecord(draft.references);
       if (!field.options.length) {
         draft.blocked = true;
-        ask('There are no eligible options for this record. Type Restart or Cancel.');
+        ask('There are no eligible options for this record.', recovery);
         return;
       }
     }
@@ -192,7 +217,7 @@ function setupAssistantWorkflows(config, message, scrollToLatest) {
       field.choices = field.recordActions.filter(action => actions.includes(action));
       if (!field.choices.length) {
         draft.blocked = true;
-        ask('There are no eligible chat actions for this record. Type Restart to choose another record or Cancel.');
+        ask('There are no eligible chat actions for this record. Restart to choose another record.', recovery);
         return;
       }
     }
@@ -201,7 +226,7 @@ function setupAssistantWorkflows(config, message, scrollToLatest) {
       const lines = field.rows(draft.references[field.sourceLines]);
       if (!lines?.length) {
         draft.blocked = true;
-        ask('There are no document lines available. Type Restart to choose another source or Cancel.');
+        ask('There are no document lines available. Restart to choose another source.', recovery);
         return;
       }
       const entries = draft.values[field.key] = lines.map(field.initial);
@@ -217,19 +242,40 @@ function setupAssistantWorkflows(config, message, scrollToLatest) {
       return;
     }
     let suffix = '';
+    const choices = [];
     if (field.lookup) {
       suffix = field.guide || (field.approval
-        ? 'Type the approval ID or type List to see eligible requests.'
-        : 'Type a name or number to search, or type List.');
+        ? 'Enter the approval ID or choose List to see eligible requests.'
+        : 'Search by name or number, or choose List.');
+      choices.push(['List']);
     }
-    if (field.choices) suffix = field.choices.join(' / ');
-    if (field.options) suffix = field.options.map((row, index) => (index + 1) + '. ' + display(row)).join('\n');
-    if (field.type === 'date') suffix = 'Use YYYY-MM-DD or type Today.';
+    if (field.choices) {
+      choices.push(...field.choices.map(choice => [choice[0].toUpperCase() + choice.slice(1), choice]));
+    }
+    if (field.options) choices.push(...rowChoices(field.options));
+    if (field.type === 'date') {
+      suffix = 'Use YYYY-MM-DD or choose Today.';
+      choices.push(['Today']);
+    }
     if (field.type === 'month') suffix = 'Use YYYY-MM.';
-    if (field.optional) suffix += (suffix ? ' ' : '') + 'Type Skip to leave it blank.';
-    if (field.repeat) suffix = 'Enter a whole number from ' + (field.minimum || 1) + ' to 20.';
+    if (field.repeat) {
+      const minimum = field.minimum || 1;
+      suffix = 'Choose a count or enter a whole number from ' + minimum + ' to 20.';
+      for (let count = minimum; count <= 5; count++) choices.push([String(count)]);
+    }
     ask((field.repeat ? 'How many ' + field.label.toLowerCase() + ' entries?' : field.label + '?') +
-      (suffix ? '\n' + suffix : ''));
+      (suffix ? '\n' + suffix : ''), withFieldControls(field, choices));
+  }
+
+  function withFieldControls(field, choices) {
+    return [...choices, ...(field.optional ? [['Skip']] : []), cancel];
+  }
+
+  function rowChoices(rows) {
+    return rows.map((row, index) => {
+      const number = String(index + 1);
+      return [number + '. ' + display(row), number];
+    });
   }
 
   function display(row) {
@@ -265,11 +311,11 @@ function setupAssistantWorkflows(config, message, scrollToLatest) {
       return {value: field.approval ? row : record.id, shown: display({...row, ...record}) + linkedCustomer};
     }
     if (command === 'next' && !previous?.more) {
-      ask('There are no more results. Type another search or List.');
+      ask('There are no more results. Try another search or choose List.');
       return null;
     }
     if (field.approval && !['list', 'next'].includes(command) && !/^\d+$/.test(text)) {
-      ask('Type an approval ID or List.');
+      ask('Enter an approval ID or choose List.');
       return null;
     }
     const search = command === 'next' ? previous.search : command === 'list' ? '' : text;
@@ -283,21 +329,24 @@ function setupAssistantWorkflows(config, message, scrollToLatest) {
     const path = typeof field.lookup === 'function' ? field.lookup(draft.values, draft.references) : field.lookup;
     const result = await BackendPersistence.request(path + (path.includes('?') ? '&' : '?') + params);
     if (field.approval && !result.enabled) {
-      ask('Independent approvals are disabled. Type Cancel to return to chat.');
+      ask('Independent approvals are disabled.', [cancel]);
       return null;
     }
     const rows = result.items.filter(row => field.approval ? row.canDecide :
       !field.localSearch || display(row).toLowerCase().includes(search.toLowerCase()));
     const more = result.total == null ? result.items.length === pageSize : page * Number(params.get('pageSize')) < result.total;
     field.results = {rows, page, more, search};
-    ask((rows.length
-      ? rows.map((row, index) => (index + 1) + '. ' + display(row)).join('\n') + '\nType the option number to select.'
+    const choices = rowChoices(rows);
+    if (more) choices.push(['Next']);
+    choices.push(['List']);
+    ask(rows.length
+      ? 'Choose a result.'
       : field.noMatch
         ? field.noMatch + (has('customer')
-          ? '\nIf the customer is new, type Cancel, then Add customer. After saving it, start the lead again.'
+          ? '\nIf the customer is new, choose Cancel, then start Add customer. After saving it, start the lead again.'
           : '\nIf the customer is new, ask someone with customer creation access to add it.')
-        : 'No eligible matches on this page. Try another search or List.') +
-      (more ? '\nType Next for more results.' : ''));
+        : 'No eligible matches on this page. Try another search or choose List.',
+      withFieldControls(field, choices));
     return null;
   }
 
@@ -357,12 +406,12 @@ function setupAssistantWorkflows(config, message, scrollToLatest) {
     });
     draft = null;
     if (result.approvalPending) {
-      ask((result.message || 'Submitted for independent ERP approval.') + '\nApproval #' + result.approval.id);
+      ask((result.message || 'Submitted for independent ERP approval.') + '\nApproval #' + result.approval.id, []);
       return;
     }
     const record = result.record || result.customer || result.approval;
     const detail = record ? display(record) : '';
-    ask('Saved in ERP' + (detail ? ' · ' + detail : '') + '.');
+    ask('Saved in ERP' + (detail ? ' · ' + detail : '') + '.', []);
   }
 
   async function answer(text) {
@@ -372,23 +421,24 @@ function setupAssistantWorkflows(config, message, scrollToLatest) {
       const {id} = draft;
       draft = null;
       if (command === 'restart') start(id);
-      else ask('Draft cancelled.');
+      else ask('Draft cancelled.', []);
       return true;
     }
     if (draft.blocked) {
-      ask('Type Restart or Cancel.');
+      ask('Choose Restart or Cancel.', recovery);
       return true;
     }
     const field = draft.fields[0];
     if (!field) {
-      if (command !== 'confirm') ask('Type Confirm to submit, Restart to change the details, or Cancel.');
+      if (command !== 'confirm') ask('Choose Confirm to submit, Restart to change the details, or Cancel.', review);
       else {
         try {
           await submitDraft();
         } catch (error) {
-          ask(error.message + (error.status >= 400 && error.status < 500
-            ? '\nType Restart to correct the details or Cancel.'
-            : '\nType Confirm to retry the same submission, or Cancel.'));
+          const needsCorrection = error.status >= 400 && error.status < 500;
+          ask(error.message + (needsCorrection
+            ? '\nRestart to correct the details.'
+            : '\nChoose Confirm to retry the same submission.'), needsCorrection ? recovery : review);
         }
       }
       return true;
@@ -409,7 +459,7 @@ function setupAssistantWorkflows(config, message, scrollToLatest) {
       else if (field.lookup) result = await lookup(field, text, command);
       else if (field.options) {
         const row = /^\d+$/.test(text) && field.options[Number(text) - 1];
-        if (!row) throw new Error('Type one of the option numbers.');
+        if (!row) throw new Error('Choose one of the listed options.');
         result = {value: row.id, shown: display(row)};
       } else result = {value: parse(field, text, command)};
       if (field.returns && result.value > 0 && !field.returns.length)

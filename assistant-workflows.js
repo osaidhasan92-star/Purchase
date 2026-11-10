@@ -150,8 +150,8 @@ function assistantWorkflow(id) {
       choice('paymentTerms', 'Payment terms', 'Cash', '15 Days', '30 Days', '45 Days'),
       number('creditLimit', 'Credit limit (PKR)'), optional('address', 'Address')),
     lead: form('/crm/leads', ref('customerId', 'Which existing customer is this lead for', '/customers', {
-      guide: 'Type just the customer name, for example Acme Traders. Or type List to browse saved customers, then enter the number next to the customer.',
-      noMatch: 'No saved customer matched. Try part of the customer name or type List.',
+      guide: 'Type just the customer name, for example Acme Traders. Or choose List to browse and select a saved customer.',
+      noMatch: 'No saved customer matched. Try part of the customer name or choose List.',
     }),
       optional('contact', 'Contact person'), optional('email', 'Email'),
       choice('stage', 'Stage', 'New', 'Contacted', 'Qualified', 'Quotation Required'),

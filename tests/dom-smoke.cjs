@@ -186,32 +186,42 @@ async function main() {
     await waitFor(() => !composer.querySelector('button').disabled, 'Chat composer remained disabled');
   };
   const latest = () => [...assistantDoc.querySelectorAll('.erp-ai-message--assistant')].at(-1).textContent;
+  const clickReply = async label => {
+    const button = [...assistantDoc.querySelectorAll('.erp-ai-actions button')].find(
+      item => typeof label === 'string' ? item.textContent === label : label.test(item.textContent),
+    );
+    assert.ok(button, 'Missing chat reply button ' + label);
+    button.click();
+    await waitFor(() => !composer.querySelector('button').disabled, 'Chat composer remained disabled');
+  };
   await send('RFQ banani hai');
   assert.match(latest(), /Approved purchase request/);
   await send(purchase.requestNo);
   assert.match(latest(), new RegExp(purchase.requestNo));
-  await send('1');
+  await clickReply(new RegExp(purchase.requestNo));
   assert.match(latest(), /How many vendor/);
-  await send('1');
+  assert.equal(assistantDoc.querySelectorAll('.erp-ai-actions').length, 1);
+  await clickReply('1');
   await send(vendor.name);
   assert.match(latest(), /Chat test vendor/);
-  await send('1');
+  await clickReply(/Chat test vendor/);
   await send('2027-02-30');
   assert.match(latest(), /valid date/);
   await send('2099-12-31');
-  await send('Skip');
+  await clickReply('Skip');
   assert.match(assistantDoc.querySelector('[data-workflow-review]').textContent, /Chat test vendor/);
   assert.equal(assistantDoc.querySelector('[data-open-process], #workspace-root [role="dialog"]'), null);
   assert.equal((await request('/trade/rfqs')).total, 0);
-  await send('Confirm');
+  await clickReply('Confirm');
   assert.match(latest(), /Saved in ERP/);
   assert.equal((await request('/trade/rfqs')).total, 1);
+  assert.equal(assistantDoc.querySelector('.erp-ai-actions'), null);
   await send('Confirm');
   assert.equal((await request('/trade/rfqs')).total, 1);
 
   await send('Send RFQ');
   assert.match(latest(), /Draft RFQ/);
-  await send('List');
+  await clickReply('List');
   await send('1');
   assert.match(latest(), /Confirm to submit/);
   assert.equal((await request('/trade/rfqs')).items[0].status, 'Draft');
@@ -219,26 +229,26 @@ async function main() {
   assert.equal((await request('/trade/rfqs')).items[0].status, 'Sent');
 
   await send('Record supplier quotation');
-  await send('List');
+  await clickReply('List');
   await send('1');
   assert.match(latest(), /Chat test vendor/);
   await send('1');
-  await send('Today');
+  await clickReply('Today');
   await send('2099-12-31');
-  await send('Skip');
-  await send('Skip');
+  await clickReply('Skip');
+  await clickReply('Skip');
   assert.match(latest(), /Chat test product \(2\).*Vendor unit rate/);
   await send('30');
-  await send('Skip');
-  await send('Skip');
-  await send('Skip');
+  await clickReply('Skip');
+  await clickReply('Skip');
+  await clickReply('Skip');
   assert.match(latest(), /Confirm to submit/);
   await send('Confirm');
   assert.equal((await request('/trade/quotations')).items[0].total, 60);
 
   await send('Create expense claim');
   await send('Test cancelled draft');
-  await send('Cancel');
+  await clickReply('Cancel');
   assert.match(latest(), /Draft cancelled/);
   assert.equal((await request('/expenses/claims')).total, 0);
 
@@ -254,8 +264,8 @@ async function main() {
   };
   await send('Create expense claim');
   await send('Test queued action');
-  await send('Today');
-  await send('List');
+  await clickReply('Today');
+  await clickReply('List');
   await send('1');
   await send('25');
   await send('0');
@@ -266,15 +276,15 @@ async function main() {
   assistantPage.window.fetch = originalFetch;
 
   await send('Show pending approvals');
-  await send('List');
+  await clickReply('List');
   assert.match(latest(), /Expense A/);
   assert.doesNotMatch(latest(), /Expense B/);
-  await send('1');
-  await send('Approve');
+  await clickReply(/Expense A/);
+  await clickReply('Approve');
   await send('Verified receipt');
   assert.match(latest(), /Confirm to submit/);
   assert.equal(approvalCalls.length, 0);
-  await send('Confirm');
+  await clickReply('Confirm');
   assert.equal(approvalCalls.length, 1);
   assert.equal(approvalCalls[0].path, '/approvals/requests/21/approve');
   assert.deepEqual(JSON.parse(approvalCalls[0].options.body), {version: 'v21', reason: 'Verified receipt'});
@@ -295,9 +305,9 @@ async function main() {
   assert.match(latest(), /No saved customer matched.*Add customer/s);
   await send('Chat order customer');
   assert.match(latest(), /1\. .*Chat order customer/);
-  await send('1');
+  await clickReply(/Chat order customer/);
   assert.match(latest(), /Contact person/);
-  await send('Cancel');
+  await clickReply('Cancel');
   persistence.request = assistantRequest;
 
   const service = (await create('/products', {name: 'Chat order service', productType: 'service', unit: 'Service'})).record;
@@ -312,8 +322,8 @@ async function main() {
   assert.match(latest(), /Accepted sales quotation/);
   await send(quotation.quotationNo);
   await send('1');
-  await send('Today');
-  await send('Skip');
+  await clickReply('Today');
+  await clickReply('Skip');
   assert.match(latest(), /Chat order customer/);
   assert.equal((await request('/trade/salesOrders')).total, 0);
   await send('Confirm');
