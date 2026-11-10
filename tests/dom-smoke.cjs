@@ -280,6 +280,26 @@ async function main() {
   assert.deepEqual(JSON.parse(approvalCalls[0].options.body), {version: 'v21', reason: 'Verified receipt'});
   assert.equal(approvalCalls[0].options.keepApprovalInChat, true);
   const customer = (await create('/customers', {name: 'Chat order customer'})).customer;
+  const customerSearches = [];
+  const assistantRequest = persistence.request;
+  persistence.request = (path, options) => {
+    if (path.startsWith('/customers?')) customerSearches.push(path);
+    return assistantRequest(path, options);
+  };
+  await send('aik new lead generate karni he');
+  assert.match(latest(), /Which existing customer/);
+  await send('kya batao customer name?');
+  assert.match(latest(), /Type just the customer name/);
+  assert.equal(customerSearches.length, 0);
+  await send('Unlisted chat customer');
+  assert.match(latest(), /No saved customer matched.*Add customer/s);
+  await send('Chat order customer');
+  assert.match(latest(), /1\. .*Chat order customer/);
+  await send('1');
+  assert.match(latest(), /Contact person/);
+  await send('Cancel');
+  persistence.request = assistantRequest;
+
   const service = (await create('/products', {name: 'Chat order service', productType: 'service', unit: 'Service'})).record;
   let quotation = (await create('/trade/salesQuotations', {
     customerId: customer.id, items: [{productId: service.id, quantity: 1, rate: 100}],

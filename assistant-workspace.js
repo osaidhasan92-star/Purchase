@@ -218,9 +218,9 @@ function setupAssistantWorkflows(config, message, scrollToLatest) {
     }
     let suffix = '';
     if (field.lookup) {
-      suffix = field.approval
+      suffix = field.guide || (field.approval
         ? 'Type the approval ID or type List to see eligible requests.'
-        : 'Type a name or number to search, or type List.';
+        : 'Type a name or number to search, or type List.');
     }
     if (field.choices) suffix = field.choices.join(' / ');
     if (field.options) suffix = field.options.map((row, index) => (index + 1) + '. ' + display(row)).join('\n');
@@ -292,7 +292,11 @@ function setupAssistantWorkflows(config, message, scrollToLatest) {
     field.results = {rows, page, more, search};
     ask((rows.length
       ? rows.map((row, index) => (index + 1) + '. ' + display(row)).join('\n') + '\nType the option number to select.'
-      : 'No eligible matches on this page. Try another search or List.') +
+      : field.noMatch
+        ? field.noMatch + (has('customer')
+          ? '\nIf the customer is new, type Cancel, then Add customer. After saving it, start the lead again.'
+          : '\nIf the customer is new, ask someone with customer creation access to add it.')
+        : 'No eligible matches on this page. Try another search or List.') +
       (more ? '\nType Next for more results.' : ''));
     return null;
   }
@@ -387,6 +391,15 @@ function setupAssistantWorkflows(config, message, scrollToLatest) {
             : '\nType Confirm to retry the same submission, or Cancel.'));
         }
       }
+      return true;
+    }
+    const clarification = command.replace(/[?!.,]+$/, '').trim();
+    if (clarification === 'help' || (field.guide && (
+      /^(?:kya|kia|kiya) (?:bata(?:o|un|oon)|likh(?:un|oon|o)|type kar(?:un|oon|o)|enter kar(?:un|oon|o))\b/.test(clarification) ||
+      /^(?:what (?:should|do) i (?:enter|type|write)|(?:can|should|do) i (?:enter|type|write))\b/.test(clarification) ||
+      /^(?:the )?customer(?:'s)? name\s*\?$/.test(command)
+    ))) {
+      prompt();
       return true;
     }
     try {
