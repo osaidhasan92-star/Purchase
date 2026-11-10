@@ -11,7 +11,7 @@ const python = process.env.PYTHON || 'python';
 const password = 'Automated-test-only-42';
 const port = 18000 + Math.floor(Math.random() * 10000);
 const base = `http://127.0.0.1:${port}`;
-const env = {...process.env, DATABASE_URL: 'sqlite:///' + path.join(temp, 'test.sqlite'), COOKIE_SECURE: 'false'};
+const env = {...process.env, DATABASE_URL: 'sqlite:///' + path.join(temp, 'test.sqlite'), COOKIE_SECURE: 'false', APPROVAL_CONTROLS_ENABLED: 'false'};
 let server;
 
 async function waitFor(predicate, message) {
@@ -121,8 +121,74 @@ async function main() {
     'receipts', 'invoices', 'payments', 'crm-dashboard', 'leads', 'reminders', 'sales', 'customers', 'sales-quotations',
     'erp:credits', 'sales-orders', 'sales-deliveries', 'sales-invoices', 'sales-payments', 'hr-dashboard', 'hr-employees', 'hr-manpower',
     'admin-data', 'hr-recruitment', 'hr-attendance', 'hr-leave', 'hr-payroll', 'hr-separation', 'hr-reports', 'reports', 'activities',
-    'erp:overview','erp:accounting','erp:accounts','erp:journals','erp:reports','erp:aged','erp:bank','erp:inventory','erp:warehouse','erp:stock-moves','erp:manufacturing','erp:production-orders','erp:boms','erp:expenses','erp:expense-claims'];
+    'erp:overview','erp:approvals','erp:accounting','erp:accounts','erp:journals','erp:reports','erp:aged','erp:bank','erp:inventory','erp:warehouse','erp:stock-moves','erp:manufacturing','erp:production-orders','erp:boms','erp:expenses','erp:expense-claims'];
   for (const name of names) {(await page(name)).window.close();}
+
+  // Workflow links open the native form and leave saving to that form.
+  for (const route of [
+    'rfqs&new=1', 'sales-orders&new=1', 'vendors&new=1', 'customers&new=1',
+    'expense-claims&new=1', 'hr-payroll&new=1', 'boms&new=1',
+    'inventory&action=adjust', 'warehouse&new=1', 'journals&new=1', 'credits&new=1'
+  ]) {
+    const screen = await page('erp:' + route);
+    await waitFor(() => screen.window.document.querySelector('#workspace-root [role="dialog"]'),
+      'Workflow did not open the native form: ' + route);
+    screen.window.close();
+  }
+
+  // Confirming in the assistant must use the native approval endpoint with the
+  // selected version and reason. Opening the preview must not submit a decision.
+  const assistantPage = await page('erp:overview');
+  const assistantDoc = assistantPage.window.document;
+  await waitFor(() => assistantDoc.querySelector('[data-process]'), 'Assistant process picker did not load');
+  const approvalCalls = [];
+  const persistence = assistantPage.window.eval('BackendPersistence');
+  const request = persistence.request;
+  persistence.request = async (path, options) => {
+    if (path.startsWith('/approvals/requests?')) return {
+      enabled: true, pageSize: 25, total: 2,
+      items: approvalCalls.length ? [] : [
+        {id: 21, label: 'Expense A', amount: '50.00', currency: 'PKR', canDecide: true, version: 'v21'},
+        {id: 22, label: 'Expense B', amount: '70.00', currency: 'PKR', canDecide: false, version: 'v22'}
+      ]
+    };
+    if (path.startsWith('/approvals/requests/')) {
+      approvalCalls.push({path, options});
+      return {approval: {status: 'Approved'}};
+    }
+    return request(path, options);
+  };
+  const dispatchChange = (element, value) => {
+    element.value = value;
+    element.dispatchEvent(new assistantPage.window.Event('change'));
+  };
+  const composer = assistantDoc.querySelector('[data-chat]');
+  const send = text => {
+    composer.elements.question.value = text;
+    composer.dispatchEvent(new assistantPage.window.Event('submit', {cancelable: true}));
+  };
+  send('RFQ banani hai');
+  await waitFor(() => assistantDoc.querySelector('[data-open-process]'), 'Typed RFQ workflow did not load');
+  assert.match(assistantDoc.querySelector('.erp-ai-message--user').textContent, /RFQ banani hai/);
+  assert.equal(new URL(assistantDoc.querySelector('[data-open-process]').href).search, '?view=rfqs&new=1');
+  await waitFor(() => !composer.querySelector('button').disabled, 'Chat composer remained disabled');
+  send('Show pending approvals');
+  const reviewList = assistantDoc.querySelector('[data-review-list]');
+  await waitFor(() => reviewList.options.length === 2, 'Eligible approval did not load');
+  dispatchChange(reviewList, '21');
+  assert.match(assistantDoc.querySelector('[data-preview]').textContent, /PKR 50.00/);
+  assert.equal(approvalCalls.length, 0);
+  const decisionForm = assistantDoc.querySelector('[data-decision]');
+  decisionForm.elements.decision.value = 'approve';
+  decisionForm.elements.reason.value = 'Verified receipt';
+  decisionForm.dispatchEvent(new assistantPage.window.Event('submit', {cancelable: true}));
+  await waitFor(() => assistantDoc.querySelector('[data-review-status]').textContent === 'Approved and executed in ERP.',
+    'Approval confirmation did not complete');
+  assert.equal(approvalCalls.length, 1);
+  assert.equal(approvalCalls[0].path, '/approvals/requests/21/approve');
+  assert.deepEqual(JSON.parse(approvalCalls[0].options.body), {version: 'v21', reason: 'Verified receipt'});
+  assistantPage.window.close();
+
   let profilePage=await page('sales');
   assert.equal(profilePage.window.document.querySelectorAll('#user-dropdown button[data-action="company-profile"]').length,1);
   await profilePage.window.openCompanyProfile();

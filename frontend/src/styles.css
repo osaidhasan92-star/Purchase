@@ -232,9 +232,7 @@
   flex: 1 1 auto;
   min-height: 0;
 }
-#workspace-root .modal-foot button,
-#workspace-root .modal-head button,
-#workspace-root .modern-pagination button {
+#workspace-root .modal-head button {
   min-height: 40px;
   font-family: inherit;
 }
@@ -246,21 +244,6 @@
 #workspace-root .modal-head h3 {
   min-width: 0;
   overflow-wrap: anywhere;
-}
-#workspace-root .modal-foot .btn-secondary,
-#workspace-root .modern-pagination button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 10px 15px;
-  border: 1px solid #dce4ef;
-  border-radius: 8px;
-  background: #fff;
-  color: #40516c;
-  font-size: 12px;
-  font-weight: 650;
-  line-height: 1.3;
-  cursor: pointer;
 }
 #workspace-root .modal button:disabled,
 #workspace-root .modern-pagination button:disabled {
@@ -1581,21 +1564,6 @@
   font: inherit;
   font-size: 12px;
 }
-.acct-toolbar .btn-primary {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  text-decoration: none;
-  min-height: 38px;
-}
-#workspace-root .acct-toolbar .acct-new-invoice {
-  background: #008d85;
-  border-color: #008d85;
-}
-#workspace-root .acct-toolbar .acct-new-bill {
-  background: #7143c4;
-  border-color: #7143c4;
-}
 #workspace-root [data-dashboard="accounting"] .ref-kpi-label {
   font-size: 12px;
   font-weight: 650;
@@ -2011,4 +1979,139 @@
   display: block;
   margin-top: 5px;
   font-size: 11px;
+}
+
+/* Shared ERP action controls. Navigation and inline record links retain their roles. */
+:root {
+  --erp-action-height: 38px;
+  --erp-action-width: 96px;
+  --erp-action-radius: 8px;
+  --erp-action-primary: #008d85;
+  --erp-action-accent: #7143c4;
+  --erp-action-border: #dce4ef;
+}
+#workspace-root
+  :where(
+    .btn,
+    .btn-primary,
+    .btn-accent,
+    .btn-secondary,
+    .btn-outline,
+    .btn-sm,
+    .btn-danger-sm,
+    .modern-pagination button,
+    .modern-error button,
+    .modal-foot button,
+    button:not([class], .user-dropdown *, .module-tabs *, .sidebar *)
+  ):not(.link-btn),
+.erp-ai-launcher,
+.erp-ai-dialog button,
+.erp-ai-dialog [data-open-process]:not([hidden]) {
+  display: inline-flex;
+  box-sizing: border-box;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: var(--erp-action-height);
+  min-width: var(--erp-action-width);
+  max-width: 100%;
+  padding: 6px 15px;
+  border: 1px solid var(--erp-action-border);
+  border-radius: var(--erp-action-radius);
+  color: #364569;
+  background: #fff;
+  font:
+    650 12px / 1.25 Inter,
+    Arial,
+    sans-serif;
+  text-align: center;
+  text-decoration: none;
+  vertical-align: middle;
+  cursor: pointer;
+}
+#workspace-root .btn-primary,
+.erp-ai-launcher,
+.erp-ai-dialog button[type="submit"] {
+  color: #fff;
+  border-color: var(--erp-action-primary);
+  background: var(--erp-action-primary);
+}
+#workspace-root :is(.btn-accent, .acct-new-bill) {
+  color: #fff;
+  border-color: var(--erp-action-accent);
+  background: var(--erp-action-accent);
+}
+#workspace-root .btn-danger-sm {
+  color: #b91c1c;
+  border-color: #fecaca;
+  background: #fef2f2;
+}
+#workspace-root
+  :is(.btn-primary, .btn-accent, .btn-secondary, .btn-outline, .btn-sm):hover,
+.erp-ai-dialog button:hover,
+.erp-ai-launcher:hover {
+  filter: brightness(0.95);
+}
+#workspace-root :is(button, a):focus-visible,
+.erp-ai-dialog :is(button, a):focus-visible,
+.erp-ai-launcher:focus-visible {
+  outline: 2px solid #7143c4;
+  outline-offset: 2px;
+}
+#workspace-root button:disabled,
+.erp-ai-dialog button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+#workspace-root .modal-head button {
+  min-width: 38px;
+  min-height: var(--erp-action-height);
+  padding-inline: 8px;
+}
+
+.inventory-workspace {
+  min-width: 0;
+}
+.inventory-workspace > .section-head {
+  align-items: flex-start;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 18px;
+}
+.inventory-workspace > .section-head h2 {
+  color: #172338;
+  font-size: 22px;
+}
+.inventory-register {
+  min-width: 0;
+  margin-top: 20px;
+  padding: 18px;
+  border: 1px solid #dce4ef;
+  border-radius: 14px;
+  background: #fff;
+}
+.inventory-register-heading h3 {
+  margin: 0 0 4px;
+  color: #243358;
+  font-size: 16px;
+}
+.inventory-register-heading p,
+.inventory-loading {
+  margin: 0;
+  color: #64748b;
+  font-size: 12px;
+}
+.inventory-register .finance-filters {
+  margin: 16px 0;
+}
+.inventory-register .finance-table-wrap {
+  margin: 0;
+}
+@media (max-width: 640px) {
+  .inventory-register {
+    padding: 12px;
+  }
+  .inventory-workspace .finance-actions {
+    flex-wrap: wrap;
+  }
 }

@@ -30,7 +30,7 @@ def worker(url, path, method, payload, barrier, output, seam="tail"):
     from backend import concurrency, db_contention, expense_api
 
     application = create_app(
-        dict(SQLALCHEMY_DATABASE_URI=url, TESTING=True, COOKIE_SECURE=False)
+        dict(SQLALCHEMY_DATABASE_URI=url, TESTING=True, COOKIE_SECURE=False, APPROVAL_CONTROLS_ENABLED=False)
     )
     original_tail = concurrency.acquire_payroll_posting
 

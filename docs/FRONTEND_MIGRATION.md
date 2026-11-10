@@ -231,3 +231,17 @@ after later returns. See [Order returns and closure](ORDER_RETURNS_AND_CLOSURE.m
 
 No new schema migration is required for this step on the preceding release. Restart
 the backend and hard-refresh after installing the included compiled frontend bundle.
+
+
+## Independent approval inbox and PKR controls
+
+Pending Approvals is a shared native workspace for submitted requests, assigned
+reviews and decision history. Admin configures per-role PKR limits with a reason;
+there are no self-approval or amount-limit exceptions for Admin. Direct posting
+requests open the inbox without economic changes. Shared dialogs collect decision
+and rejection reasons. See [Approval controls and upgrade](APPROVAL_CONTROLS.md).
+
+**Upgrade required:** stop workers, back up and run
+`python -m flask --app backend.app migrate-storage`, then restart and hard-refresh.
+Limits start unconfigured. Configure them and provide a separate eligible approver
+before controlled posting. Compiled assets are included.

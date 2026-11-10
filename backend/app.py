@@ -416,6 +416,7 @@ def create_app(config=None):
         raise ValueError('ERP_LOCK_TIMEOUT_MS must be between 1 and 60000')
     app.config.setdefault('HR_RESOURCE_LOCKING', os.environ.get('HR_RESOURCE_LOCKING', 'true').lower() == 'true')
     app.config.setdefault('RESOURCE_CONCURRENCY', os.environ.get('RESOURCE_CONCURRENCY', 'true').lower() == 'true')
+    app.config.setdefault('APPROVAL_CONTROLS_ENABLED', os.environ.get('APPROVAL_CONTROLS_ENABLED', 'true').lower() == 'true')
     db.init_app(app)
 
     @app.before_request
@@ -795,7 +796,7 @@ def create_app(config=None):
             query['view'] = [legacy_routes[path]]
             return redirect('/erp.html?' + urlencode(query, doseq=True), code=302)
         # Never expose backend source, environment files, database files or backup JS.
-        public = {'frontend-dist/THIRD_PARTY_LICENSES.txt', 'frontend-dist/workspace-app.js', 'frontend-dist/workspace-app.css', 'workspace.js', 'workspace-loader.js', 'remaining-workspace.js', 'admin-workspace.js', 'expense-workspace.js', 'production-workspace.js', 'inventory-workspace.js', 'finance-workspace.js', 'hr-workspace.js', 'trade-workspace.js', 'crm-workspace.js', 'app.js', 'backend-client.js', 'erp.css',
+        public = {'frontend-dist/THIRD_PARTY_LICENSES.txt', 'frontend-dist/workspace-app.js', 'frontend-dist/workspace-app.css', 'workspace.js', 'workspace-loader.js', 'assistant-workspace.js', 'remaining-workspace.js', 'admin-workspace.js', 'expense-workspace.js', 'production-workspace.js', 'inventory-workspace.js', 'finance-workspace.js', 'hr-workspace.js', 'trade-workspace.js', 'crm-workspace.js', 'app.js', 'backend-client.js', 'erp.css',
                   'shared.css', 'styles.css', 'logo.png', 'dexterra-stamp.jpg'}
         pages = {'index.html', 'erp.html'}
         asset = path.startswith('assets/') and Path(path).suffix.lower() in ('.png', '.jpg', '.jpeg', '.webp')
@@ -959,6 +960,11 @@ def create_app(config=None):
     app.register_blueprint(expense_blueprint)
     from .production_api import bp as production_blueprint
     app.register_blueprint(production_blueprint)
+    from .approvals import bp as approvals_blueprint, intercept
+    app.register_blueprint(approvals_blueprint)
+    app.before_request(intercept)
+    from .assistant_api import bp as assistant_blueprint
+    app.register_blueprint(assistant_blueprint)
     return app
 
 

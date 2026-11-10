@@ -98,21 +98,6 @@ export function RemainingPage({
       setBusy(false);
     }
   }
-  async function seed() {
-    if (locked.current) return;
-    locked.current = true;
-    setBusy(true);
-    setError("");
-    try {
-      await bridge.request("/erp/seed-demo", { method: "POST", body: "{}" });
-      location.reload();
-    } catch (e) {
-      setError(errorMessage(e));
-    } finally {
-      locked.current = false;
-      setBusy(false);
-    }
-  }
   return (
     <section data-native-remaining={view} aria-busy={loading}>
       {error && (
@@ -121,29 +106,14 @@ export function RemainingPage({
         </p>
       )}
       {view === "overview" ? (
-        <>
-          {summary && (
-            <ModuleDashboard
-              kind="overview"
-              summary={summary}
-              bridge={bridge}
-              workspaces={workspaces}
-            />
-          )}
-          {!!summary?.canSeed && (
-            <div className="section-card">
-              <h3>General-products demonstration</h3>
-              <p>
-                Load sample products, a standard BoM, opening inventory and
-                cash/bank balances into this empty installation. This posts demo
-                opening journals.
-              </p>
-              <button className="btn-secondary" disabled={busy} onClick={seed}>
-                Load demo opening data
-              </button>
-            </div>
-          )}
-        </>
+        summary && (
+          <ModuleDashboard
+            kind="overview"
+            summary={summary}
+            bridge={bridge}
+            workspaces={workspaces}
+          />
+        )
       ) : (
         <>
           <div className="section-head">

@@ -65,7 +65,10 @@ export function CreditsPage({ bridge }: { bridge: Bridge }) {
     [error, setError] = useState(""),
     [loading, setLoading] = useState(true),
     [detail, setDetail] = useState<Credit | null>(null),
-    [creating, setCreating] = useState(!!params.get("invoiceId")),
+    [creating, setCreating] = useState(
+      bridge.can("accounting", "create") &&
+        (!!params.get("invoiceId") || params.get("new") === "1"),
+    ),
     [invoiceId, setInvoiceId] = useState(params.get("invoiceId") || ""),
     [source, setSource] = useState<Source | null>(null),
     [quantities, setQuantities] = useState<Record<number, string>>({}),

@@ -35,7 +35,11 @@ export function WarehousePage({ bridge }: { bridge: Bridge }) {
     [reload, setReload] = useState(0),
     [loading, setLoading] = useState(true),
     [error, setError] = useState(""),
-    [form, setForm] = useState(!!inspectionProduct && canInspect),
+    [form, setForm] = useState(
+      canInspect &&
+        (!!inspectionProduct ||
+          new URLSearchParams(location.search).get("new") === "1"),
+    ),
     [product, setProduct] = useState(inspectionProduct),
     [stock, setStock] = useState<Row | null>(null),
     [source, setSource] = useState(inspectionProduct ? "Returns" : "Stock"),

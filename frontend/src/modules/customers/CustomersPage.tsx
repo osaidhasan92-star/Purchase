@@ -134,6 +134,13 @@ export function CustomersPage({
       "customer-" + Date.now() + "-" + Math.random().toString(36).slice(2);
     setEditing(customer);
   };
+  useEffect(() => {
+    if (
+      bridge.can("sales_customers", "create") &&
+      new URLSearchParams(location.search).get("new") === "1"
+    )
+      open(null);
+  }, []);
   const save = async () => {
     if (readonly || busy.current || !form.current) return;
     if (!form.current.reportValidity()) return;

@@ -28,7 +28,7 @@ document.addEventListener('click',event=>{
 if(location.pathname.endsWith('/erp.html')){
  const url=new URL(location.href),view=url.searchParams.get('view')||'overview';
  if(view==='dashboard')url.searchParams.set('view','overview');
- if(!Object.hasOwn(WORKSPACE_ROUTES,view)&&!['overview', 'warehouse', 'credits', 'accounting', 'accounts', 'journals', 'reports', 'aged', 'bank', 'inventory', 'manufacturing', 'boms', 'expenses', 'stock-moves', 'production-orders', 'expense-claims'].includes(view))url.searchParams.set('view','overview');
+ if(!Object.hasOwn(WORKSPACE_ROUTES,view)&&!['overview', 'approvals', 'warehouse', 'credits', 'accounting', 'accounts', 'journals', 'reports', 'aged', 'bank', 'inventory', 'manufacturing', 'boms', 'expenses', 'stock-moves', 'production-orders', 'expense-claims'].includes(view))url.searchParams.set('view','overview');
  else if(!url.searchParams.has('view'))url.searchParams.set('view','overview');
  if(url.href!==location.href)history.replaceState(null,'',url);
 }
@@ -66,6 +66,6 @@ function nativeProductionView(){const view=new URLSearchParams(location.search).
 
 function nativeExpenseView(){const view=new URLSearchParams(location.search).get('view');return workspacePage()==='erp.html'&&['expenses','expense-claims'].includes(view)?view:null;}
 
-function nativeAdminView(){return {'users.html':'users','activities.html':'activities','admin-data.html':'data'}[workspacePage()]||null;}
+function nativeAdminView(){if(workspacePage()==='erp.html'&&new URLSearchParams(location.search).get('view')==='approvals')return 'approvals';return {'users.html':'users','activities.html':'activities','admin-data.html':'data'}[workspacePage()]||null;}
 
 function nativeRemainingView(){const page=workspacePage();return page==='companies.html'?'companies':page==='crm-quotes.html'?'crmQuotes':page==='erp.html'&&(new URLSearchParams(location.search).get('view')||'overview')==='overview'?'overview':null;}

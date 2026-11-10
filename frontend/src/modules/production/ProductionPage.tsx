@@ -41,7 +41,12 @@ export function ProductionPage({
     [loading, setLoading] = useState(true),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
-    [form, setForm] = useState<FormState | null>(null),
+    [form, setForm] = useState<FormState | null>(() =>
+      bridge.can("manufacturing", "create") &&
+      new URLSearchParams(location.search).get("new") === "1"
+        ? { kind: view === "boms" ? "bom" : "order" }
+        : null,
+    ),
     [bom, setBom] = useState<Bom | null>(null),
     [order, setOrder] = useState<Order | null>(null),
     [completion, setCompletion] = useState(false);

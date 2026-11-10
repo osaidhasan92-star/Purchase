@@ -106,13 +106,11 @@ export function ModuleDashboard({
   kind,
   summary,
   bridge,
-  items = [],
   workspaces = [],
 }: {
   kind: ModuleKind;
   summary: object;
   bridge: Bridge;
-  items?: Item[];
   workspaces?: Workspace[];
 }) {
   const s = summary as Data,
@@ -426,30 +424,19 @@ export function ModuleDashboard({
         icon: "order",
       },
     ];
-    chartTitle = "Product Stock Values";
-    chartSubtitle =
-      "Top five stock values on the current product register page";
+    chartTitle = "Highest Value Stock";
+    chartSubtitle = "Five highest stock values across the warehouse";
     currency = true;
-    const stockItems = items.filter((r) => r.type === "stock");
-    chartRows = stockItems
-      .filter((r) => num(r.value) !== undefined)
-      .sort((a, b) => Number(b.value) - Number(a.value))
-      .slice(0, 5)
-      .map((r) => ({ label: text(r.name), value: Number(r.value) }));
-    workflowTitle = "Current Page Stock Mix";
+    chartRows = ((s.topProducts || []) as Item[]).map((product) => ({
+      label: text(product.name),
+      value: num(product.value) ?? 0,
+    }));
+    workflowTitle = "Stock Availability";
+    const health = (s.stockHealth || {}) as Record<string, number>;
     workflowRows = [
-      {
-        label: "Positive stock",
-        count: stockItems.filter((r) => Number(r.quantity) > 0).length,
-      },
-      {
-        label: "Zero stock",
-        count: stockItems.filter((r) => num(r.quantity) === 0).length,
-      },
-      {
-        label: "Negative stock",
-        count: stockItems.filter((r) => (num(r.quantity) ?? 0) < 0).length,
-      },
+      { label: "In stock", count: health.inStock ?? 0 },
+      { label: "Out of stock", count: health.outOfStock ?? 0 },
+      { label: "Negative balance", count: health.negative ?? 0 },
     ];
     lower = [
       recordPanel,
@@ -470,7 +457,7 @@ export function ModuleDashboard({
       </Panel>,
       quick("Inventory Workspace", [
         ["Product Master", "products", "products"],
-        ["Stock Balances", "inventory", "inventory"],
+        ["Warehouse Operations", "warehouse", "inventory"],
         ["Stock Movements", "stock-moves", "inventory"],
       ]),
     ];
@@ -759,7 +746,7 @@ export function ModuleDashboard({
           kicker="Current position"
           subtitle={
             kind === "inventory"
-              ? "Counts reflect the products on this page"
+              ? "Stock products across the warehouse"
               : "Authorized operational information"
           }
         >

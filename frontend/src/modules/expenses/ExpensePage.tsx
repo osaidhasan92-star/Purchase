@@ -54,7 +54,12 @@ export function ExpensePage({
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
     [claim, setClaim] = useState<Claim | null>(null),
-    [form, setForm] = useState<"create" | "pay" | null>(null);
+    [form, setForm] = useState<"create" | "pay" | null>(() =>
+      bridge.can("expenses", "create") &&
+      new URLSearchParams(location.search).get("new") === "1"
+        ? "create"
+        : null,
+    );
   const lock = useRef(false),
     keys = useRef(new Map<string, string>());
   useEffect(() => {

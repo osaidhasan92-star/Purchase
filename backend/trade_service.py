@@ -365,7 +365,7 @@ def add(state, key, values):
     record = {
         **values,
         "id": identity,
-        "createdBy": g.user.id,
+        "createdBy": g.get("approval_requester_id", g.user.id),
         "createdAt": utcnow(),
         "workflowVersion": 1,
     }

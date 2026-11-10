@@ -186,4 +186,4 @@ def source_creator(source):
         row = next((r for r in (doc.data.get(collection, []) if doc else []) if str(r.get('id')) == identity), None)
         if row:
             return creator_of_record(row)
-    return getattr(g, 'scope_creator', None) or g.user.id
+    return getattr(g, 'scope_creator', None) or getattr(g, 'approval_requester_id', None) or g.user.id

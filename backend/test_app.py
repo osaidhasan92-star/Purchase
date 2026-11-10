@@ -19,7 +19,7 @@ def app(tmp_path):
     if test_url and not test_url.split('?',1)[0].endswith('/purchase_test'):
         raise RuntimeError('TEST_DATABASE_URL must point to an isolated database named purchase_test')
     # Exercise the explicit historical transport compatibility mode in this regression suite.
-    application = create_app({'ENABLE_LEGACY_HR_WRITES': True, 'ENABLE_LEGACY_TRADE_WRITES': True, 'TESTING': True, 'COOKIE_SECURE': False,
+    application = create_app({'APPROVAL_CONTROLS_ENABLED': False, 'ENABLE_LEGACY_HR_WRITES': True, 'ENABLE_LEGACY_TRADE_WRITES': True, 'TESTING': True, 'COOKIE_SECURE': False,
                               'SQLALCHEMY_DATABASE_URI': test_url or 'sqlite:///' + str(tmp_path / 'test.sqlite')})
     if test_url:
         with application.app_context():
@@ -84,7 +84,7 @@ def test_persistence_across_app_instances_and_conflict(app):
     revision = client.get('/api/state').json['revision']
     assert patch(client, headers, {'vendors': [{'id': 1, 'name': 'Saved supplier'}]}, revision=revision).status_code == 200
     assert patch(client, headers, {'vendors': []}, revision=revision).status_code == 409
-    other = create_app({'TESTING': True, 'COOKIE_SECURE': False,
+    other = create_app({'APPROVAL_CONTROLS_ENABLED': False, 'TESTING': True, 'COOKIE_SECURE': False,
                         'SQLALCHEMY_DATABASE_URI': app.config['SQLALCHEMY_DATABASE_URI']})
     reader, _ = session(other)
     assert reader.get('/api/state').json['state']['vendors'][0]['name'] == 'Saved supplier'

@@ -29,7 +29,7 @@ export interface ShellPage {
   menuStyle: string;
   html: string;
   remainingView?: "overview" | "companies" | "crmQuotes";
-  adminView?: "users" | "activities" | "data";
+  adminView?: "users" | "activities" | "data" | "approvals";
   expenseView?: "expenses" | "expense-claims";
   productionView?: import("./modules/production/ProductionPage").ProductionView;
   inventoryView?: "inventory" | "stock-moves" | "warehouse";
@@ -115,6 +115,7 @@ export interface CustomerPage {
   pageSize: number;
 }
 export interface ModernRuntime {
+  askDecisionReason(): Promise<string | null>;
   dispose(): void;
   render(page: ShellPage, bridge: Bridge): void;
   openMaster(id?: string | number): void;

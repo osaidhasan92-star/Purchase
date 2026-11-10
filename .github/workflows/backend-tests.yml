@@ -1,5 +1,5 @@
 name: Backend and frontend checks
-on: [push, pull_request]
+on: [push, pull_request, workflow_dispatch]
 jobs:
   sqlite:
     runs-on: ubuntu-latest
@@ -41,14 +41,14 @@ jobs:
         with:
           python-version: '3.12'
       - run: pip install -r backend/requirements.txt pytest
-      - run: python -m pytest backend -q
-      - name: Isolated PostgreSQL capacity baseline
+      - run: python -m pytest backend -q --junitxml=postgres-tests.xml
+      - name: Approval-enabled PostgreSQL service baseline
         env:
           POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
           CAPACITY_DATABASE_URL: postgresql+psycopg://purchase:isolated-test-password@localhost:5432/purchase_capacity_test
         run: |
           docker exec "$POSTGRES_CONTAINER" createdb -U purchase purchase_capacity_test
-          python -m backend.capacity_probe --rows 1000 --workers 1 4 8 --iterations 3 --output capacity-report.json
+          python -m backend.approval_probe --rows 1000 --workers 1 4 8 --iterations 3 --output capacity-report.json
           cat capacity-report.json
       - name: Verify PostgreSQL backup and restore
         env:
@@ -61,7 +61,18 @@ jobs:
           python -m backend.backup_verify prepare
           docker exec "$POSTGRES_CONTAINER" pg_dump -U purchase -Fc purchase_backup_source > /tmp/purchase-backup-drill.dump
           docker exec -i "$POSTGRES_CONTAINER" pg_restore -U purchase -d purchase_backup_restore < /tmp/purchase-backup-drill.dump
-          python -m backend.backup_verify compare
+          python -m backend.backup_verify compare > backup-report.json
+          cat backup-report.json
+      - name: Preserve PostgreSQL acceptance reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: postgres-acceptance-reports
+          path: |
+            postgres-tests.xml
+            capacity-report.json
+            backup-report.json
+          if-no-files-found: warn
 
   browser:
     runs-on: ubuntu-latest
@@ -80,3 +91,4 @@ jobs:
       - run: npm run build:frontend
       - run: npx playwright install --with-deps chromium
       - run: npm run test:browser
+      - run: npm run test:approvals

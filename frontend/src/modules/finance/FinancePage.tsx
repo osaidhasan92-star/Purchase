@@ -61,7 +61,16 @@ export function FinancePage({
     [loading, setLoading] = useState(true),
     [error, setError] = useState(""),
     [reload, setReload] = useState(0),
-    [form, setForm] = useState<FormState | null>(null),
+    [form, setForm] = useState<FormState | null>(() => {
+      if (new URLSearchParams(location.search).get("new") !== "1") return null;
+      if (view === "aged" && bridge.can("accounting", "approve"))
+        return { kind: "reconcile" };
+      if (!bridge.can("accounting", "create")) return null;
+      if (view === "accounts") return { kind: "account" };
+      if (view === "journals") return { kind: "journal" };
+      if (view === "bank") return { kind: "statement" };
+      return null;
+    }),
     [detail, setDetail] = useState<Journal | null>(null),
     [busy, setBusy] = useState(false);
   const locked = useRef(false),

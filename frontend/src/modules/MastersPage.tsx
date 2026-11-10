@@ -267,6 +267,13 @@ export function MastersPage({
       kind + "-" + Date.now() + "-" + Math.random().toString(36).slice(2);
     setEditing(value);
   };
+  useEffect(() => {
+    if (
+      bridge.can(kind, "create") &&
+      new URLSearchParams(location.search).get("new") === "1"
+    )
+      open(null);
+  }, []);
   const save = async () => {
     if (
       readonly ||

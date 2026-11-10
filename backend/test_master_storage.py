@@ -61,7 +61,7 @@ def test_existing_database_migration_is_idempotent_and_preserves_records(app):
         assert db.session.get(Document, "app").revision == revision
     other = create_app(
         {
-            "TESTING": True,
+            "TESTING": True, "APPROVAL_CONTROLS_ENABLED": False,
             "COOKIE_SECURE": False,
             "SQLALCHEMY_DATABASE_URI": app.config["SQLALCHEMY_DATABASE_URI"],
         }

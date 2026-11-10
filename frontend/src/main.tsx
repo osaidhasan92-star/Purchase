@@ -1,3 +1,5 @@
+import { askDecisionReason } from "./components/ApprovalReasonPrompt";
+import { ApprovalsPage } from "./modules/admin/ApprovalsPage";
 import { WarehousePage } from "./modules/inventory/WarehousePage";
 import { CreditsPage } from "./modules/finance/CreditsPage";
 import { Component, type ErrorInfo, type ReactNode } from "react";
@@ -45,6 +47,7 @@ let root: Root | undefined;
 const commands: CustomerCommands = { open: () => {}, save: async () => {} };
 const masterCommands: MasterCommands = { open: () => {}, save: async () => {} };
 window.ModernWorkspace = {
+  askDecisionReason,
   dispose() {
     root?.unmount();
     root = undefined;
@@ -69,7 +72,11 @@ window.ModernWorkspace = {
                 bridge={bridge}
                 workspaces={page.workspaces}
               />
-            ) : page.native === "admin" && page.adminView ? (
+            ) : page.native === "admin" && page.adminView === "approvals" ? (
+              <ApprovalsPage bridge={bridge} user={page.user} />
+            ) : page.native === "admin" &&
+              page.adminView &&
+              page.adminView !== "approvals" ? (
               <AdminPage
                 key={page.adminView}
                 view={page.adminView}

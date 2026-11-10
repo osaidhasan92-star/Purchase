@@ -38,7 +38,12 @@ export function HrPage({
     [reload, setReload] = useState(0),
     [loading, setLoading] = useState(true),
     [error, setError] = useState(""),
-    [form, setForm] = useState<RecordData | null | undefined>(undefined),
+    [form, setForm] = useState<RecordData | null | undefined>(() =>
+      bridge.can(config.module, "create") &&
+      new URLSearchParams(location.search).get("new") === "1"
+        ? null
+        : undefined,
+    ),
     [detail, setDetail] = useState<RecordData | null>(null),
     [login, setLogin] = useState<RecordData | null>(null),
     [busy, setBusy] = useState(false);

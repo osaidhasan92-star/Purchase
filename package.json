@@ -7,6 +7,7 @@
     "build:frontend": "npm run typecheck && node frontend/build.mjs",
     "dev:frontend": "node frontend/build.mjs --watch",
     "test:browser": "node tests/browser-smoke.cjs",
+    "test:approvals": "node tests/approvals-browser.cjs",
     "format:frontend": "prettier --write frontend",
     "check:format": "prettier --check frontend"
   },

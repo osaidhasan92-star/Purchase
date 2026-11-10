@@ -4,7 +4,8 @@
 
 1. Follow the README to initialize the database and create an administrator.
 2. Sign in. The landing page is **ERP Overview**, with Pakistan, PKR and WH / Stock.
-3. On an empty installation, click **Load demo opening data**. This adds:
+3. Prepare demo opening data in a separate empty test database before the presentation.
+   The demo workflow below expects:
    - Main Bank PKR 250,000 and Cash on Hand PKR 25,000.
    - 100 General Panels at PKR 500 cost and 200 Fastener Packs at PKR 50.
    - A General Assembly Kit and Installation Service catalog entry.

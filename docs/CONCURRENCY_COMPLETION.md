@@ -115,6 +115,18 @@ Period close, administration, master data and explicit bulk adapters remain excl
 by design. Shared financial posting, numbering and creator metadata still serialize
 parts of transactions. Representative mixed-module HTTP load tests are the next
 measurement step; these concurrency rendezvous/race tests do not establish a user
-capacity. Monitoring, off-server backup scheduling/retention, MFA/approval controls,
+capacity. Monitoring, off-server backup scheduling/retention, MFA/SSO and independent security review,
 required business extensions, statutory validation and client acceptance remain on
 the broader readiness roadmap. Nothing here merges or deploys the draft branch.
+
+
+## Independent approval controls
+
+The native approval layer now enforces configured per-role PKR limits and independent
+review. Approval decisions and policy/routing writes retain the exclusive compatibility
+gate so decision metadata and business effects commit together. Draft preparation/editing
+and fulfillment of previously approved orders continue on their existing resource-lock
+paths. See [Approval controls](APPROVAL_CONTROLS.md). The isolated historical capacity
+probe explicitly disables the new control layer and labels its output accordingly;
+its results do not measure production approval throughput. Multi-stage approvals,
+sustained deployment HTTP load and independent security acceptance remain separate.

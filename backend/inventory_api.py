@@ -4,7 +4,7 @@ from functools import wraps
 from decimal import Decimal, ROUND_HALF_UP
 import re
 from flask import Blueprint, g, jsonify, request
-from sqlalchemy import select, func, or_
+from sqlalchemy import select, func, or_, case
 from .app import db, app_document, body, problem, audit, validate_json
 from .permissions import allowed
 from .erp import (
@@ -146,13 +146,26 @@ def get_move(identity):
 @bp.get("/summary")
 @read
 def summary():
-    count = db.session.scalar(
-        select(func.count()).select_from(ERPProduct).where(ERPProduct.kind == "stock")
-    )
-    value = db.session.scalar(
-        select(func.coalesce(func.sum(StockBalance.value), 0))
-        .join(ERPProduct)
+    quantity = func.coalesce(StockBalance.quantity, 0)
+    stock = (
+        select(
+            func.count(),
+            func.coalesce(func.sum(StockBalance.value), 0),
+            func.count(case((quantity > 0, 1))),
+            func.count(case((quantity == 0, 1))),
+            func.count(case((quantity < 0, 1))),
+        )
+        .select_from(ERPProduct)
+        .outerjoin(StockBalance, StockBalance.product_id == ERPProduct.id)
         .where(ERPProduct.kind == "stock")
+    )
+    count, value, in_stock, out_of_stock, negative = db.session.execute(stock).one()
+    top_products = db.session.execute(
+        select(ERPProduct.name, StockBalance.value)
+        .join(StockBalance, StockBalance.product_id == ERPProduct.id)
+        .where(ERPProduct.kind == "stock", StockBalance.value > 0)
+        .order_by(StockBalance.value.desc(), ERPProduct.id)
+        .limit(5)
     )
     moves = db.session.scalar(select(func.count()).select_from(StockMove))
     return jsonify(
@@ -161,6 +174,8 @@ def summary():
         stockProducts=count,
         inventoryValue=str(value),
         movements=moves,
+        stockHealth={"inStock": in_stock, "outOfStock": out_of_stock, "negative": negative},
+        topProducts=[{"name": name, "value": str(amount)} for name, amount in top_products],
     )
 
 
@@ -316,7 +331,7 @@ def command(command):
             if quantity <= 0:
                 problem("Scrap quantity must be positive")
             quantity = -quantity
-        g.scope_creator = g.user.id
+        g.scope_creator = g.get("approval_requester_id", g.user.id)
         m = stock_move(
             p.id,
             quantity,

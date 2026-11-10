@@ -62,8 +62,16 @@ export function InventoryPage({
     [reload, setReload] = useState(0),
     [loading, setLoading] = useState(true),
     [error, setError] = useState(""),
+    [summaryError, setSummaryError] = useState(""),
+    [actionError, setActionError] = useState(""),
     [detail, setDetail] = useState<Movement | null>(null),
-    [form, setForm] = useState<Form | null>(null),
+    [form, setForm] = useState<Form | null>(() => {
+      const action = new URLSearchParams(location.search).get("action");
+      return bridge.can("inventory", "approve") &&
+        (action === "adjust" || action === "scrap")
+        ? { kind: action }
+        : null;
+    }),
     [busy, setBusy] = useState(false);
   const locked = useRef(false);
   const moves = view === "stock-moves";
@@ -79,17 +87,12 @@ export function InventoryPage({
     setError("");
     const timer = setTimeout(
       () =>
-        Promise.all([
-          bridge.request<PageData>(
+        bridge
+          .request<PageData>(
             "/inventory/" + (moves ? "movements" : "products") + "?" + params,
-          ),
-          bridge.request<Summary>("/inventory/summary"),
-        ])
-          .then(([list, s]) => {
-            if (active) {
-              setData(list);
-              setSummary(s);
-            }
+          )
+          .then((list) => {
+            if (active) setData(list);
           })
           .catch((e) => {
             if (active) setError(errorMessage(e));
@@ -104,11 +107,29 @@ export function InventoryPage({
       clearTimeout(timer);
     };
   }, [bridge, view, page, search, type, productId, start, end, reload]);
+  useEffect(() => {
+    let active = true;
+    setSummaryError("");
+    bridge
+      .request<Summary>("/inventory/summary")
+      .then((result) => {
+        if (active) setSummary(result);
+      })
+      .catch((failure) => {
+        if (active) {
+          setSummary(null);
+          setSummaryError(errorMessage(failure));
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, [bridge, reload]);
   async function open(id: number) {
     if (locked.current) return;
     locked.current = true;
     setBusy(true);
-    setError("");
+    setActionError("");
     try {
       setDetail(
         (
@@ -118,7 +139,7 @@ export function InventoryPage({
         ).record,
       );
     } catch (e) {
-      setError(errorMessage(e));
+      setActionError(errorMessage(e));
     } finally {
       locked.current = false;
       setBusy(false);
@@ -132,7 +153,7 @@ export function InventoryPage({
     >
       <div className="section-head">
         <div>
-          <h2>{moves ? "Stock movement register" : "Stock balances"}</h2>
+          <h2>{moves ? "Stock movement register" : "Inventory overview"}</h2>
           <p>WH / Stock · PKR · Perpetual average-cost valuation</p>
         </div>
         {bridge.can("inventory", "approve") && (
@@ -145,7 +166,7 @@ export function InventoryPage({
               Stock Adjustment
             </button>
             <button
-              className="btn-secondary"
+              className="btn-accent"
               disabled={busy}
               onClick={() => setForm({ kind: "scrap" })}
             >
@@ -154,13 +175,26 @@ export function InventoryPage({
           </div>
         )}
       </div>
-      {summary && !moves && (
-        <ModuleDashboard
-          kind="inventory"
-          summary={summary}
-          bridge={bridge}
-          items={data.items}
-        />
+      {summaryError && (
+        <p role="alert" className="modern-error">
+          Inventory summary unavailable. {summaryError}{" "}
+          <button type="button" onClick={() => setReload((v) => v + 1)}>
+            Try again
+          </button>
+        </p>
+      )}
+      {!moves && summary && (
+        <ModuleDashboard kind="inventory" summary={summary} bridge={bridge} />
+      )}
+      {!moves && !summary && !summaryError && (
+        <p role="status" className="inventory-loading">
+          Loading inventory overview…
+        </p>
+      )}
+      {actionError && (
+        <p role="alert" className="modern-error">
+          {actionError}
+        </p>
       )}
       {summary && moves && (
         <div className="stats">
@@ -177,192 +211,206 @@ export function InventoryPage({
           ))}
         </div>
       )}
-      <div className="finance-filters">
-        <label>
-          Search
-          <input
-            type="search"
-            maxLength={160}
-            value={search}
-            onChange={(e) => {
-              setSearch(e.target.value);
-              setPage(1);
-            }}
-          />
-        </label>
-        {moves ? (
-          <>
-            <label>
-              From
-              <input
-                type="date"
-                value={start}
-                onChange={(e) => {
-                  setStart(e.target.value);
-                  setPage(1);
-                }}
-              />
-            </label>
-            <label>
-              To
-              <input
-                type="date"
-                value={end}
-                onChange={(e) => {
-                  setEnd(e.target.value);
-                  setPage(1);
-                }}
-              />
-            </label>
-            {productId && (
-              <p>
-                Product: {productId}{" "}
-                <button
-                  onClick={() => {
-                    setProductId("");
-                    setPage(1);
-                  }}
-                >
-                  Clear product filter
-                </button>
-              </p>
-            )}
-            {bridge.can("inventory", "export") && (
-              <a
-                className="btn-secondary"
-                href={"/api/inventory/movements/export?" + params}
-              >
-                Export current page CSV
-              </a>
-            )}
-          </>
-        ) : (
+      <section
+        className="inventory-register"
+        aria-label={moves ? "Movements" : "Stock balances"}
+      >
+        <div className="inventory-register-heading">
+          <h3>{moves ? "Movement history" : "Stock balances"}</h3>
+          <p>
+            {moves
+              ? "Filter stock movements by date or product"
+              : "On-hand quantities and average costs by product"}
+          </p>
+        </div>
+        <div className="finance-filters">
           <label>
-            Product type
-            <select
-              aria-label="Product type"
-              value={type}
+            Search
+            <input
+              type="search"
+              maxLength={160}
+              value={search}
               onChange={(e) => {
-                setType(e.target.value);
+                setSearch(e.target.value);
                 setPage(1);
               }}
-            >
-              <option value="stock">Stock goods</option>
-              <option value="service">Services</option>
-              <option value="">All products</option>
-            </select>
+            />
           </label>
-        )}
-      </div>
-      {error && (
-        <p role="alert" className="modern-error">
-          {error}{" "}
-          <button onClick={() => setReload((v) => v + 1)}>Try again</button>
-        </p>
-      )}
-      {loading ? (
-        <p role="status">Loading inventory…</p>
-      ) : (
-        <div className="finance-table-wrap">
-          <table className="data-table">
-            <thead>
-              <tr>
-                {(moves
-                  ? [
-                      "Movement",
-                      "Date",
-                      "Product",
-                      "Operation",
-                      "Quantity",
-                      "Value PKR",
-                      "Actions",
-                    ]
-                  : [
-                      "Product",
-                      "SKU",
-                      "Type",
-                      "On hand",
-                      "Average cost PKR",
-                      "Value PKR",
-                      "Actions",
-                    ]
-                ).map((t) => (
-                  <th key={t}>{t}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {data.items.map((r) => (
-                <tr key={str(r.id)}>
-                  {moves ? (
-                    <>
-                      <td>{str(r.number)}</td>
-                      <td>{str(r.date)}</td>
-                      <td>{str(r.product)}</td>
-                      <td>{str(r.kind)}</td>
-                      <td>
-                        {str(r.quantity)} {str(r.unit)}
-                      </td>
-                      <td>{money(r.value)}</td>
-                      <td>
-                        <button
-                          className="btn-secondary btn-sm"
-                          disabled={busy}
-                          onClick={() => void open(Number(r.id))}
-                        >
-                          View
-                        </button>
-                      </td>
-                    </>
-                  ) : (
-                    <>
-                      <td>{str(r.name)}</td>
-                      <td>{str(r.sku)}</td>
-                      <td>{str(r.type)}</td>
-                      <td>
-                        {r.type === "stock"
-                          ? str(r.quantity) + " " + str(r.unit)
-                          : "—"}
-                      </td>
-                      <td>{r.type === "stock" ? money(r.averageCost) : "—"}</td>
-                      <td>{r.type === "stock" ? money(r.value) : "—"}</td>
-                      <td>
-                        <a
-                          className="btn-secondary btn-sm"
-                          href={
-                            "erp.html?view=stock-moves&productId=" +
-                            encodeURIComponent(str(r.id))
-                          }
-                        >
-                          Movements
-                        </a>
-                      </td>
-                    </>
-                  )}
-                </tr>
-              ))}
-              {!data.items.length && (
-                <tr>
-                  <td colSpan={7}>
-                    No {moves ? "stock movements" : "products"} found
-                  </td>
-                </tr>
+          {moves ? (
+            <>
+              <label>
+                From
+                <input
+                  type="date"
+                  value={start}
+                  onChange={(e) => {
+                    setStart(e.target.value);
+                    setPage(1);
+                  }}
+                />
+              </label>
+              <label>
+                To
+                <input
+                  type="date"
+                  value={end}
+                  onChange={(e) => {
+                    setEnd(e.target.value);
+                    setPage(1);
+                  }}
+                />
+              </label>
+              {productId && (
+                <p>
+                  Product: {productId}{" "}
+                  <button
+                    onClick={() => {
+                      setProductId("");
+                      setPage(1);
+                    }}
+                  >
+                    Clear product filter
+                  </button>
+                </p>
               )}
-            </tbody>
-          </table>
+              {bridge.can("inventory", "export") && (
+                <a
+                  className="btn-secondary"
+                  href={"/api/inventory/movements/export?" + params}
+                >
+                  Export current page CSV
+                </a>
+              )}
+            </>
+          ) : (
+            <label>
+              Product type
+              <select
+                aria-label="Product type"
+                value={type}
+                onChange={(e) => {
+                  setType(e.target.value);
+                  setPage(1);
+                }}
+              >
+                <option value="stock">Stock goods</option>
+                <option value="service">Services</option>
+                <option value="">All products</option>
+              </select>
+            </label>
+          )}
         </div>
-      )}
-      <Pager
-        page={page}
-        total={data.total}
-        loading={loading}
-        onPage={setPage}
-      />
-      <p>
-        Receipts increase stock; validated deliveries reduce stock and post cost
-        of goods sold. Returns reverse stock quantities and valuation;
-        commercial credits/refunds require separate accounting treatment.
-      </p>
+        {error && (
+          <p role="alert" className="modern-error">
+            {error}{" "}
+            <button onClick={() => setReload((v) => v + 1)}>Try again</button>
+          </p>
+        )}
+        {loading ? (
+          <p role="status" className="inventory-loading">
+            Loading inventory…
+          </p>
+        ) : error ? null : (
+          <div className="finance-table-wrap">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  {(moves
+                    ? [
+                        "Movement",
+                        "Date",
+                        "Product",
+                        "Operation",
+                        "Quantity",
+                        "Value PKR",
+                        "Actions",
+                      ]
+                    : [
+                        "Product",
+                        "SKU",
+                        "Type",
+                        "On hand",
+                        "Average cost PKR",
+                        "Value PKR",
+                        "Actions",
+                      ]
+                  ).map((t) => (
+                    <th key={t}>{t}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {data.items.map((r) => (
+                  <tr key={str(r.id)}>
+                    {moves ? (
+                      <>
+                        <td>{str(r.number)}</td>
+                        <td>{str(r.date)}</td>
+                        <td>{str(r.product)}</td>
+                        <td>{str(r.kind)}</td>
+                        <td>
+                          {str(r.quantity)} {str(r.unit)}
+                        </td>
+                        <td>{money(r.value)}</td>
+                        <td>
+                          <button
+                            className="btn-secondary btn-sm"
+                            disabled={busy}
+                            onClick={() => void open(Number(r.id))}
+                          >
+                            View
+                          </button>
+                        </td>
+                      </>
+                    ) : (
+                      <>
+                        <td>{str(r.name)}</td>
+                        <td>{str(r.sku)}</td>
+                        <td>{str(r.type)}</td>
+                        <td>
+                          {r.type === "stock"
+                            ? str(r.quantity) + " " + str(r.unit)
+                            : "—"}
+                        </td>
+                        <td>
+                          {r.type === "stock" ? money(r.averageCost) : "—"}
+                        </td>
+                        <td>{r.type === "stock" ? money(r.value) : "—"}</td>
+                        <td>
+                          <a
+                            className="btn-secondary btn-sm"
+                            href={
+                              "erp.html?view=stock-moves&productId=" +
+                              encodeURIComponent(str(r.id))
+                            }
+                          >
+                            Movements
+                          </a>
+                        </td>
+                      </>
+                    )}
+                  </tr>
+                ))}
+                {!data.items.length && (
+                  <tr>
+                    <td colSpan={7}>
+                      No {moves ? "stock movements" : "products"} found
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
+        {!error && (
+          <Pager
+            page={page}
+            total={data.total}
+            loading={loading}
+            onPage={setPage}
+          />
+        )}
+      </section>
       {form && (
         <InventoryForm
           bridge={bridge}

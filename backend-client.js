@@ -35,6 +35,15 @@ const BackendPersistence = (() => {
     if (!['GET', 'HEAD'].includes(method) && csrf) headers.set('X-CSRF-Token', csrf);
     const response = await fetch('/api' + path, {...options, method, headers, credentials: 'same-origin', cache: 'no-store'});
     const data = await response.json().catch(() => ({}));
+    if (response.status === 202 && data.approvalPending && data.approval?.id) {
+      location.href='erp.html?view=approvals&submitted='+encodeURIComponent(String(data.approval.id));
+      throw new Error(data.message || 'Submitted for independent approval');
+    }
+    if (response.status===400 && data.error==='Use Pending Approvals to record a decision reason' && window.ModernWorkspace?.askDecisionReason && typeof options.body==='string') {
+      const reason=await window.ModernWorkspace.askDecisionReason();
+      if(!reason)throw new Error('Decision cancelled');
+      return request(path,{...options,body:JSON.stringify({...JSON.parse(options.body),approvalReason:reason})});
+    }
     if (!response.ok) {
       const error = new Error(data.error || `Request failed (${response.status})`);
       error.status = response.status;

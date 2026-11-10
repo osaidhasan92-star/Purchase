@@ -168,7 +168,7 @@ def _process_payroll(url, identity, version, key, barrier, output):
     from backend.hr_context import Context
 
     application = create_app(
-        dict(SQLALCHEMY_DATABASE_URI=url, TESTING=True, COOKIE_SECURE=False)
+        dict(SQLALCHEMY_DATABASE_URI=url, TESTING=True, COOKIE_SECURE=False, APPROVAL_CONTROLS_ENABLED=False)
     )
     original = Context.validate
 

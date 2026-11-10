@@ -1,5 +1,22 @@
 # Purchase — database-backed ERP
 
+## Approval controls upgrade
+
+Independent approval controls are enabled by default, including for Admin.
+Before using this release, back up the database, stop the backend and run:
+
+```bat
+python -m flask --app backend.app migrate-storage
+```
+
+Restart the backend and press Ctrl+F5. As Admin, open **Pending Approvals →
+Approval Controls**, configure PKR limits and provide a separate eligible
+approver account. Blank limits grant no approval authority. Requests do not
+post stock or accounting changes until independently approved. See
+[setup, workflow coverage and limitations](docs/APPROVAL_CONTROLS.md).
+
+For recovery, concurrency and load acceptance, see [operational checks and PostgreSQL 16 runner](docs/OPERATIONAL_ACCEPTANCE.md).
+
 This is a general-products ERP demonstration for **Pakistan, PKR, one company and
 one warehouse (`WH / Stock`)**. It integrates CRM, sales, purchasing, HR/payroll,
 accounting, inventory, manufacturing and employee expenses. PostgreSQL is the
@@ -116,6 +133,38 @@ restart or ordinary `docker compose down` does not delete this named volume.
 For a managed database instead of Compose, set `DATABASE_URL` to a PostgreSQL
 connection URL. Both `postgresql://` and `postgresql+psycopg://` are supported.
 Use the database provider's TLS settings when the connection crosses networks.
+
+## Run ERP workflows with the AI Assistant
+
+Open **AI Assistant** from any signed-in workspace and type what you want
+to do. Try “RFQ banani hai,” “create a payroll draft,” or “show pending approvals.”
+Common written commands work without an AI key. **Browse workflows** lists the
+forms and registers your role can open.
+
+The assistant replies with a link to the existing ERP form or register.
+Select source records, complete the fields and save there. Creating an RFQ
+requires an approved purchase request. The RFQ starts as Draft and follows
+the normal Mark as Sent workflow.
+
+For approvals, choose an eligible pending request in the Assistant, review the
+record details and PKR amount, select Approve or Reject and enter a decision
+reason before confirming. The Assistant uses the same approval endpoint as the
+ERP inbox. The server rechecks assignment, record access, the reviewer limit,
+independence and version at execution. Use the Pending Approvals screen to
+discover new review requests. The Assistant can also answer questions using
+the selected ERP summary. **ERP figures used** shows the figures behind an answer.
+
+When a model is configured, broader messages may be sent to OpenAI with
+available workflow labels. Summary questions also send the selected aggregate
+figures within the user's permissions. Keep sensitive information out of free text.
+
+For Docker Compose, set `OPENAI_API_KEY` and `ERP_AI_MODEL` in the server's
+private `.env` file. Use a model ID available to your API project. Run
+`docker compose up -d --build web` from the project folder. For direct Flask,
+set both values as environment variables before starting Flask. No new database
+migration is required for this update.
+
+[OpenAI Responses API reference](https://developers.openai.com/api/reference/resources/responses/methods/create)
 
 ## Moving existing browser demo records
 

@@ -135,7 +135,7 @@ def _process_edit(url, identity, version, key, barrier, output, resource="manpow
     from backend.hr_context import Context
 
     application = create_app(
-        dict(SQLALCHEMY_DATABASE_URI=url, TESTING=True, COOKIE_SECURE=False)
+        dict(SQLALCHEMY_DATABASE_URI=url, TESTING=True, COOKIE_SECURE=False, APPROVAL_CONTROLS_ENABLED=False)
     )
     original = Context.validate
 

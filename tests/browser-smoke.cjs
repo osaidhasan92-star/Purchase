@@ -15,6 +15,7 @@ const assert = require("node:assert/strict");
     ...process.env,
     DATABASE_URL: "sqlite:///" + path.join(temp, "test.sqlite"),
     COOKIE_SECURE: "false",
+    APPROVAL_CONTROLS_ENABLED: "false",
   };
   let server, browser;
   try {

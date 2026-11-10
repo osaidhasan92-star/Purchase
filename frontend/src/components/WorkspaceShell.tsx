@@ -1,3 +1,4 @@
+import { ApprovalReasonPrompt } from "./ApprovalReasonPrompt";
 import { Icon } from "./dashboard/Dashboard";
 import { FinanceNavigation } from "./FinanceNavigation";
 import { useEffect, useState, type ReactNode, type MouseEvent } from "react";
@@ -14,6 +15,7 @@ const moduleIcons: Record<string, string> = {
   manufacturing: "factory",
   expenses: "file",
   admin: "settings",
+  approvals: "file",
 };
 export function WorkspaceShell({
   page,
@@ -222,6 +224,7 @@ export function WorkspaceShell({
       )}
       <div id="toast" />
       <div dangerouslySetInnerHTML={{ __html: page.menuStyle }} />
+      <ApprovalReasonPrompt />
     </>
   );
 }

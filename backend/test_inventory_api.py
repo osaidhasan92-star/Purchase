@@ -370,3 +370,21 @@ def test_paging_filters_export_and_upgrade_preserve_ledger(app):
         assert (
             db.session.scalar(select(func.count()).select_from(JournalEntry)) == before
         )
+
+
+def test_summary_covers_all_stock_products_and_excludes_services(app):
+    client, headers = session(app)
+    stocked = make_product(client, headers, "Stocked")
+    make_product(client, headers, "Empty")
+    make_product(client, headers, "Service", "service")
+    adjust(client, headers, stocked, 4, 25)
+
+    response = client.get("/api/inventory/summary")
+    assert response.status_code == 200, response.json
+    summary = response.json
+    assert summary["stockProducts"] == 2
+    assert Decimal(summary["inventoryValue"]) == 100
+    assert summary["stockHealth"] == {"inStock": 1, "outOfStock": 1, "negative": 0}
+    assert len(summary["topProducts"]) == 1
+    assert summary["topProducts"][0]["name"] == "Stocked"
+    assert Decimal(summary["topProducts"][0]["value"]) == 100

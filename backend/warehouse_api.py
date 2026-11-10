@@ -632,7 +632,7 @@ def command(command):
             quantity=qty,
             date=date,
             reason=reason.strip(),
-            created_by=g.user.id,
+            created_by=g.get("approval_requester_id", g.user.id),
         )
         db.session.add(transfer)
         db.session.flush()

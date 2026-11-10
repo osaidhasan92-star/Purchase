@@ -153,3 +153,10 @@ do not extrapolate this host's absolute timings to client hardware or large comp
 Payroll now uses employee-level preparation plus a serialized financial posting tail;
 see [phase 16](PAYROLL_CONCURRENCY.md). Recorded earlier SQLite results remain
 historical observations. Rerun on the intended PostgreSQL host before capacity claims.
+
+
+Independent approval enforcement is now enabled by default in the application. The
+existing isolated service probe sets `APPROVAL_CONTROLS_ENABLED=false` explicitly and
+labels its output as a compatibility baseline. Its timings do not measure the new
+maker/reviewer flow. Deployment acceptance must exercise that flow with enforcement
+on, real role limits and separate approver accounts. See [Approval controls](APPROVAL_CONTROLS.md).

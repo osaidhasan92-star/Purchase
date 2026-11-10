@@ -17,8 +17,8 @@ figures entirely. Users can open permitted module links without receiving financ
 or private HR/register data. Normal page loads use compact bootstrap and bounded
 resources, without fetching `/api/state`, `/api/hr/state` or `/api/erp/overview`.
 
-Admin sees Load demo opening data only when the operational registers and ledger
-are empty. The server rechecks under its write lock and rejects seeding if customers,
+The overview no longer includes a demo opening-data control. Where test seeding
+is enabled, the server checks under its write lock and rejects seeding if customers,
 vendors, CRM records, products, trade documents, claims, stock or journals already
 exist. Seeding is also blocked until required storage migrations are complete. This prevents the historical demo action from replacing existing master data.
 Demo setup remains explicit and uses the established posting service; it is not an

@@ -418,7 +418,7 @@ def test_sqlite_backup_restore_retains_posted_workflows(app, tmp_path):
 
     restored = create_app(
         {
-            "TESTING": True,
+            "TESTING": True, "APPROVAL_CONTROLS_ENABLED": False,
             "COOKIE_SECURE": False,
             "SQLALCHEMY_DATABASE_URI": "sqlite:///" + target,
         }
