@@ -73,7 +73,14 @@ async function main() {
     const module=document.querySelector('.module-app').dataset.module;
     if(module!=='overview'){
       assert.equal(document.querySelectorAll('.module-tabs').length,1,'Expected one shared submenu: '+name);
-      assert.equal(document.querySelectorAll('.module-tabs [aria-current="page"]').length,1,'Expected one active tab: '+name);
+      const isCrmQuoteArchive = name === 'crm-quotes';
+      assert.equal(document.querySelectorAll('.module-tabs [aria-current="page"]').length,
+        isCrmQuoteArchive ? 0 : 1, 'Unexpected active tab count: ' + name);
+      if (module === 'crm') {
+        const tabs = [...document.querySelectorAll('.module-tabs a[href]')];
+        assert.ok(tabs.every(link => new URL(link.href).searchParams.get('view') !== 'crm-quotes'),
+          'The legacy quote register must stay out of CRM navigation');
+      }
       if(module!=='admin')assert.equal(document.querySelectorAll('.module-navigation .module-flow').length,1,'Missing workflow strip: '+name);
     }
     assert.equal(document.querySelectorAll('.sidebar a[href="leads.html"],.sidebar a[href="orders.html"],.sidebar a[href="hr-payroll.html"]').length,0,'Submenus must live in the module content: '+name);

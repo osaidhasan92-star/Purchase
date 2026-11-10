@@ -29,9 +29,9 @@ automatic migration step or production opening-balance import.
 - Companies retains the old company/prospect directory with name, industry, contact,
   email, telephone and Active/Inactive status. It is shared with authorized CRM users.
   It does not replace the shared CRM/Sales Customers master or create customers.
-- The CRM Quote Register retains the older amount-only tracking records, dates,
-  currency and Draft/Sent/Accepted/Rejected/Expired status. It does not contain Sales
-  product lines and is not the approved commercial quotation ledger.
+- The legacy CRM Quote Register is available to authorized users at
+  `erp.html?view=crm-quotes`. It retains older amount-only tracking records, dates,
+  currencies and statuses. Use Sales → Quotations for commercial quotations.
 - New tracking quotes require a visible lead, positive amount and PKR. Historical
   currencies can be retained when editing; no exchange-rate conversion is implied.
   Valid-until dates cannot precede quote dates. References and numbers are server-owned.
@@ -105,10 +105,11 @@ are included; desktop testing needs no Node installation. Hard-refresh the brows
 
 ## Demonstration and verification
 
-Open Overview and follow a permitted module card. Under CRM, create/edit a Company;
-open Quote Register, choose a visible Lead and create a PKR tracking quote. Change
-its tracking status, inspect the explanatory note and use the separate Sales handoff
-when authorized. Test another account and its direct manager to verify quote privacy.
+Open Overview and follow a permitted module card. Under CRM, create or edit a
+Company and verify the submenu excludes Quote Register. Open the legacy register
+at `erp.html?view=crm-quotes` to verify access to tracking records. Open
+Sales → Quotations to verify the commercial workflow. Test another account and
+its direct manager to verify quote privacy.
 
 Seven backend scenarios independently cover historical round trips, rollback,
 private quote/lead scope, status changes without economic effects, versions/replay,
