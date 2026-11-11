@@ -194,7 +194,7 @@ export function ApprovalsPage({
         </div>
         <div className="finance-actions">
           <button
-            className="btn-secondary"
+            className="btn-primary"
             disabled={busy || loading}
             onClick={() => setReload((v) => v + 1)}
           >
@@ -228,21 +228,23 @@ export function ApprovalsPage({
           {error}
         </p>
       )}
-      <label>
-        Status
-        <select
-          value={status}
-          onChange={(e) => {
-            setStatus(e.target.value);
-            setPage(1);
-          }}
-        >
-          <option value="Pending">Pending</option>
-          <option value="Approved">Approved</option>
-          <option value="Rejected">Rejected</option>
-          <option value="">All</option>
-        </select>
-      </label>
+      <div className="finance-filters">
+        <label>
+          Status
+          <select
+            value={status}
+            onChange={(e) => {
+              setStatus(e.target.value);
+              setPage(1);
+            }}
+          >
+            <option value="Pending">Pending</option>
+            <option value="Approved">Approved</option>
+            <option value="Rejected">Rejected</option>
+            <option value="">All</option>
+          </select>
+        </label>
+      </div>
       <div className="finance-table-wrap">
         <table className="data-table">
           <thead>
