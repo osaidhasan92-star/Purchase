@@ -120,7 +120,7 @@ function can(id,action='view'){
   if(role.permissions?.[id] && typeof role.permissions[id][action] !== 'undefined')return !!role.permissions[id][action];
   return action==='view' ? role[id]===true : false;
 }
-function guard(id){need();if(id&&!can(id,'view')){toast('You do not have permission to access this module');setTimeout(()=>location.href='dashboard.html',500);return false}return true}
+function guard(id){need();if(id&&!can(id,'view')){toast('You do not have permission to access this module');setTimeout(()=>location.href='/erp',500);return false}return true}
 function guardAction(module,action='view'){need();if(!can(module,action)){toast('You do not have permission to '+(PERMISSION_LABELS[action]||action)+' this module');return false}return true}
 function recordActivity(x,action,module,details='',entity=''){
   x.activities=x.activities||[];
@@ -140,7 +140,7 @@ function layout(active,title,sub,body){
  document.body.classList.add('module-screen');
  if(window.ModernWorkspace){renderModernWorkspace(active,title,sub,body);return}
  const context=moduleContext(active);
- document.body.innerHTML=`<div class="app module-app" data-module="${context.id}"><aside class="sidebar" id="side"><div class="side-brand"><img src="logo.png" alt="${esc(companySettings().name||'Company')}"></div><div class="sidebar-scroll">${moduleSidebar(context.id)}</div><div class="module-sidebar-foot">Pakistan · PKR · WH / Stock</div></aside><main class="main"><header class="top module-header"><button class="mobile-menu" type="button" aria-label="Open modules" onclick="document.getElementById('side').classList.toggle('open')"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button><div class="module-page-heading"><span class="module-eyebrow">${esc(context.label)}</span><h1>${esc(title)}</h1><p>${esc(sub)}</p></div><div class="user user-menu-wrap">
+ document.body.innerHTML=`<div class="app module-app" data-module="${context.id}"><aside class="sidebar" id="side"><div class="side-brand"><img src="/logo.png" alt="${esc(companySettings().name||'Company')}"></div><div class="sidebar-scroll">${moduleSidebar(context.id)}</div><div class="module-sidebar-foot">Pakistan · PKR · WH / Stock</div></aside><main class="main"><header class="top module-header"><button class="mobile-menu" type="button" aria-label="Open modules" onclick="document.getElementById('side').classList.toggle('open')"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button><div class="module-page-heading"><span class="module-eyebrow">${esc(context.label)}</span><h1>${esc(title)}</h1><p>${esc(sub)}</p></div><div class="user user-menu-wrap">
 <button class="user-menu-trigger" onclick="toggleUserMenu(event)" type="button">
 <span>${esc(currentUser()?.name||'Admin User')}</span>
 <b>${esc((currentUser()?.name||'AU').split(' ').map(v=>v[0]).join('').slice(0,2).toUpperCase())}</b>
@@ -379,7 +379,7 @@ function navigateAfterSave(event, link) {
   event.preventDefault();
   if (!link?.href) return false;
   rememberSidebarScroll();
-  BackendPersistence.drain().then(() => location.assign(workspaceUrl(link.href))).catch(() => {});
+  BackendPersistence.drain().then(() => location.assign(workspaceUrl(link.getAttribute('href')))).catch(() => {});
   return false;
 }
 function nav(id,label,icon,a){return `<a class="nav-item ${a===id?'active':''}" href="${id}.html" onclick="return navigateAfterSave(event,this)"><i class="ti ${icon}"></i><span>${label}</span></a>`}
@@ -424,13 +424,13 @@ async function saveChangePassword(){
 
     closeModal();
     toast('Password changed. Please sign in again.');
-    location.href='index.html';
+    location.href='/index.html';
   }catch(error){
     toast(error.message||'Unable to change password');
   }
 }
 
-async function logout(){try{await api('/auth/logout',{method:'POST'})}catch(_){}CURRENT_USER=null;location.href='index.html'} function need(){if(!CURRENT_USER)location.href='index.html'} function money(n){const c=companySettings();return `${c.currencySymbol||c.currency||''} ${Number(n||0).toLocaleString(c.currencyLocale||'en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}`.trim()} function stat(label,val,icon){return `<div class="stat-card"><div class="stat-icon"><i class="ti ${icon}"></i></div><div><div class="stat-label">${label}</div><div class="stat-value">${val}</div></div></div>`} function table(headers,rows){return `<div class="table-wrap"><table><thead><tr>${headers.map(h=>`<th>${h}</th>`).join('')}</tr></thead><tbody>${rows||`<tr><td colspan="${headers.length}" class="empty">No records found</td></tr>`}</tbody></table></div>`}
+async function logout(){try{await api('/auth/logout',{method:'POST'})}catch(_){}CURRENT_USER=null;location.href='/index.html'} function need(){if(!CURRENT_USER)location.href='/index.html'} function money(n){const c=companySettings();return `${c.currencySymbol||c.currency||''} ${Number(n||0).toLocaleString(c.currencyLocale||'en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}`.trim()} function stat(label,val,icon){return `<div class="stat-card"><div class="stat-icon"><i class="ti ${icon}"></i></div><div><div class="stat-label">${label}</div><div class="stat-value">${val}</div></div></div>`} function table(headers,rows){return `<div class="table-wrap"><table><thead><tr>${headers.map(h=>`<th>${h}</th>`).join('')}</tr></thead><tbody>${rows||`<tr><td colspan="${headers.length}" class="empty">No records found</td></tr>`}</tbody></table></div>`}
 function status(s){return `<span class="badge ${String(s).toLowerCase().replace(/[^a-z0-9_-]/g,'-')}">${esc(s)}</span>`}function formModal(title,fields,submit){return `<div class="modal" id="modal"><div class="modal-box"><div class="modal-head"><h3>${title}</h3><button onclick="closeModal()">×</button></div><div class="modal-body">${fields}</div><div class="modal-foot"><button class="btn-secondary" onclick="closeModal()">Cancel</button><button class="btn-primary" onclick="${submit}">Save</button></div></div></div>`}function closeModal(){const m=document.getElementById('modal');if(m)m.remove();document.body.classList.remove('modal-open')}
 function openModal(html){closeModal();document.body.insertAdjacentHTML('beforeend',html);const m=document.getElementById('modal');if(m){document.body.classList.add('modal-open');requestAnimationFrame(()=>m.classList.add('is-open'));}}
 function bindModalEvents(){if(window.__modalEventsBound)return;window.__modalEventsBound=true;document.addEventListener('keydown',e=>{if(e.key==='Escape'&&document.getElementById('modal'))closeModal()});document.addEventListener('click',e=>{const m=document.getElementById('modal');if(m&&e.target===m)closeModal()});}
@@ -2021,7 +2021,7 @@ const MODULE_WORKSPACES = [
 function moduleVisibleTabs(group){return group.tabs.filter(([,href,permission])=>!permission||(permission==='@admin'?currentUser()?.role==='Admin':can(permission)));}
 function moduleContext(active){
  const page=workspacePage(),query=new URLSearchParams(location.search);
- const matches=href=>{const url=new URL(href,location.href);return workspacePage(url)===page&&(page!=='erp.html'||(url.searchParams.get('view')||'overview')===(query.get('view')||'overview'))};
+ const matches=href=>new URL(workspaceUrl(href)).pathname===location.pathname;
  const forced=MODULE_WORKSPACES.find(m=>m.id===query.get('module')&&m.tabs.some(([,href])=>matches(href)));
  if(forced&&moduleVisibleTabs(forced).length)return forced;
  // Shared master-data pages have a predictable default, with optional module context in the URL.
@@ -2036,9 +2036,9 @@ function moduleSidebar(active){
 }
 function moduleSubmenu(group){
  if(group.id==='overview')return '';
- const page=workspacePage(),query=new URLSearchParams(location.search),tabs=moduleVisibleTabs(group);
+ const tabs=moduleVisibleTabs(group);
  const links=tabs.map(([label,href])=>{
-   const url=new URL(href,location.href),selected=workspacePage(url)===page&&(page!=='erp.html'||(url.searchParams.get('view')||'overview')===(query.get('view')||'overview'));
+   const selected=new URL(workspaceUrl(href)).pathname===location.pathname;
    return `<a href="${esc(href)}" class="module-tab ${selected?'active':''}" ${selected?'aria-current="page"':''} onclick="return navigateAfterSave(event,this)">${esc(label)}</a>`;
  }).join('');
  return `<div class="module-navigation"><nav class="module-tabs" aria-label="${esc(group.label)} submenu">${links}</nav>${group.flow?`<div class="module-flow">${esc(group.flow)}</div>`:''}</div>`;
@@ -2062,11 +2062,11 @@ async function saveCompanyProfile(){
 function renderModernWorkspace(active,title,subtitle,html,native,options={}){
  const group=moduleContext(active),current=new URL(location.href);
  const normalize=href=>workspaceUrl(href);
- const tabs=moduleVisibleTabs(group).map(([label,href])=>{const url=new URL(normalize(href));return {label,href:url.href,active:url.pathname===current.pathname&&(url.searchParams.get('view')||'overview')===(current.searchParams.get('view')||'overview')}});
+ const tabs=moduleVisibleTabs(group).map(([label,href])=>{const url=new URL(normalize(href));return {label,href:url.href,active:url.pathname===current.pathname}});
  const workspaces=MODULE_WORKSPACES.filter(item=>moduleVisibleTabs(item).length).map(item=>({id:item.id,label:item.label,icon:item.icon,href:normalize(moduleVisibleTabs(item)[0][1])}));
- window.ModernWorkspace.render({module:group.id,label:group.label,title,subtitle,flow:group.flow,tabs,workspaces,user:currentUser(),companyName:companySettings().name,logo:companySettings().logo||'logo.png',menuStyle:USER_MENU_STYLE,html,native,...options},{
+ window.ModernWorkspace.render({module:group.id,label:group.label,title,subtitle,flow:group.flow,tabs,workspaces,user:currentUser(),companyName:companySettings().name,logo:new URL(companySettings().logo||'logo.png',location.origin).href,menuStyle:USER_MENU_STYLE,html,native,...options},{
    request:(path,options)=>api(path,options),can:(module,action='view')=>can(module,action),
-   navigate:href=>{rememberSidebarScroll();BackendPersistence.drain().then(()=>location.assign(href)).catch(()=>{})},
+   navigate:href=>{rememberSidebarScroll();BackendPersistence.drain().then(()=>location.assign(workspaceUrl(href))).catch(()=>{})},
    toast,changePassword:openChangePassword,companyProfile:openCompanyProfile,logout,
    cacheCustomers:items=>{APP_STATE.customers=items},cacheRecords:(kind,items)=>{APP_STATE[kind]=items}
  });

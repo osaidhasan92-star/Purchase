@@ -220,8 +220,14 @@ def test_workspace_routes_preserve_context(app):
         assert response.status_code == 302
         from urllib.parse import urlparse, parse_qs
         target = urlparse(response.location)
-        assert target.path == '/erp.html'
-        assert parse_qs(target.query) == {'module': ['crm'], 'leadId': ['123'], 'view': [view]}
-    shell = client.get('/erp.html?view=hr-payroll')
+        assert target.path == '/erp/' + view
+        assert parse_qs(target.query) == {'module': ['crm'], 'leadId': ['123']}
+    old_url = client.get('/erp.html?view=approvals&submitted=12&tag=a&tag=b')
+    assert old_url.status_code == 302
+    assert old_url.location == '/erp/approvals?submitted=12&tag=a&tag=b'
+    assert client.get('/erp.html').location == '/erp'
+    assert client.get('/erp/unknown').status_code == 404
+    assert client.get('/erp?view=inventory').location == '/erp/inventory'
+    shell = client.get('/erp/hr-payroll')
     assert shell.status_code == 200
     assert b'workspace-loader.js' in shell.data

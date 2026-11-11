@@ -37,7 +37,7 @@ const BackendPersistence = (() => {
     const data = await response.json().catch(() => ({}));
     if (response.status === 202 && data.approvalPending && data.approval?.id) {
       if (keepApprovalInChat) return data;
-      location.href='erp.html?view=approvals&submitted='+encodeURIComponent(String(data.approval.id));
+      location.href='/erp/approvals?submitted='+encodeURIComponent(String(data.approval.id));
       throw new Error(data.message || 'Submitted for independent approval');
     }
     if (!keepApprovalInChat && response.status===400 && data.error==='Use Pending Approvals to record a decision reason' && window.ModernWorkspace?.askDecisionReason && typeof options.body==='string') {
@@ -48,7 +48,7 @@ const BackendPersistence = (() => {
     if (!response.ok) {
       const error = new Error(data.error || `Request failed (${response.status})`);
       error.status = response.status;
-      if (response.status === 401 && path !== '/auth/login' && !location.pathname.endsWith('index.html')) location.href = 'index.html';
+      if (response.status === 401 && path !== '/auth/login' && !location.pathname.endsWith('index.html')) location.href = '/index.html';
       throw error;
     }
     if (data.csrfToken) csrf = data.csrfToken;

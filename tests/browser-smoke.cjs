@@ -209,7 +209,7 @@ const assert = require("node:assert/strict");
     await page.getByRole("button", { name: "Open modules" }).click();
     await page.locator(".sidebar.open").waitFor();
     await page.locator('[data-workspace="hr"]').click();
-    await page.waitForURL("**/erp.html?view=hr-dashboard");
+    await page.waitForURL("**/erp/hr-dashboard");
     await page
       .getByRole("heading", { name: "HR Dashboard", exact: true })
       .waitFor();

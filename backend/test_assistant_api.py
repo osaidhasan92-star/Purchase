@@ -18,7 +18,7 @@ def test_assistant_requires_login_csrf_and_configuration(app, monkeypatch):
     assert client.post("/api/assistant/ask", json=payload).status_code == 403
     assert client.post("/api/assistant/ask", headers=headers, json=payload).status_code == 503
     assert client.get("/assistant-workspace.js").status_code == 200
-    assert b"assistant-workspace.js" in client.get("/erp.html").data
+    assert b"assistant-workspace.js" in client.get("/erp").data
 
 
 def test_assistant_sends_only_scoped_summary_and_no_write_tools(app, monkeypatch):

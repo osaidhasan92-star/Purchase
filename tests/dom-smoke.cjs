@@ -61,12 +61,12 @@ async function main() {
     const close=dom.window.close.bind(dom.window);dom.window.close=()=>{dom.window.ModernWorkspace?.dispose();close()};
     const document=dom.window.document;
     assert.equal(document.querySelector('.module-app').dataset.frontend,'react','Expected the React shell on '+name);
-    assert.equal(dom.window.location.pathname,'/erp.html','Every module uses the shared workspace');
-    assert.ok(dom.window.location.search.includes('view='),'Every screen has a view route');
+    assert.match(dom.window.location.pathname, /^\/erp(?:\/[a-z-]+)?$/, 'Every module uses a clean workspace URL');
+    assert.equal(new URLSearchParams(dom.window.location.search).has('view'), false);
     for(const link of document.querySelectorAll('.sidebar a[href],.module-tabs a[href]')){
       const target=new URL(link.href);
-      assert.equal(target.pathname,'/erp.html','Navigation must use the shared workspace: '+link.href);
-      assert.ok(target.searchParams.get('view'));
+      assert.match(target.pathname, /^\/erp(?:\/[a-z-]+)?$/, 'Navigation must use clean workspace URLs: '+link.href);
+      assert.equal(target.searchParams.has('view'), false);
     }
     assert.ok(document.querySelector('.module-header h1'),'Missing shared header: '+name);
     assert.equal(document.querySelectorAll('.sidebar .nav-item.active').length,1,'Expected one active module: '+name);
@@ -78,7 +78,7 @@ async function main() {
         isCrmQuoteArchive ? 0 : 1, 'Unexpected active tab count: ' + name);
       if (module === 'crm') {
         const tabs = [...document.querySelectorAll('.module-tabs a[href]')];
-        assert.ok(tabs.every(link => new URL(link.href).searchParams.get('view') !== 'crm-quotes'),
+        assert.ok(tabs.every(link => new URL(link.href).pathname !== '/erp/crm-quotes'),
           'The legacy quote register must stay out of CRM navigation');
       }
       if(module!=='admin')assert.equal(document.querySelectorAll('.module-navigation .module-flow').length,1,'Missing workflow strip: '+name);
@@ -272,7 +272,7 @@ async function main() {
   assert.match(latest(), /Confirm to submit/);
   await send('Confirm');
   assert.match(latest(), /Submitted for independent approval.*Approval #55/s);
-  assert.equal(assistantPage.window.location.search, '?view=overview');
+  assert.equal(assistantPage.window.location.pathname + assistantPage.window.location.search, '/erp');
   assistantPage.window.fetch = originalFetch;
 
   await send('Show pending approvals');
@@ -375,7 +375,7 @@ async function main() {
   for (const view of ['sales','purchase-dashboard']) {
     const screen=await page(view);
     const hrefs=[...screen.window.document.querySelectorAll('.module-tabs a')].map(a=>a.href);
-    assert.ok(!hrefs.some(h=>/view=(sales-invoices|sales-payments|invoices|payments|receipts|sales-deliveries)(&|$)/.test(h)));
+    assert.ok(!hrefs.some(h=>/^\/erp\/(sales-invoices|sales-payments|invoices|payments|receipts|sales-deliveries)$/.test(new URL(h).pathname)));
     screen.window.close();
   }
   let dom = await page('vendors');

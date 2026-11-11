@@ -1,37 +1,41 @@
 /* One workspace URL for every business screen. Route names are allowlisted. */
 const WORKSPACE_ROUTES = {"activities": "activities.html", "admin-data": "admin-data.html", "companies": "companies.html", "comparison": "comparison.html", "crm-dashboard": "crm-dashboard.html", "crm-quotes": "crm-quotes.html", "customers": "customers.html", "dashboard": "dashboard.html", "hr-attendance": "hr-attendance.html", "hr-dashboard": "hr-dashboard.html", "hr-employees": "hr-employees.html", "hr-leave": "hr-leave.html", "hr-manpower": "hr-manpower.html", "hr-payroll": "hr-payroll.html", "hr-recruitment": "hr-recruitment.html", "hr-reports": "hr-reports.html", "hr-separation": "hr-separation.html", "invoices": "invoices.html", "leads": "leads.html", "orders": "orders.html", "payments": "payments.html", "products": "products.html", "purchase-dashboard": "purchase-dashboard.html", "purchase-reports": "reports.html", "quotations": "quotations.html", "receipts": "receipts.html", "reminders": "reminders.html", "requests": "requests.html", "rfqs": "rfqs.html", "sales": "sales.html", "sales-deliveries": "sales-deliveries.html", "sales-invoices": "sales-invoices.html", "sales-orders": "sales-orders.html", "sales-payments": "sales-payments.html", "sales-quotations": "sales-quotations.html", "users": "users.html", "vendors": "vendors.html"};
+function workspaceView(url = new URL(location.href)) {
+ if(url.pathname === '/erp') return 'overview';
+ if(url.pathname.startsWith('/erp/')) return url.pathname.slice('/erp/'.length);
+ if(url.pathname === '/erp.html') return url.searchParams.get('view') || 'overview';
+ return null;
+}
 function workspacePage(url = new URL(location.href)) {
- const page=url.pathname.split('/').pop();
- return page==='erp.html' ? (WORKSPACE_ROUTES[url.searchParams.get('view')] || 'erp.html') : page;
+ const view = workspaceView(url);
+ return view ? (WORKSPACE_ROUTES[view] || 'erp.html') : url.pathname.split('/').pop();
 }
 function workspaceUrl(href) {
- const url=new URL(href,location.href);
- if(url.origin!==location.origin)return url.href;
- const page=url.pathname.split('/').pop();
- const route=Object.keys(WORKSPACE_ROUTES).find(key=>WORKSPACE_ROUTES[key]===page);
- if(route){url.pathname=url.pathname.replace(/[^/]*$/, 'erp.html');url.searchParams.set('view',route);}
+ const base = href.startsWith('#') || href.startsWith('?') ? location.href : location.origin;
+ const url = new URL(href, base);
+ if(url.origin !== location.origin) return url.href;
+ const page = url.pathname.slice(1);
+ const view = page === 'erp.html'
+   ? workspaceView(url)
+   : Object.keys(WORKSPACE_ROUTES).find(key => WORKSPACE_ROUTES[key] === page);
+ if(view){
+   url.pathname = view === 'overview' || view === 'dashboard' ? '/erp' : '/erp/' + view;
+   url.searchParams.delete('view');
+ }
  return url.href;
 }
 function workspaceLinks(root=document) {
  if(!root)return;
  root.querySelectorAll('a[href]').forEach(link=>{
-   const target=workspaceUrl(link.href);
+   const target=workspaceUrl(link.getAttribute('href'));
    if(link.href!==target)link.href=target;
  });
 }
 new MutationObserver(()=>workspaceLinks()).observe(document.documentElement,{childList:true,subtree:true});
 document.addEventListener('click',event=>{
  const link=event.target.closest('a[href]');
- if(link)link.href=workspaceUrl(link.href);
+ if(link)link.href=workspaceUrl(link.getAttribute('href'));
 },true);
-
-if(location.pathname.endsWith('/erp.html')){
- const url=new URL(location.href),view=url.searchParams.get('view')||'overview';
- if(view==='dashboard')url.searchParams.set('view','overview');
- if(!Object.hasOwn(WORKSPACE_ROUTES,view)&&!['overview', 'approvals', 'warehouse', 'credits', 'accounting', 'accounts', 'journals', 'reports', 'aged', 'bank', 'inventory', 'manufacturing', 'boms', 'expenses', 'stock-moves', 'production-orders', 'expense-claims'].includes(view))url.searchParams.set('view','overview');
- else if(!url.searchParams.has('view'))url.searchParams.set('view','overview');
- if(url.href!==location.href)history.replaceState(null,'',url);
-}
 
 // Native transaction routes share compact bootstrap; no legacy register renderer is loaded.
 const NATIVE_TRADE_ROUTES={
@@ -58,14 +62,14 @@ const NATIVE_HR_ROUTES={
 'hr-dashboard.html':{permission:'hr_dashboard',active:'hr-dashboard',title:'HR Dashboard'},'hr-reports.html':{permission:'hr_reports',active:'hr-reports',title:'HR Reports',reports:true}
 };
 
-function nativeFinanceView(){const view=new URLSearchParams(location.search).get('view');return workspacePage()==='erp.html'&&['accounting','accounts','journals','reports','aged','bank','credits'].includes(view)?view:null;}
+function nativeFinanceView(){const view=workspaceView();return workspacePage()==='erp.html'&&['accounting','accounts','journals','reports','aged','bank','credits'].includes(view)?view:null;}
 
-function nativeInventoryView(){const view=new URLSearchParams(location.search).get('view');return workspacePage()==='erp.html'&&['inventory','stock-moves','warehouse'].includes(view)?view:null;}
+function nativeInventoryView(){const view=workspaceView();return workspacePage()==='erp.html'&&['inventory','stock-moves','warehouse'].includes(view)?view:null;}
 
-function nativeProductionView(){const view=new URLSearchParams(location.search).get('view');return workspacePage()==='erp.html'&&['manufacturing','boms','production-orders'].includes(view)?view:null;}
+function nativeProductionView(){const view=workspaceView();return workspacePage()==='erp.html'&&['manufacturing','boms','production-orders'].includes(view)?view:null;}
 
-function nativeExpenseView(){const view=new URLSearchParams(location.search).get('view');return workspacePage()==='erp.html'&&['expenses','expense-claims'].includes(view)?view:null;}
+function nativeExpenseView(){const view=workspaceView();return workspacePage()==='erp.html'&&['expenses','expense-claims'].includes(view)?view:null;}
 
-function nativeAdminView(){if(workspacePage()==='erp.html'&&new URLSearchParams(location.search).get('view')==='approvals')return 'approvals';return {'users.html':'users','activities.html':'activities','admin-data.html':'data'}[workspacePage()]||null;}
+function nativeAdminView(){if(workspacePage()==='erp.html'&&workspaceView()==='approvals')return 'approvals';return {'users.html':'users','activities.html':'activities','admin-data.html':'data'}[workspacePage()]||null;}
 
-function nativeRemainingView(){const page=workspacePage();return page==='companies.html'?'companies':page==='crm-quotes.html'?'crmQuotes':page==='erp.html'&&(new URLSearchParams(location.search).get('view')||'overview')==='overview'?'overview':null;}
+function nativeRemainingView(){const page=workspacePage();return page==='companies.html'?'companies':page==='crm-quotes.html'?'crmQuotes':page==='erp.html'&&(workspaceView()||'overview')==='overview'?'overview':null;}

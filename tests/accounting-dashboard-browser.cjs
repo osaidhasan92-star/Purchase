@@ -72,7 +72,7 @@ module.exports = async (page, base) => {
         exact: true,
       })
       .click();
-    await page.waitForURL("**/erp.html?view=" + view + "&module=accounting");
+    await page.waitForURL("**/erp/" + view + "?module=accounting");
     await page.locator('[data-screen^="trade-"]').waitFor();
     assert.equal(
       await page.locator('[data-frontend="react"]').getAttribute("data-module"),
@@ -87,7 +87,7 @@ module.exports = async (page, base) => {
   ]) {
     await page.getByRole("link", { name: label, exact: true }).click();
     await page.getByRole("dialog").waitFor();
-    assert.equal(new URL(page.url()).searchParams.get("view"), view);
+    assert.equal(new URL(page.url()).pathname, "/erp/" + view);
     await page
       .getByRole("dialog")
       .getByRole("button", { name: "Cancel", exact: true })

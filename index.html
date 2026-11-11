@@ -8,8 +8,8 @@ async function login() {
    // Remove obsolete browser passwords after successful backend authentication.
    localStorage.removeItem('purchase_demo_users_v1');
    localStorage.removeItem('purchase_demo_session_v1');
-   location.href='erp.html';
+   location.href='/erp';
  }catch(error){const el=document.getElementById('toast');el.textContent=error.message;el.className='toast';button.disabled=false;}
 }
-BackendPersistence.request('/auth/me').then(()=>location.href='erp.html').catch(()=>{});
+BackendPersistence.request('/auth/me').then(()=>location.href='/erp').catch(()=>{});
 </script></body></html>

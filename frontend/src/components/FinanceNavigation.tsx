@@ -21,7 +21,7 @@ export function FinanceNavigation({
     trigger = useRef<HTMLButtonElement | null>(null),
     menu = useRef<HTMLDivElement>(null);
   const query = new URLSearchParams(location.search),
-    view = query.get("view") || "accounting",
+    view = location.pathname.split("/")[2] || "accounting",
     action = query.get("action");
   const link = (v: string, extra: Record<string, string> = {}) =>
     "erp.html?" +

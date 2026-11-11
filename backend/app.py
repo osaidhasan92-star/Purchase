@@ -790,15 +790,30 @@ def create_app(config=None):
         if path in ('bootstrap.html', 'seed.html', 'settings.html'):
             problem('Demo login shortcuts have been removed', 410)
         legacy_routes = {'reminders.html': 'reminders', 'requests.html': 'requests', 'sales-invoices.html': 'sales-invoices', 'users.html': 'users', 'sales-quotations.html': 'sales-quotations', 'invoices.html': 'invoices', 'purchase-dashboard.html': 'purchase-dashboard', 'hr-separation.html': 'hr-separation', 'products.html': 'products', 'hr-dashboard.html': 'hr-dashboard', 'hr-recruitment.html': 'hr-recruitment', 'sales-deliveries.html': 'sales-deliveries', 'crm-quotes.html': 'crm-quotes', 'payments.html': 'payments', 'customers.html': 'customers', 'hr-payroll.html': 'hr-payroll', 'hr-reports.html': 'hr-reports', 'hr-leave.html': 'hr-leave', 'quotations.html': 'quotations', 'activities.html': 'activities', 'leads.html': 'leads', 'companies.html': 'companies', 'comparison.html': 'comparison', 'reports.html': 'purchase-reports', 'sales.html': 'sales', 'rfqs.html': 'rfqs', 'sales-orders.html': 'sales-orders', 'vendors.html': 'vendors', 'crm-dashboard.html': 'crm-dashboard', 'sales-payments.html': 'sales-payments', 'admin-data.html': 'admin-data', 'hr-attendance.html': 'hr-attendance', 'receipts.html': 'receipts', 'hr-manpower.html': 'hr-manpower', 'orders.html': 'orders', 'dashboard.html': 'overview', 'hr-employees.html': 'hr-employees'}
-        if path in legacy_routes:
+        workspace_views = set(legacy_routes.values()) | {
+            'approvals', 'warehouse', 'credits', 'accounting', 'accounts',
+            'journals', 'reports', 'aged', 'bank', 'inventory', 'manufacturing',
+            'boms', 'expenses', 'stock-moves', 'production-orders', 'expense-claims',
+        }
+        if (
+            path in legacy_routes
+            or path in ('erp.html', 'erp/overview', 'erp/dashboard', 'erp/')
+            or (path == 'erp' and 'view' in request.args)
+        ):
             from urllib.parse import urlencode
+
+            requested_view = request.args.get('view', 'overview') if path in ('erp', 'erp.html') else 'overview'
+            view = legacy_routes.get(path, requested_view)
+            target = '/erp/' + view if view in workspace_views and view != 'overview' else '/erp'
             query = request.args.to_dict(flat=False)
-            query['view'] = [legacy_routes[path]]
-            return redirect('/erp.html?' + urlencode(query, doseq=True), code=302)
+            query.pop('view', None)
+            return redirect(target + ('?' + urlencode(query, doseq=True) if query else ''), code=302)
+        if path == 'erp' or (path.startswith('erp/') and path[4:] in workspace_views):
+            return send_from_directory(ROOT, 'erp.html')
         # Never expose backend source, environment files, database files or backup JS.
         public = {'frontend-dist/THIRD_PARTY_LICENSES.txt', 'frontend-dist/workspace-app.js', 'frontend-dist/workspace-app.css', 'workspace.js', 'workspace-loader.js', 'assistant-workspace.js', 'assistant-workflows.js', 'remaining-workspace.js', 'admin-workspace.js', 'expense-workspace.js', 'production-workspace.js', 'inventory-workspace.js', 'finance-workspace.js', 'hr-workspace.js', 'trade-workspace.js', 'crm-workspace.js', 'app.js', 'backend-client.js', 'erp.css',
                   'shared.css', 'styles.css', 'logo.png', 'dexterra-stamp.jpg'}
-        pages = {'index.html', 'erp.html'}
+        pages = {'index.html'}
         asset = path.startswith('assets/') and Path(path).suffix.lower() in ('.png', '.jpg', '.jpeg', '.webp')
         if path not in public | pages and not asset:
             abort(404)

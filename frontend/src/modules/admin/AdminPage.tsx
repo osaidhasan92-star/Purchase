@@ -416,7 +416,7 @@ function AdminForm({
         },
       );
       if (r.signInRequired) {
-        location.assign("index.html");
+        location.assign("/index.html");
         return;
       }
       bridge.toast("Administration change saved");

@@ -12,7 +12,7 @@ else if(['customers.html','crm-dashboard.html','leads.html','reminders.html'].in
 (async()=>{
  try {
    for(const src of scripts)await new Promise((resolve,reject)=>{
-     const script=document.createElement('script');script.src=src;script.onload=resolve;
+     const script=document.createElement('script');script.src='/'+src;script.onload=resolve;
      script.onerror=()=>reject(new Error('Could not load '+src));document.body.appendChild(script);
    });
    window.dispatchEvent(new Event('workspace:ready'));
