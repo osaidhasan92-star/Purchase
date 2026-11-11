@@ -1,0 +1,26 @@
+{
+  "tablesVerified": 87,
+  "rowsVerified": 89,
+  "match": true,
+  "attachmentVerified": true,
+  "enforcementEnabled": true,
+  "selfApprovalBlocked": true,
+  "duplicateDecisionBlocked": true,
+  "expensePaidAfterIndependentReview": true,
+  "workflowHealth": {
+    "uniqueReservationsReady": true,
+    "workflowIndexesReady": true,
+    "unbalancedOrIncompletePostedJournals": 0,
+    "negativeStockBalances": 0,
+    "duplicateWorkflowKeys": 0,
+    "historicalUnresolvedTradeLinks": 0,
+    "healthy": true
+  },
+  "database": "postgresql",
+  "preparation": {
+    "prepared": true,
+    "enforcementEnabled": true,
+    "pendingApprovals": 1,
+    "attachmentSha256": "f3323a68a2bb7b96fd41969b484b5573c1f26cda0bfe1994a0762f5d5b3d572b"
+  }
+}

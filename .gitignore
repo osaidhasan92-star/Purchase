@@ -1,0 +1,19 @@
+.env
+.venv/
+__pycache__/
+.pytest_cache/
+*.pyc
+instance/
+*.sqlite*
+backups/
+node_modules/
+test-results/
+
+# Local diagnostics, editor leftovers and temporary files
+*.log
+*.tmp
+*.bak
+*.orig
+*.rej
+.DS_Store
+Thumbs.db

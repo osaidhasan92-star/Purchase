@@ -1,0 +1,7 @@
+{
+  "postgresVersion": "PostgreSQL 16.2 on x86_64-pc-linux-gnu, compiled by gcc (GCC) 10.2.1 20210130 (Red Hat 10.2.1-11), 64-bit",
+  "backendExitCode": 0,
+  "approvalProbeExitCode": 0,
+  "recoveryPassed": true,
+  "passed": true
+}

@@ -1,0 +1,40 @@
+{
+  "completedAt": "2026-11-06T10:39:12.699808+00:00",
+  "syntheticDataOnly": true,
+  "sqliteBackend": {
+    "passed": 230,
+    "skipped": 25,
+    "failures": 0,
+    "skipReason": "PostgreSQL-specific checks"
+  },
+  "postgresBackend": {
+    "version": "16.2",
+    "passed": 254,
+    "skipped": 1,
+    "failures": 0,
+    "skipReason": "SQLite backup API test"
+  },
+  "sqliteRecoveryPassed": true,
+  "postgresDumpRestorePassed": true,
+  "approvalEnabledBaselines": {
+    "databases": [
+      "sqlite",
+      "postgresql"
+    ],
+    "clients": [
+      1,
+      4,
+      8
+    ],
+    "workflowsPerDatabase": 39,
+    "unexpectedRequestFailures": 0
+  },
+  "pending": [
+    "Docker runner execution",
+    "deployed HTTP load",
+    "browser acceptance",
+    "live monitoring and alerting",
+    "real production backup drill"
+  ],
+  "githubBranchUpdated": false
+}
